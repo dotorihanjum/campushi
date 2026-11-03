@@ -3,7 +3,7 @@ import { gameFor, isGame } from "./games.js";
 import { groupExperience, GROUPS } from "./groups.js";
 
 export const STORAGE_KEY = "campushi-v1";
-// 4년 8학기. 학기마다 그 학년의 과목 중 하나를 골라 체험하고, 4학년 2학기는 졸업 과제다.
+// 4년 8학기. 학기마다 그 학년 편성표의 과목 중 하나를 골라 체험하고, 4학년 2학기는 졸업 과제다.
 export const YEARS = [1, 2, 3, 4];
 const SLOTS = YEARS.flatMap((year) => [1, 2].map((semester) => ({ year, semester })));
 
@@ -37,7 +37,7 @@ const subjectList = (value) => (Array.isArray(value) ? [...new Set(value.filter(
 
 /**
  * 서버의 학과 데이터를 화면에서 쓰는 학과로 만든다. 형식이 틀리면 null.
- * 학기 자리 8개: 1-1 ~ 4-1은 그 학년의 고를 과목(choices) 중 하나를 고르고, 4-2는 졸업 과제(final)다.
+ * 학기 자리 8개: 1-1 ~ 4-1은 그 학년 편성표의 과목(졸업 과제 과목 제외) 중 하나를 고르고, 4-2는 졸업 과제(final)다.
  */
 export function createDepartment(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -47,8 +47,8 @@ export function createDepartment(raw) {
   const group = GROUPS.some((item) => item.id === raw.group) ? raw.group : null;
   if (!id || !school || !name || !group) return null;
   const years = Object.fromEntries(YEARS.map((year) => [year, subjectList(raw.years?.[year])]));
-  const choices = Object.fromEntries(YEARS.map((year) => [year, subjectList(raw.choices?.[year]).filter((s) => years[year].includes(s))]));
   const finalSubject = text(raw.final) && years[4].includes(raw.final) ? raw.final : null;
+  const choices = Object.fromEntries(YEARS.map((year) => [year, years[year].filter((s) => s !== finalSubject)]));
   const groupFinal = groupExperience(group, "final");
   // 1·2학기에 하나씩 고르므로 학년마다 두 과목 이상 있어야 하고, 졸업 과제가 있어야 한다.
   if (YEARS.some((year) => choices[year].length < 2) || !finalSubject || !groupFinal) return null;
@@ -74,7 +74,7 @@ export function createDepartment(raw) {
       url: url && /^https:\/\//.test(url) ? url : "",
       year: Number.isInteger(raw.source?.curriculum_year) ? raw.source.curriculum_year : null,
     },
-    // 공식 편성표의 학년별 과목과, 그중 체험으로 고를 수 있는 과목.
+    // 공식 편성표의 학년별 과목과, 학기마다 고를 수 있는 과목(졸업 과제 과목을 뺀 편성표 과목).
     years,
     choices,
     lessonGames: cleanLessonGames(raw.games),
@@ -97,9 +97,14 @@ export const stageLabel = (d, index) => `${d.yearNumbers[index]}학년 ${d.semes
 export const shortStage = (d, index) => `${d.yearNumbers[index]}-${d.semesters[index]}`;
 // 학기 자리에서 고르기 전에 보여주는 이름.
 export const CHOOSE_TITLE = "과목 고르기";
-// 과목의 체험: 실습 과목이면 학과군 실습(group:학과군), 연습 문제가 있으면 그 유형, 없으면 null(기본 체험).
+// 과목의 체험: 실습 과목이면 학과군 실습(group:학과군), 연습 문제가 있으면 그 유형, 없으면 null(체험 구현 예정).
 export const gameOf = (d, subject) =>
   subject === d.practiceSubject ? `group:${d.studyGroup}` : gameFor(subject, d.lessonGames);
+
+// 체험이 아직 없는(구현 예정) 과목인지.
+export const isPlanned = (d, subject) => !gameOf(d, subject);
+// 이미 고른 학기 자리 중 체험이 구현 예정인 자리인지(졸업 과제 자리는 늘 체험이 있다).
+export const plannedAt = (d, index) => !!d.chosen?.[index] && !d.games[index];
 
 // 고른 과목을 반영한 학과: 학기 자리의 수업 이름과 체험을 고른 과목으로 바꾼다. chosen[i]는 그 자리에서 골랐는지.
 export function withChoices(d, choices = {}) {
@@ -182,13 +187,13 @@ export function progressOf(journey, total) {
   return { completed, skipped, passed: completed - skipped.length, finished: !!journey && completed === total };
 }
 
-// 학과 상세의 학년별 과목: [{ year, open: [고를 수 있는 과목], others: [그 밖의 편성 과목] }].
+// 학과 상세의 학년별 과목: [{ year, open: [체험할 수 있는 과목], others: [체험 구현 예정인 과목] }]. 졸업 과제 과목은 4학년에 넣는다.
 export function yearSubjects(d) {
-  return YEARS.map((year) => ({
-    year,
-    open: year === 4 ? [...d.choices[4], d.finalSubject] : d.choices[year],
-    others: d.years[year].filter((subject) => !d.choices[year].includes(subject) && subject !== d.finalSubject),
-  }));
+  return YEARS.map((year) => {
+    const subjects = d.years[year];
+    const open = subjects.filter((subject) => subject === d.finalSubject || !isPlanned(d, subject));
+    return { year, open, others: subjects.filter((subject) => !open.includes(subject)) };
+  });
 }
 
 // 제휴 학교 표시. 예시 제휴도 실제 제휴와 같은 배지를 쓰고, 예시라는 것은 화면의 안내 문구로 알린다.

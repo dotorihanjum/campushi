@@ -27,7 +27,7 @@ function GameFrame({ title, played, children }) {
   );
 }
 
-// 과목의 연습 문제를 받는다. status: idle(받을 문제 없음) | loading | ready | basic(문제가 없거나 쓸 수 없음) | error.
+// 과목의 연습 문제를 받는다. status: idle(받을 문제 없음) | loading | ready | basic(문제가 없거나 쓸 수 없어 구현 예정으로 넘어감) | error.
 // 수업 화면이 "배우기" 단계에서 문제 제목을 보여주고 "기록" 단계에서 해설을 보여주므로, 문제는 수업 화면이 받아서 넘긴다.
 export function useLessonGame(subject) {
   const [load, setLoad] = useState({ status: subject ? "loading" : "idle" });
@@ -41,7 +41,7 @@ export function useLessonGame(subject) {
       (game) => setLoad(typedComponents[game.type] ? { status: "ready", game } : { status: "basic" }),
       (error) => {
         if (controller.signal.aborted) return;
-        // 문제가 없어졌거나(404) 형식이 맞지 않으면(422) 다시 시도해도 같으므로 기본 체험으로 넘어간다.
+        // 문제가 없어졌거나(404) 형식이 맞지 않으면(422) 다시 시도해도 같으므로 구현 예정 과목처럼 넘어간다.
         if (error.status === 404 || error.status === 422) setLoad({ status: "basic" });
         else setLoad({ status: "error", message: error.message });
       },
@@ -52,7 +52,6 @@ export function useLessonGame(subject) {
   return {
     ...load,
     retry: () => setAttempt((n) => n + 1),
-    skip: () => setLoad({ status: "basic" }),
   };
 }
 

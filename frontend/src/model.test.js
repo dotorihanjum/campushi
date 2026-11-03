@@ -10,7 +10,9 @@ import {
   createDepartment,
   departmentsOf,
   initialState,
+  isPlanned,
   loadState,
+  plannedAt,
   normalize,
   progressOf,
   recommend,
@@ -39,8 +41,8 @@ test("실제 학과 데이터(서버 파일)는 프런트 형식 검사를 통�
     assert.equal(d.lessons.length, 8);
     assert.deepEqual(d.yearNumbers, [1, 1, 2, 2, 3, 3, 4, 4]);
     assert.deepEqual(d.semesters, [1, 2, 1, 2, 1, 2, 1, 2]);
-    // 학기 자리는 그 학년의 고를 과목이고, 4학년 2학기는 졸업 과제(고르지 않음)다.
-    d.options.slice(0, 7).forEach((options, i) => assert.deepEqual(options, raw.choices[d.yearNumbers[i]]));
+    // 학기 자리는 그 학년 편성표 전체 과목(졸업 과제 과목 제외)이고, 4학년 2학기는 졸업 과제(고르지 않음)다.
+    d.options.slice(0, 7).forEach((options, i) => assert.deepEqual(options, raw.years[d.yearNumbers[i]].filter((s) => s !== raw.final)));
     assert.equal(d.options[7], null);
     assert.equal(d.lessons[7], raw.final);
     assert.ok(d.partner && d.partnerExample);
@@ -55,11 +57,12 @@ test("형식이 틀린 학과 데이터는 쓰지 않는다", () => {
   assert.equal(createDepartment(null), null);
   assert.equal(createDepartment({ ...RAW_CSE, group: "music" }), null);
   assert.equal(createDepartment({ ...RAW_CSE, id: "" }), null);
-  // 1·2학기에 하나씩 고르므로 학년마다 두 과목 이상 있어야 한다. 편성표에 없는 과목은 빼고 센다.
-  assert.equal(createDepartment({ ...RAW_CSE, choices: { ...RAW_CSE.choices, 2: ["자료구조", "없는과목"] } }), null);
+  // 1·2학기에 하나씩 고르므로 학년마다 (졸업 과제 과목을 빼고) 두 과목 이상 있어야 한다.
+  assert.equal(createDepartment({ ...RAW_CSE, years: { ...RAW_CSE.years, 2: ["자료구조"] } }), null);
+  assert.equal(createDepartment({ ...RAW_CSE, years: { ...RAW_CSE.years, 4: ["정보보호", "졸업프로젝트"] } }), null);
   assert.equal(createDepartment({ ...RAW_CSE, final: "없는과목" }), null);
-  // 실습 과목이 고를 과목에 없으면 실습 없이 연습 문제·기본 체험으로 진행한다.
-  assert.equal(createDepartment({ ...RAW_CSE, practice: "컴파일러" }).practiceSubject, null);
+  // 실습 과목이 편성표에 없으면 실습 없이 진행한다.
+  assert.equal(createDepartment({ ...RAW_CSE, practice: "없는과목" }).practiceSubject, null);
 });
 
 test("학기 이름과 학년별 과목 목록", () => {
@@ -67,9 +70,11 @@ test("학기 이름과 학년별 과목 목록", () => {
   assert.equal(stageLabel(d, 0), "1학년 1학기");
   assert.equal(stageLabel(d, 7), "4학년 2학기");
   assert.equal(shortStage(d, 5), "3-2");
-  assert.deepEqual(yearSubjects(d)[0], { year: 1, open: ["객체지향프로그래밍", "이산구조"], others: ["미분적분학"] });
-  // 4학년에는 졸업 과제 과목도 체험 과목으로 넣는다.
-  assert.deepEqual(yearSubjects(d)[3], { year: 4, open: ["정보보호", "캡스톤디자인", "졸업프로젝트"], others: ["졸업논문"] });
+  // open은 체험이 있는 과목(연습 문제·실습·졸업 과제), others는 체험 구현 예정 과목이다.
+  assert.deepEqual(yearSubjects(d)[0], { year: 1, open: ["객체지향프로그래밍"], others: ["이산구조", "미분적분학"] });
+  assert.deepEqual(yearSubjects(d)[2], { year: 3, open: ["알고리즘", "운영체제"], others: ["컴파일러"] });
+  assert.deepEqual(yearSubjects(d)[3], { year: 4, open: ["졸업프로젝트"], others: ["정보보호", "캡스톤디자인", "졸업논문"] });
+  assert.deepEqual(d.options[6], ["정보보호", "캡스톤디자인", "졸업논문"]);
 });
 
 test("과목은 지금 학기 자리에서만, 그 학년 과목 중 다른 학기에 고르지 않은 것으로 고른다", () => {
@@ -120,6 +125,20 @@ test("실습 과목은 학과군 실습을, 졸업 과제는 끝까지 해봐야
   assert.deepEqual(progressOf(state.journeys[id], 8), { completed: 8, skipped: [], passed: 8, finished: true });
 });
 
+test("체험이 없는 과목은 구현 예정으로, 체험 없이 넘어가고 구현 예정으로 표시된다", () => {
+  const id = RAW_CSE.id;
+  let state = chooseSubject(enrolled(), id, 0, "이산구조");
+  let d = withChoices(createDepartment(RAW_CSE), state.choices);
+  assert.ok(isPlanned(d, "이산구조") && !isPlanned(d, "객체지향프로그래밍") && !isPlanned(d, "알고리즘"));
+  assert.equal(plannedAt(d, 0), true);
+  assert.equal(plannedAt(d, 1), false, "아직 고르지 않은 자리");
+  state = completeLesson(state, id, 0, "");
+  assert.deepEqual(progressOf(state.journeys[id], 8), { completed: 1, skipped: [], passed: 1, finished: false });
+  state = chooseSubject(state, id, 1, "객체지향프로그래밍");
+  d = withChoices(createDepartment(RAW_CSE), state.choices);
+  assert.equal(plannedAt(d, 1), false);
+});
+
 test("휴강하면 미이수로 남고, 다시 들어 완료하면 이수로 바뀐다", () => {
   const id = RAW_ID.id;
   let state = enrolled([RAW_ID]);
@@ -166,7 +185,7 @@ test("서버에서 새 학과 데이터를 받으면 바꾸고, 쓸 수 없는 �
   assert.equal(refreshCatalog(state, []), state);
   assert.equal(refreshCatalog(state, [{ id: "x" }]), state);
   // 학과가 빠지면 그 학과의 기록도 정리하고, 편성이 바뀌어 없어진 과목의 선택은 지운다.
-  const changed = { ...RAW_ID, choices: { ...RAW_ID.choices, 1: ["평면디자인", "입체디자인"] } };
+  const changed = { ...RAW_ID, years: { ...RAW_ID.years, 1: ["평면디자인", "입체디자인"] } };
   const next = refreshCatalog(state, [changed]);
   assert.deepEqual(Object.keys(next.journeys), [RAW_ID.id]);
   assert.deepEqual(next.choices, {});

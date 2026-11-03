@@ -27,18 +27,15 @@ class ApiTest(unittest.TestCase):
         for item in items:
             self.assertTrue(item["partner"] and item["partner_example"])
             self.assertTrue(item["source"]["url"].startswith("https://"))
-            for year in main.YEARS:
-                # 고를 과목은 학년마다 4~5개이고, 모두 공식 편성표의 그 학년 과목이다.
-                self.assertIn(len(item["choices"][year]), (4, 5))
-                self.assertTrue(set(item["choices"][year]) <= set(item["years"][year]))
             self.assertIn(item["final"], item["years"]["4"])
-            # 연습 문제 유형은 고를 수 있는 과목의 것만 보낸다.
-            choices = {subject for year in main.YEARS for subject in item["choices"][year]}
-            self.assertTrue(set(item["games"]) <= choices)
-        cse = items[0]
-        self.assertEqual(cse["choices"]["3"][0], "알고리즘")
+            # 연습 문제 유형은 편성표 과목의 것만 보낸다.
+            subjects = {subject for year in main.YEARS for subject in item["years"][year]}
+            self.assertTrue(set(item["games"]) <= subjects)
+        cse, design = items
+        self.assertEqual(len(cse["years"]["3"]), 37)
         self.assertIn("데이터베이스", cse["years"]["3"])
         self.assertEqual(cse["games"]["객체지향프로그래밍"], "match")
+        self.assertEqual(len(design["years"]["2"]), 10)
 
     def test_lesson_game(self):
         response = self.client.post("/api/lesson_game", json={"subject": "객체지향프로그래밍"})
@@ -63,16 +60,16 @@ class ApiTest(unittest.TestCase):
         original = json.loads(main.DEPARTMENTS_PATH.read_text(encoding="utf-8"))["departments"][0]
         broken = []
         item = copy.deepcopy(original)
-        item["choices"]["2"] = ["자료구조", "없는과목"]
+        item["years"]["2"] = ["자료구조"]
         broken.append(item)
         item = copy.deepcopy(original)
-        item["choices"]["1"] = ["객체지향프로그래밍"]
+        item["years"]["1"] = ["객체지향프로그래밍", "객체지향프로그래밍", "이산구조"]
         broken.append(item)
         item = copy.deepcopy(original)
-        item["final"] = item["choices"]["4"][0]
+        item["final"] = "없는과목"
         broken.append(item)
         item = copy.deepcopy(original)
-        item["practice"] = "컴파일러"
+        item["practice"] = "없는과목"
         broken.append(item)
         item = copy.deepcopy(original)
         item["source"]["url"] = "http://example.com"

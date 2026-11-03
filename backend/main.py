@@ -87,22 +87,22 @@ async def server_error(request, exc):
 
 
 def check_department(item):
-    """학과 데이터가 화면이 기대하는 모양인지 확인한다. 고르는 과목·실습·졸업 과제는 모두 공식 편성표의 그 학년 과목이어야 한다."""
+    """학과 데이터가 화면이 기대하는 모양인지 확인한다. 학년마다 1·2학기에 하나씩 고를 수 있게 과목이 둘 이상 있어야 하고,
+    실습·졸업 과제 과목은 공식 편성표의 과목이어야 한다."""
     name = f"{item.get('id')}"
     years = item.get("years", {})
-    choices = item.get("choices", {})
-    if set(years) != set(YEARS) or set(choices) != set(YEARS):
-        raise ValueError(f"{name}: 1~4학년 편성과 고를 과목이 모두 있어야 합니다.")
+    if set(years) != set(YEARS):
+        raise ValueError(f"{name}: 1~4학년 편성이 모두 있어야 합니다.")
     for year in YEARS:
-        if len(choices[year]) < 2 or len(set(choices[year])) != len(choices[year]):
-            raise ValueError(f"{name}: {year}학년에 서로 다른 과목이 둘 이상 있어야 합니다(1·2학기에 하나씩 고름).")
-        missing = [subject for subject in choices[year] if subject not in years[year]]
-        if missing:
-            raise ValueError(f"{name}: {year}학년 편성표에 없는 과목 {missing}")
-    if item.get("final") not in years["4"] or item["final"] in choices["4"]:
-        raise ValueError(f"{name}: 졸업 과제는 4학년 편성표의 과목이고, 4학년 선택 과목과 겹치지 않아야 합니다.")
-    if item.get("practice") and not any(item["practice"] in choices[year] for year in YEARS):
-        raise ValueError(f"{name}: 실습 과목은 고를 수 있는 과목이어야 합니다.")
+        if len(set(years[year])) != len(years[year]):
+            raise ValueError(f"{name}: {year}학년에 같은 과목이 두 번 있습니다.")
+    if item.get("final") not in years["4"]:
+        raise ValueError(f"{name}: 졸업 과제는 4학년 편성표의 과목이어야 합니다.")
+    for year in YEARS:
+        if len([subject for subject in years[year] if subject != item["final"]]) < 2:
+            raise ValueError(f"{name}: {year}학년에 고를 과목이 둘 이상 있어야 합니다(1·2학기에 하나씩 고름).")
+    if item.get("practice") and not any(item["practice"] in years[year] for year in YEARS):
+        raise ValueError(f"{name}: 실습 과목은 편성표의 과목이어야 합니다.")
     if not str(item.get("source", {}).get("url", "")).startswith("https://"):
         raise ValueError(f"{name}: 교육과정 출처 주소가 필요합니다.")
 
@@ -118,8 +118,8 @@ def departments():
 
 @lru_cache(maxsize=1)
 def lesson_games():
-    """검증을 통과한 연습 문제: 과목 → 문제. 고를 수 있는 과목의 것만 둔다."""
-    subjects = {subject for item in departments() for year in YEARS for subject in item["choices"][year]}
+    """검증을 통과한 연습 문제: 과목 → 문제. 두 학과 편성표의 과목 것만 둔다."""
+    subjects = {subject for item in departments() for year in YEARS for subject in item["years"][year]}
     games = {}
     if GAMES_PATH.exists():
         with GAMES_PATH.open(encoding="utf-8") as file:
@@ -140,7 +140,7 @@ def department_list():
     games = lesson_games()
     return {
         "departments": [
-            {**item, "games": {subject: games[subject]["type"] for year in YEARS for subject in item["choices"][year] if subject in games}}
+            {**item, "games": {subject: games[subject]["type"] for year in YEARS for subject in item["years"][year] if subject in games}}
             for item in departments()
         ]
     }
