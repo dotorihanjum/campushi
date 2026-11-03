@@ -218,3 +218,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# 캠퍼스하이
+node_modules/
+.vite/
+frontend/dist/
+.vercel
+backend/.venv/
+backend/.cache/
+.DS_Store
