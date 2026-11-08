@@ -67,6 +67,7 @@
 - `frontend/src/experiences.js`, `Templates.jsx`: 체험 틀(A 문지르기, B 순서, C 분류, D 반응 실험, F 계획 조립, G AI 가르치기)의 형식 검사·채점과 화면. 체험은 틀을 늘리지 않고 데이터를 더해 늘린다.
 - `frontend/src/groups.js`, `groupData.js`: 두 학과군(컴퓨터·AI, 디자인·미술)의 실습·졸업 과제 데이터. 사실과 맞아야 하므로 고칠 때 근거를 확인하고, AI가 쓴 데이터는 별도 에이전트의 검토를 통과한 뒤에만 `status: "verified"`로 바꾼다.
 - `frontend/src/lessonGames.js`, `TypedGames.jsx`: 연습 문제 5유형(빈칸, OX, 순서, 짝, 분류)의 형식 검사와 화면.
+- `frontend/src/theory.js`, `backend/theory_banks.py`, `backend/data/theory_banks.jsonl`: 이론 수업 퀴즈. 과목마다 강의계획서로 만든 문제 은행에서 체험할 때마다 유형이 다른 3라운드를 새로 뽑는다(반복해도 유형·문항이 바뀜, 2026-11-09 사용자 결정). 은행을 추가하면 `blind` → 별도 에이전트 풀이 → `apply`로 검증한 뒤에만 공개된다(`backend/SOURCE.md`).
 - `backend/main.py`: FastAPI. `GET /api/health`, `GET /api/departments`(학과 데이터와 과목별 연습 문제 유형), `POST /api/lesson_game`. 학과 데이터 형식이 틀리면(편성표에 없는 과목 등) 서버가 뜨지 않는다.
 - `scripts/dev.mjs`: 백엔드 가상환경 준비와 백엔드·프론트 동시 실행.
 

@@ -1174,6 +1174,7 @@ function MintCard({ title, children, className = "" }) {
 
 /** 연습 문제 유형별로 "이 수업에서 해볼 것". */
 function quizTask(game) {
+  if (game.type === "theory") return "퀴즈 3라운드를 풀어요. 라운드마다 유형이 다르고, 다시 할 때마다 유형과 문제가 바뀌어요.";
   const n = game.items.length;
   if (game.type === "blank") return `문장 ${n}개의 빈칸에 알맞은 말을 골라요.`;
   if (game.type === "ox") return `문장 ${n}개가 맞는지 O, X로 골라요.`;

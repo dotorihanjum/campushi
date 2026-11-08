@@ -6,7 +6,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from backend import main
+from backend import main, theory_banks
 
 
 class ApiTest(unittest.TestCase):
@@ -93,9 +93,69 @@ class ApiTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = main.Path(folder) / "games.jsonl"
             path.write_text("\n".join(lines), encoding="utf-8")
-            with mock.patch.object(main, "GAMES_PATH", path):
+            # 이론 문제 은행은 따로 읽으므로 없는 파일로 두고 고정 문제만 본다.
+            with mock.patch.object(main, "GAMES_PATH", path), mock.patch.object(main, "THEORY_PATH", main.Path(folder) / "없음.jsonl"):
                 self.assertEqual(main.lesson_games(), {})
         main.lesson_games.cache_clear()
+
+    def test_theory_bank_replaces_fixed_game(self):
+        # 이론 수업 문제 은행이 있는 과목은 고정된 문제 대신 은행(유형 theory)을 준다. 검증 기록은 내보내지 않는다.
+        games = self.client.get("/api/departments").json()["departments"][0]["games"]
+        self.assertEqual(games["미분적분학"], "theory")
+        self.assertEqual(games["이산구조"], "theory")
+        game = self.client.post("/api/lesson_game", json={"subject": "선형대수"}).json()["game"]
+        self.assertEqual(game["type"], "theory")
+        self.assertNotIn("check", game)
+        self.assertTrue(game["terms"] and game["facts"] and game["units"])
+
+    def test_unverified_theory_banks_are_hidden(self):
+        bank = theory_banks.load()[0]
+        main.lesson_games.cache_clear()
+        with tempfile.TemporaryDirectory() as folder:
+            path = main.Path(folder) / "theory.jsonl"
+            path.write_text(json.dumps({**bank, "status": "draft"}, ensure_ascii=False), encoding="utf-8")
+            with mock.patch.object(main, "THEORY_PATH", path):
+                self.assertNotEqual(main.lesson_games().get(bank["course_name"], {}).get("type"), "theory")
+        main.lesson_games.cache_clear()
+
+
+class TheoryBankTest(unittest.TestCase):
+    def test_service_banks_are_valid(self):
+        banks = theory_banks.load()
+        self.assertTrue(banks)
+        for bank in banks:
+            self.assertEqual(theory_banks.problems(bank), [], bank["course_name"])
+            self.assertIn(bank["status"], ("verified", "rejected", "draft"))
+
+    def test_blind_sheet_hides_answers(self):
+        bank = theory_banks.load()[0]
+        sheet = json.dumps(theory_banks.blind(bank, seed=1), ensure_ascii=False)
+        self.assertNotIn('"answer"', sheet)
+        self.assertNotIn('"unit"', sheet)
+        for fact in bank["facts"]:
+            self.assertNotIn(fact["explanation"], sheet)
+
+    def test_apply_drops_wrong_or_flagged_items(self):
+        bank = copy.deepcopy(theory_banks.load()[0])
+        bank["status"] = "draft"
+        answers = {}
+        for i, item in enumerate(bank["terms"]):
+            answers[f"term-{i}"] = item["term"]
+            answers[f"unit-{i}"] = bank["units"][item["unit"]]
+        for i, item in enumerate(bank["facts"]):
+            answers[f"fact-{i}"] = item["answer"]
+        for i, item in enumerate(bank["sequences"]):
+            answers[f"seq-{i}"] = item["steps"]
+        answers["term-0"] = "틀린 답"
+        answers["fact-1"] = not bank["facts"][1]["answer"]
+        result = theory_banks.apply(bank, {"reviewer": "검토", "answers": answers, "flags": {"seq-0": "순서가 둘"}})
+        self.assertEqual(result["status"], "verified")
+        self.assertEqual(sorted(result["check"]["removed"]), ["fact-1", "seq-0", "term-0"])
+        self.assertNotIn(bank["terms"][0], result["terms"])
+        self.assertEqual(len(result["facts"]), len(bank["facts"]) - 1)
+        # 너무 많이 빠져 형식을 만족하지 못하면 공개하지 않는다.
+        wrong = {key: "틀림" for key in answers}
+        self.assertEqual(theory_banks.apply(bank, {"answers": wrong})["status"], "rejected")
 
 
 if __name__ == "__main__":

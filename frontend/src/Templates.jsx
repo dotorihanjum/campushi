@@ -261,7 +261,7 @@ function AdjacentOrder({ data, onComplete }) {
 }
 
 // 자리 옮기기(move): 화살표로 단계를 위아래로 옮기고 확인한다. 세 번 틀리면 정답을 볼 수 있다.
-function MoveOrder({ data, onComplete }) {
+function MoveOrder({ data, onComplete, after }) {
   const size = data.items.length;
   const [order, setOrder] = useState(() => startOrder(size, "move"));
   const [tries, setTries] = useState(0);
@@ -343,7 +343,7 @@ function MoveOrder({ data, onComplete }) {
           <p className="body-copy">
             <strong>{result === "shown" ? "올바른 순서예요." : `${tries}번 만에 순서를 맞혔어요.`}</strong> {data.explanation}
           </p>
-          <Restart onClick={restart}>다시 해보기 →</Restart>
+          {after ?? <Restart onClick={restart}>다시 해보기 →</Restart>}
         </div>
       ) : (
         <>
@@ -364,8 +364,9 @@ function MoveOrder({ data, onComplete }) {
   );
 }
 
-export function OrderTemplate({ data, onComplete }) {
-  return data.swap === "adjacent" ? <AdjacentOrder data={data} onComplete={onComplete} /> : <MoveOrder data={data} onComplete={onComplete} />;
+// after: 이론 퀴즈의 라운드로 쓸 때 다 맞힌 뒤 "다시 해보기" 대신 보여줄 것(자리 옮기기에서만 쓴다).
+export function OrderTemplate({ data, onComplete, after }) {
+  return data.swap === "adjacent" ? <AdjacentOrder data={data} onComplete={onComplete} /> : <MoveOrder data={data} onComplete={onComplete} after={after} />;
 }
 
 /* ---- C 분류하기: 카드마다 칸별로 보기를 고르고 확인한다. 틀리면 맞힐 때까지 다시 고른다. ---- */
