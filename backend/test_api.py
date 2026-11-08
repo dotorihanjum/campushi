@@ -32,8 +32,10 @@ class ApiTest(unittest.TestCase):
             subjects = {subject for year in main.YEARS for subject in item["years"][year]}
             self.assertTrue(set(item["games"]) <= subjects)
         cse, design = items
-        self.assertEqual(len(cse["years"]["3"]), 37)
+        self.assertEqual(len(cse["years"]["3"]), 35)
         self.assertIn("데이터베이스", cse["years"]["3"])
+        # 2023-1 ~ 2026-2 개설 기록이 없는 과목은 뺐다(SOURCE.md).
+        self.assertNotIn("웹보안", cse["years"]["4"])
         self.assertEqual(cse["games"]["객체지향프로그래밍"], "match")
         self.assertEqual(len(design["years"]["2"]), 10)
 
