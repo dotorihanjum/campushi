@@ -32,6 +32,11 @@ class ApiTest(unittest.TestCase):
             subjects = {subject for year in main.YEARS for subject in item["years"][year]}
             self.assertTrue(set(item["games"]) <= subjects)
         cse, design = items
+        # 필수과목(전공기초·전공필수)은 공식 편성표의 이수구분 그대로다.
+        self.assertEqual(cse["kinds"]["전공기초"], ["미분방정식", "선형대수", "미분적분학", "확률및랜덤변수"])
+        self.assertIn("객체지향프로그래밍", cse["kinds"]["전공필수"])
+        self.assertNotIn("이산구조", cse["kinds"]["전공필수"] + cse["kinds"]["전공기초"])
+        self.assertEqual(len(design["kinds"]["전공기초"]), 7)
         self.assertEqual(len(cse["years"]["3"]), 35)
         self.assertIn("데이터베이스", cse["years"]["3"])
         # 2023-1 ~ 2026-2 개설 기록이 없는 과목은 뺐다(SOURCE.md).
@@ -64,7 +69,13 @@ class ApiTest(unittest.TestCase):
         original = json.loads(main.DEPARTMENTS_PATH.read_text(encoding="utf-8"))["departments"][0]
         broken = []
         item = copy.deepcopy(original)
-        item["years"]["2"] = ["자료구조"]
+        item["years"]["2"] = []
+        broken.append(item)
+        item = copy.deepcopy(original)
+        item["kinds"] = {"전공필수": ["없는과목"]}
+        broken.append(item)
+        item = copy.deepcopy(original)
+        item["kinds"] = {"교양": []}
         broken.append(item)
         item = copy.deepcopy(original)
         item["years"]["1"] = ["객체지향프로그래밍", "객체지향프로그래밍", "이산구조"]

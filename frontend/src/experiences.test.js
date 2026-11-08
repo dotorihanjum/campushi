@@ -17,9 +17,9 @@ import {
   bubbleStart,
   bubbleStep,
 } from "./experiences.js";
-import { createDepartment, finalReady } from "./model.js";
+import { createDepartment } from "./model.js";
 import { groupData } from "./groupData.js";
-import { RAW_CSE } from "./testFixtures.js";
+import { RAW_CSE, RAW_ID } from "./testFixtures.js";
 
 // 반응 실험(틀 D) 형식 검사용 예시. 이 서비스의 학과군은 쓰지 않는 틀이라 테스트 안에 둔다.
 const REACTION = {
@@ -234,11 +234,9 @@ test("AI 가르치기 데이터는 형식이 맞는 것만 받는다", () => {
   // 검사를 통과한 데이터를 다시 검사해도 같다(학과군 데이터가 base로 쓸 때).
   assert.deepEqual(cleanExperience(experiences.petClassifier), experiences.petClassifier);
 });
-test("프로젝트형 졸업 과제는 끝까지 해봐야 완료할 수 있다", () => {
-  const d = createDepartment(RAW_CSE);
-  assert.equal(d.final.kind, "project");
-  assert.equal(finalReady({ artworks: {} }, d), false);
-  assert.equal(finalReady({ artworks: { [d.id]: true } }, d), true);
+test("졸업 과제는 틀에 따라 프로젝트(점수) 또는 작품(P)이다", () => {
+  assert.equal(createDepartment(RAW_CSE).final.kind, "project");
+  assert.equal(createDepartment(RAW_ID).final.kind, "artwork");
 });
 
 test("버블 정렬 실습은 규칙대로 고를 때만 진행되고, 바꾼 횟수는 뒤집힌 쌍의 수와 같다", () => {

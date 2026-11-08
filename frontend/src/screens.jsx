@@ -14,29 +14,30 @@ import {
   ProgressBar,
   Screen,
   T,
-  Dialog,
   SchoolLogo,
 } from "./ui.jsx";
 import {
   QUESTIONS,
+  YEARS,
   answeredAll,
   departmentsOf,
-  finalOf,
   recommend,
-  completeLesson,
+  completeCourse,
+  courseKey,
   initialState,
-  chooseSubject,
   gameOf,
-  plannedAt,
-  stageLabel,
-  shortStage,
-  skipLesson,
+  isRequired,
+  kindOf,
   progressOf,
+  recordOf,
+  savePlay,
+  yearOf,
   yearSubjects,
   PARTNER_LABEL,
   PARTNER_EXAMPLE_NOTE,
   showsExampleNote,
 } from "./model.js";
+import { averagePoint, gradeOf, passes, PASS, PASS_GRADE } from "./grades.js";
 import { isLessonType, lessonTypes } from "./lessonGames.js";
 import LessonGame, { useLessonGame } from "./Games.jsx";
 import { Rub } from "./Templates.jsx";
@@ -47,43 +48,25 @@ import { groupName } from "./groups.js";
 /* 공통                                                                */
 /* ------------------------------------------------------------------ */
 
-// 학과 목록(고른 과목 반영).
+// 학과 목록.
 const all = (state) => departmentsOf(state);
 
-/**
- * 지금 보고 있는 학과와 그 진행 상태. 학교가 정해진 학과가 없으면 null.
- * at에 휴강한(미이수) 자리 번호를 주면 그 자리를 다시 듣는 것으로 본다(retake).
- */
-function view(state, at) {
+/** 지금 보고 있는 학과와 그 진행 상황(progressOf). 학교가 정해진 학과가 없으면 null. */
+function view(state) {
   const d = all(state).find((item) => item.id === state.current && item.school);
   if (!d) return null;
-  const journey = state.journeys[d.id] || null;
-  const total = d.lessons.length;
-  const { completed, skipped, passed, finished } = progressOf(journey, total);
-  const retake = Number.isInteger(at) && skipped.includes(at);
-  const index = retake ? at : Math.min(completed, total - 1);
-  return {
-    d,
-    journey,
-    total,
-    completed,
-    skipped,
-    passed,
-    retake,
-    index,
-    year: d.yearNumbers[index],
-    lastYear: d.yearNumbers[total - 1],
-    final: finalOf(d),
-    finished,
-  };
+  return { d, journey: state.journeys[d.id] || null, progress: progressOf(state, d), final: d.final };
 }
+
+// 성적 글자: "B+", 정답률이 있으면 "B+ (82%)".
+const gradeText = (record) => (record ? `${record.grade}${Number.isInteger(record.percent) ? ` (${record.percent}%)` : ""}` : "");
 
 const SHOWN_SUBJECTS = 4;
 /**
  * 학과 상세의 학년별 과목 칩. 누를 수 없는 글 목록이다. 체험으로 고를 수 있는 과목(open)을 민트 칩으로 먼저 두고,
  * 그 밖의 편성 과목은 흰 칩으로 둔다. 그 밖의 과목이 4개를 넘으면 더 보기로 펼친다.
  */
-function YearSubjects({ years }) {
+function YearSubjects({ years, required }) {
   const [opened, setOpened] = useState({});
   const chip = "max-w-full rounded-[16px] border px-[12px] py-[6px] text-[13px] leading-[19px]";
   return (
@@ -102,12 +85,14 @@ function YearSubjects({ years }) {
                 <li key={`open-${name}`} className={`${chip} border-mint bg-mint-soft font-semibold text-mint-deep`} style={{ wordBreak: "keep-all", overflowWrap: "anywhere" }}>
                   <span className="sr-only">체험 과목 </span>
                   {name}
+                  {required(name) && <span className="ml-[4px] text-[10.5px] font-bold text-mint">필수</span>}
                 </li>
               ))}
               {shown.map((name) => (
                 <li key={name} className={`${chip} border-line bg-white text-ink-2`} style={{ wordBreak: "keep-all", overflowWrap: "anywhere" }}>
                   <span className="sr-only">구현 예정 </span>
                   {name}
+                  {required(name) && <span className="ml-[4px] text-[10.5px] font-bold text-gray">필수</span>}
                 </li>
               ))}
             </ul>
@@ -505,12 +490,13 @@ export function Detail({ active, nav, state, setState }) {
     return () => observer.disconnect();
   }, [!!v]);
   if (!v) return null;
-  const { d, journey, total, finished } = v;
+  const { d, journey, progress } = v;
+  const finished = progress.graduated;
   const enroll = () => {
     if (finished) return nav.push("graduation");
     setState((s) => ({ ...s, studying: d.id }));
     if (journey) return nav.reset(["home"]);
-    setState((s) => ({ ...s, journeys: { ...s.journeys, [d.id]: { completed: 0, paused: false } } }));
+    setState((s) => ({ ...s, journeys: { ...s.journeys, [d.id]: {} } }));
     nav.push("enrolled", undefined, "rise");
   };
   const subjects = Object.values(d.years).flat();
@@ -557,7 +543,7 @@ export function Detail({ active, nav, state, setState }) {
           {d.intro}
         </div>
         <div className="absolute left-[17px] top-[136px] flex gap-[8px]">
-          <TagPill>{`${d.duration} · ${total}학기 체험`}</TagPill>
+          <TagPill>{`${d.duration} · 학년별 체험`}</TagPill>
           {d.tags.map((tag) => (
             <TagPill key={tag}>{tag}</TagPill>
           ))}
@@ -567,10 +553,10 @@ export function Detail({ active, nav, state, setState }) {
         이 학과는 이런 내용을 배워요
       </T>
       <T y={472.5} size={14} lh={20} left={33} clip={340} className="a-up text-slate/90" style={delay(0.2)}>
-        {`학기마다 그 학년 편성표 과목 중 하나를 골라요\n민트색은 체험할 수 있고, 나머지는 구현 예정이에요 (${subjects.length}과목)`}
+        {`필수과목을 B- 이상으로 이수하면 다음 학년이 열려요\n민트색은 체험할 수 있고, 나머지는 구현 예정이에요 (${subjects.length}과목)`}
       </T>
       <div ref={list} className="a-up absolute left-[20px] right-[20px] top-[528px]" style={delay(0.28)}>
-        <YearSubjects years={yearSubjects(d)} />
+        <YearSubjects years={yearSubjects(d)} required={(subject) => isRequired(d, subject)} />
         <p className="footnote">
           {`출처: ${d.school} `}
           {d.source.url ? (
@@ -580,7 +566,7 @@ export function Detail({ active, nav, state, setState }) {
           ) : (
             d.source.title
           )}
-          {". 4학년 2학기에는 졸업 과제를 해요."}
+          {". 필수는 편성표의 전공기초·전공필수예요. 4학년에는 졸업 과제를 해요."}
         </p>
       </div>
     </Screen>
@@ -687,67 +673,54 @@ function BottomSign({ d: department, wait }) {
 export function Grades({ active, nav, state }) {
   const v = view(state);
   const next = () => nav.replace("diploma", undefined, "fade");
-  useGuard(!!v?.finished, nav, active);
+  const ok = !!v?.progress.graduated;
+  useGuard(ok, nav, active);
   useAutoAdvance(next, 4600);
-  if (!v?.finished) return null;
-  const { d, skipped } = v;
-  // 휴강한 과목이 있으면 A+ 도장 대신 학년마다 이수·미이수를 적는다.
-  const missed = skipped.length > 0;
+  if (!ok) return null;
+  const { d, progress } = v;
+  // 들은 과목을 필수부터, 학년 순서로 적는다. 종이에 다 들어가지 않으면 "외 N과목"으로 줄인다.
+  const taken = [...progress.taken].sort((a, b) => b.required - a.required || a.year - b.year);
+  const shown = taken.slice(0, 7);
+  const average = averagePoint(taken.map((course) => course.record.grade));
+  const perfect = taken.every((course) => course.record.grade === "A+" || course.record.grade === PASS);
   return (
     <CertificateShell onBack={() => nav.reset(["home"])} onNext={next}>
       <div className="absolute inset-0 overflow-hidden rounded-[8px]">
         <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint" style={delay(0.45)}>
           성적표
         </T>
-        <Statement y={104} d={0.6}>
-          {missed
-            ? `위 사람은 ${d.school} ${d.name}의\n체험 과정을 마쳤음을 증명합니다 (미이수 ${skipped.length}과목)`
-            : `위 사람은 ${d.school} ${d.name}의\n체험 과정을 모두 마쳤음을 증명합니다`}
+        <Statement y={98} d={0.6}>
+          {`위 사람은 ${d.school} ${d.name}의\n체험 과정을 모두 마쳤음을 증명합니다`}
+          <span className="block text-[10.5px] leading-[18px] text-mint-deep">
+            {`이수 ${progress.passedCount}과목${average === null ? "" : ` · 평균 평점 ${average.toFixed(2)} / 4.5`}`}
+          </span>
         </Statement>
-        {missed && (
-          <ul className="a-fade absolute left-[26px] top-[164px] w-[222px]" style={delay(0.7)} aria-label="과목별 이수 결과">
-            {d.lessons.map((lesson, i) => (
-              <li key={i} className="flex gap-[6px] text-[10px] leading-[16px] text-gray">
-                <span className="shrink-0 tabular-nums text-mint-deep">{shortStage(d, i)}</span>
-                <span className="min-w-0 flex-1 truncate">{lesson}</span>
-                <span className={`shrink-0 font-semibold ${skipped.includes(i) ? "text-ink-2" : "text-mint-deep"}`}>
-                  {skipped.includes(i) ? "미이수" : plannedAt(d, i) ? "구현 예정" : "이수"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {/* 학기별 학과는 학기마다 고른 과목을 적는다. */}
-        {!missed && d.options && (
-          <ul className="a-fade absolute left-[170px] top-[152px] w-[92px]" style={delay(0.7)} aria-label="학기별 이수 과목">
-            {d.options.map((items, i) =>
-              items ? (
-                <li key={i} className="flex gap-[5px] text-[9.5px] leading-[16px] text-gray">
-                  <span className="shrink-0 tabular-nums text-mint-deep">{shortStage(d, i)}</span>
-                  <span className="min-w-0 truncate">{`${d.lessons[i]}${plannedAt(d, i) ? "(구현 예정)" : ""}`}</span>
-                </li>
-              ) : null,
-            )}
-          </ul>
-        )}
+        <ul className="a-fade absolute left-[26px] top-[164px] w-[222px]" style={delay(0.7)} aria-label="과목별 성적">
+          {shown.map((course) => (
+            <li key={course.subject} className="flex gap-[6px] text-[10px] leading-[16px] text-gray">
+              <span className="shrink-0 tabular-nums text-mint-deep">{course.year}학년</span>
+              <span className="min-w-0 flex-1 truncate">{course.subject}</span>
+              <span className="shrink-0 font-semibold text-ink-2">{course.record.grade}</span>
+            </li>
+          ))}
+          {taken.length > shown.length && <li className="text-[10px] leading-[16px] text-gray">{`외 ${taken.length - shown.length}과목`}</li>}
+        </ul>
         <BottomSign d={d} wait={0.7} />
         <SchoolSeal d={d} className="a-fade" style={delay(0.8)} />
-        {!missed && (
+        {perfect && (
           <img
             src={img.gradeAplus}
-            alt="A+"
+            alt="모두 A+"
             className="absolute left-[-4px] top-[141px] h-[191px] w-[166px]"
             style={{ animation: "stamp 0.55s cubic-bezier(0.22,1,0.36,1) 1.05s both" }}
           />
         )}
-        {(!missed || d.lessons.length <= 5) && (
-          <img
-            src={img.gradeSign}
-            alt=""
-            className="absolute left-[131px] top-[256px] h-[72px] w-[130px]"
-            style={{ animation: "wipe 0.75s cubic-bezier(0.65,0,0.35,1) 1.75s both" }}
-          />
-        )}
+        <img
+          src={img.gradeSign}
+          alt=""
+          className="absolute left-[131px] top-[256px] h-[72px] w-[130px]"
+          style={{ animation: "wipe 0.75s cubic-bezier(0.65,0,0.35,1) 1.75s both" }}
+        />
       </div>
     </CertificateShell>
   );
@@ -756,10 +729,11 @@ export function Grades({ active, nav, state }) {
 export function Diploma({ active, nav, state }) {
   const v = view(state);
   const next = () => nav.replace("graduation", undefined, "fade");
-  useGuard(!!v?.finished, nav, active);
+  const ok = !!v?.progress.graduated;
+  useGuard(ok, nav, active);
   useAutoAdvance(next, 4200);
-  if (!v?.finished) return null;
-  const { d, skipped } = v;
+  if (!ok) return null;
+  const { d } = v;
   return (
     <CertificateShell onBack={() => nav.reset(["home"])} onNext={next}>
       <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint" style={delay(0.45)}>
@@ -768,11 +742,6 @@ export function Diploma({ active, nav, state }) {
       <PaperRow y={117} left="체험생" right={`${d.school} ${d.name}`} d={0.6} />
       <Statement y={168} d={0.8}>
         {`위 사람은 ${d.school} ${d.name}\n체험 과정을 졸업하였음을 증명합니다`}
-        {skipped.length > 0 && (
-          <span className="mt-[2px] block truncate text-[10px] leading-[16px] text-ink-3">
-            {`미이수 ${skipped.length}과목 · ${skipped.map((i) => d.lessons[i]).join(", ")}`}
-          </span>
-        )}
       </Statement>
       <BottomSign d={d} wait={0.95} />
       <SchoolSeal d={d} className="a-pop" style={delay(1.15)} />
@@ -839,10 +808,10 @@ export function Welcome({ active, nav, state }) {
       </T>
       <div className="a-up absolute left-0 top-[603px] h-[115px] w-[402px] rounded-[28px] bg-cream-2" style={delay(0.8)}>
         <T y={27} size={16.5} center clip={360} className="font-bold text-ink-2">
-          {`${stageLabel(d, 0)} · ${d.lessons[0]}`}
+          {`1학년 과목 ${d.years[1].length}개 · 필수 ${d.years[1].filter((subject) => isRequired(d, subject)).length}개`}
         </T>
         <T y={62.5} size={13.5} lh={20} center className="text-ink-3">
-          {"학기마다 그 학년 과목을 골라 체험하고\n4학년 2학기에는 졸업 과제에 도전해요."}
+          {"필수과목을 B- 이상으로 이수하면 다음 학년이 열려요.\n4학년에는 졸업 과제에 도전해요."}
         </T>
       </div>
     </Screen>
@@ -915,38 +884,31 @@ function TabBar({ active, nav, state }) {
   );
 }
 
-// 체험의 이름: 전공 실습이면 그 틀(예: 순서 맞추기), 아니면 연습 문제 유형.
-const kindOf = (d, id) => (id.startsWith("group:") && d.practice ? `전공 실습(${templates[d.practice.template].title})` : lessonTypes[id]?.title || "");
+// 체험의 이름: 졸업 과제, 전공 실습(예: 순서 맞추기), 연습 문제 유형(예: 이론 퀴즈).
+const experienceName = (d, id) =>
+  id === "final" ? "졸업 과제" : id.startsWith("group:") && d.practice ? `전공 실습(${templates[d.practice.template].title})` : lessonTypes[id]?.title || "";
 
-/** 과제 하나가 어떤 활동인지 한 줄로. */
-function taskKind(d, index) {
-  if (index === d.lessons.length - 1) return "졸업 과제";
-  if (d.options?.[index] && !d.chosen?.[index]) return `${d.yearNumbers[index]}학년 과목 ${d.options[index].length}개 중 하나를 골라요`;
-  const id = d.games?.[index];
-  return (typeof id === "string" && kindOf(d, id)) || "체험 구현 예정";
-}
-
-/**
- * 아직 순서가 오지 않은 과제. 누르면 언제 열리는지 잠깐 알려준다.
- * 제휴 잠금과 헷갈리지 않게 자물쇠 대신 오른쪽에 "{N}학년에 열려요"를 회색 글씨로 적는다.
- */
-function TaskCard({ top, title, sub, opens, hint, onClick, d }) {
+/** 들어야 할 과목 카드. 성적이 있으면 재수강이 필요하다고 알린다. */
+function CourseCard({ top, d, course, wait, onClick }) {
+  const sub = course.record
+    ? `${course.record.grade} · ${PASS_GRADE} 이상이어야 이수돼요 · 재수강`
+    : course.final
+      ? `졸업 과제 · ${d.final.name}`
+      : `${course.kind} · ${experienceName(d, gameOf(d, course.subject))}`;
   return (
     <button
       onClick={onClick}
-      aria-label={`${title}, ${sub}, ${opens}에 열려요`}
-      className="pressable a-up absolute left-[21px] flex h-[69px] w-[365px] items-center gap-[10px] rounded-[10px] border border-[#a4acb6] bg-chalk pl-[14px] pr-[14px] text-left"
-      style={{ top, animationDelay: `${d}s` }}
+      aria-label={`${course.subject}, ${sub}, 듣기`}
+      className="pressable a-up absolute left-[21px] flex h-[69px] w-[365px] items-center gap-[10px] rounded-[10px] border border-mint bg-white pl-[16px] pr-[14px] text-left"
+      style={{ top, animationDelay: `${wait}s` }}
     >
-      <Mask src={icon.eye} w={19} h={19} color="#827d76" />
-      {/* 이름과 유형은 왼쪽에서 남는 폭만큼만 쓰고 말줄임한다. 오른쪽 "{N}학년에 열려요"는 줄지 않는다(학년 과목의 체험하기와 같은 글자). */}
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-[14px] font-semibold leading-[20px] text-ink-2">{title}</span>
-        <span key={hint || "sub"} className={`truncate text-[10.5px] leading-[16px] ${hint ? "a-shake text-mint-deep" : "text-ink-3"}`}>
-          {hint || sub}
-        </span>
+        <span className="truncate text-[14px] font-semibold leading-[20px] text-ink-2">{course.subject}</span>
+        <span className="truncate text-[10.5px] leading-[16px] text-ink-3">{sub}</span>
       </span>
-      <span className="shrink-0 text-[12.5px] font-semibold text-black">{`${opens}에 열려요`}</span>
+      <span className="flex h-[24px] shrink-0 items-center rounded-full bg-mint-soft px-[10px] text-[12px] font-semibold text-mint-deep">
+        {course.record ? "재수강" : "듣기"}
+      </span>
     </button>
   );
 }
@@ -965,7 +927,7 @@ function HomeStart({ nav, state, setState, catalog }) {
         {"어떤 전공이\n나에게 맞을까?"}
       </T>
       <T y={201.5} size={14.5} left={20.5} clip={230} className="a-up text-gray" style={delay(0.08)}>
-        학과에 입학해 학기마다 수업을 체험해요.
+        학과에 입학해 학년마다 수업을 체험해요.
       </T>
       <div className="a-pop absolute left-[244px] top-[104px] h-[106px] w-[143px]" style={delay(0.2)}>
         <img src={img.mascotHome} alt="" className="loop h-full w-full" style={{ animation: "float 2.6s ease-in-out 0.9s infinite" }} />
@@ -974,6 +936,8 @@ function HomeStart({ nav, state, setState, catalog }) {
     </Screen>
   );
 }
+
+const SHOWN_TODO = 3;
 
 export function Home({ active, nav, state, setState, catalog }) {
   const v = view(state);
@@ -987,30 +951,22 @@ export function Home({ active, nav, state, setState, catalog }) {
     if (fallback) setState((s) => ({ ...s, current: fallback }));
     else if (shown && state.studying !== shown) setState((s) => ({ ...s, studying: shown }));
   }, [active, fallback, shown, state.studying, setState]);
-  const percent = v?.journey ? Math.round((v.completed / v.total) * 100) : 0;
+  const percent = v?.journey ? v.progress.percent : 0;
   const pct = useCountUp(percent);
-  // 아직 순서가 오지 않은 과제를 눌렀을 때 그 카드에 보여줄 안내.
-  const [hint, setHint] = useState(null);
-  const hintTimer = useRef(0);
-  useEffect(() => () => window.clearTimeout(hintTimer.current), []);
   if (!v?.journey) return fallback ? null : <HomeStart nav={nav} state={state} setState={setState} catalog={catalog} />;
-  const { d, total, completed, index, year, finished, skipped, passed } = v;
-  const tellLocked = (i) => {
-    const before = stageLabel(d, i - 1);
-    setHint({ i, text: i - 1 === index ? `지금 하는 ${before} 수업을 마치면 열려요` : `${before} 수업을 마치면 열려요` });
-    window.clearTimeout(hintTimer.current);
-    hintTimer.current = window.setTimeout(() => setHint(null), 2400);
-  };
-  // 학기 자리에서 아직 과목을 고르지 않았으면 과목 고르기부터 한다.
-  const choosing = !finished && !!d.options?.[index] && !d.chosen?.[index];
-  const open = () => (finished ? nav.push("graduation") : nav.push(choosing ? "choose" : "lesson"));
-  const label = stageLabel(d, index);
-  // 지금 과제 다음에 남은 과제(최대 2개).
-  const upcoming = finished ? [] : d.lessons.map((lesson, i) => ({ lesson, i })).slice(index + 1, index + 3);
-  // 남은 과제 아래에 휴강한(미이수) 과목을 다시 들을 수 있게 둔다.
-  const listEnd = (upcoming.length ? 565 + upcoming.length * 84 : 615);
+  const { d, progress } = v;
+  const { openYear, graduated, years, passedCount } = progress;
+  const now = years[openYear - 1];
+  // 다음 학년(4학년이면 졸업)까지 남은 것: 체험이 있는 필수과목, 4학년이면 졸업 과제까지.
+  const finalCourse = years[3].courses.find((course) => course.final);
+  const todo = graduated
+    ? []
+    : [...now.left, ...(openYear === 4 && !finalCourse.passed && !now.left.includes(finalCourse) ? [finalCourse] : [])];
+  const shownTodo = todo.slice(0, SHOWN_TODO);
+  const open = () => (graduated ? nav.push("graduation") : nav.push("courses", { year: openYear }));
+  const listEnd = shownTodo.length ? 565 + shownTodo.length * 84 + (todo.length > SHOWN_TODO ? 30 : 0) : 615;
   // 맨 아래에 학과 추천과 학과 카드(다른 학과도 둘러볼 수 있게).
-  const pickerTop = (skipped.length ? listEnd + 52 + skipped.length * 84 : listEnd) + 52;
+  const pickerTop = listEnd + 52;
   return (
     <Screen h={pickerTop + pickerHeight(all(state).length)} foot={739} veil={false} footer={<TabBar active="home" nav={nav} state={state} />}>
       <Mask src={icon.cap} w={24} h={18} color="#087f77" className="absolute left-[23px] top-[59px]" />
@@ -1029,13 +985,13 @@ export function Home({ active, nav, state, setState, catalog }) {
         {"한 걸음씩,\n나의 전공을 알아가는 중"}
       </T>
       <T y={201.5} size={14.5} left={20.5} className="a-up text-gray" style={delay(0.08)}>
-        {finished ? "모든 과정을 마쳤어요. 졸업을 축하해요!" : `오늘은 ${label} 수업을 만나봐요.`}
+        {graduated ? "모든 과정을 마쳤어요. 졸업을 축하해요!" : `지금은 ${openYear}학년 과목까지 들을 수 있어요.`}
       </T>
       <T y={263.5} size={d.name.length > 8 ? 15 : 19.5} left={20} clip={190} className="a-up font-bold text-ink-2" style={delay(0.14)}>
         {d.name}
       </T>
       <T y={294.5} size={12.5} lh={16} left={20.5} clip={170} className="a-up text-mint-deep" style={delay(0.18)}>
-        {`${label} · ${d.lessons[index]}\n${skipped.length ? `${passed} / ${total} 이수 · 미이수 ${skipped.length}` : `학습·실습 ${completed} / ${total} 완료`}`}
+        {`${graduated ? "졸업" : `${openYear}학년 진행 중`}\n이수 ${passedCount}과목${graduated ? "" : ` · 남은 과제 ${todo.length}개`}`}
       </T>
       <div className="a-pop absolute left-[174px] top-[261px] h-[154px] w-[208px]" style={delay(0.2)}>
         <img src={img.mascotHome} alt="" className="loop h-full w-full" style={{ animation: "float 2.6s ease-in-out 0.9s infinite" }} />
@@ -1049,7 +1005,7 @@ export function Home({ active, nav, state, setState, catalog }) {
       <div
         className="absolute left-[20px] top-[423px] h-[8.5px] w-[362px] overflow-hidden rounded-full bg-track"
         role="progressbar"
-        aria-label="졸업까지 진행도"
+        aria-label="졸업까지 진행도(필수과목과 졸업 과제 중 이수한 비율)"
         aria-valuenow={percent}
         aria-valuemin={0}
         aria-valuemax={100}
@@ -1062,57 +1018,31 @@ export function Home({ active, nav, state, setState, catalog }) {
         style={{ animationDelay: "0.3s" }}
       >
         <span className="loop pointer-events-none absolute inset-0 rounded-[14px]" style={{ animation: "glow 2.4s ease-in-out 1.6s infinite" }} />
-        <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-          {finished ? "졸업 리포트 보기" : choosing ? `${label} 과목 고르기` : `${d.lessons[index]} ${completed ? "이어하기" : "시작하기"}`}
-        </span>
+        <span className="overflow-hidden text-ellipsis whitespace-nowrap">{graduated ? "졸업 리포트 보기" : `${openYear}학년 과목 듣기`}</span>
       </button>
       <T y={535.5} size={15} left={21} className="a-up font-bold text-ink-2" style={delay(0.36)}>
-        졸업까지 남은 과제
+        {graduated ? "졸업까지 남은 과제" : openYear < 4 ? `${openYear + 1}학년이 열리려면` : "졸업하려면"}
       </T>
-      {upcoming.map(({ lesson, i }, n) => (
-        <TaskCard
-          key={i}
+      {shownTodo.map((course, n) => (
+        <CourseCard
+          key={course.subject}
           top={565 + n * 84}
-          d={0.42 + n * 0.06}
-          title={lesson}
-          sub={taskKind(d, i)}
-          opens={stageLabel(d, i)}
-          hint={hint?.i === i ? hint.text : ""}
-          onClick={() => tellLocked(i)}
+          wait={0.42 + n * 0.06}
+          d={d}
+          course={course}
+          onClick={() => nav.push("lesson", { subject: course.subject })}
         />
       ))}
-      <p className="sr-only" role="status">
-        {hint?.text}
-      </p>
-      {upcoming.length === 0 && (
+      {todo.length > SHOWN_TODO && (
+        <T y={565 + SHOWN_TODO * 84} size={12.5} left={21} className="a-up text-ink-3" style={delay(0.6)}>
+          {`외 ${todo.length - SHOWN_TODO}과목은 과목 목록에서 볼 수 있어요.`}
+        </T>
+      )}
+      {shownTodo.length === 0 && (
         <T y={585} size={13} left={21} className="a-up text-ink-3" style={delay(0.42)}>
-          {finished ? "모든 과제를 마쳤어요." : "지금 하는 과제가 마지막이에요."}
+          모든 과제를 마쳤어요.
         </T>
       )}
-      {skipped.length > 0 && (
-        <T y={listEnd + 12} size={15} left={21} className="a-up font-bold text-ink-2" style={delay(0.5)}>
-          휴강한 과목 다시 듣기
-        </T>
-      )}
-      {skipped.map((i, n) => (
-        <button
-          key={`skipped-${i}`}
-          onClick={() => nav.push("lesson", { retake: i })}
-          aria-label={`${stageLabel(d, i)} ${d.lessons[i]}, 미이수, 다시 듣기`}
-          className="pressable a-up absolute left-[21px] h-[69px] w-[365px] rounded-[10px] border border-mint bg-white text-left"
-          style={{ top: listEnd + 42 + n * 84, animationDelay: `${0.56 + n * 0.06}s` }}
-        >
-          <T y={19} size={14} left={16} clip={250} className="font-semibold text-ink-2">
-            {d.lessons[i]}
-          </T>
-          <T y={41.5} size={10.5} left={16.5} clip={250} className="text-ink-3">
-            {`${stageLabel(d, i)} · 미이수 · 다시 들으면 이수로 바뀌어요`}
-          </T>
-          <span className="absolute right-[14px] top-[22px] flex h-[24px] items-center rounded-full bg-mint-soft px-[10px] text-[12px] font-semibold text-mint-deep">
-            다시 듣기
-          </span>
-        </button>
-      ))}
       <T y={pickerTop - 30} size={15} left={21} className="a-up font-bold text-ink-2" style={delay(0.5)}>
         학과 둘러보기
       </T>
@@ -1183,106 +1113,145 @@ function quizTask(game) {
   return `${n}개를 알맞은 칸으로 나눠요.`;
 }
 export function Lesson({ active, nav, route, state, setState }) {
-  // 이 화면은 들어올 때의 수업 하나를 끝까지 다룬다. retake가 있으면 휴강했던(미이수) 그 자리를 다시 듣는다.
-  const [v] = useState(() => view(state, route?.params?.retake));
-  const ok = !!v?.journey && (!v.finished || v.retake);
-  const key = ok ? `${v.d.id}-${v.index}` : "";
-  const subject = ok ? v.d.lessons[v.index] : "";
-  const isFinal = ok && v.index === v.total - 1;
-  // 학기 자리에서 과목을 아직 고르지 않았으면(새로고침 등) 과목 고르기로 보낸다.
-  const unchosen = ok && !!v.d.options?.[v.index] && !v.d.chosen?.[v.index];
-  const game = ok && !isFinal ? v.d.games?.[v.index] || null : null;
+  // 이 화면은 들어올 때의 과목 하나를 다룬다. 열린 학년의 과목만 들을 수 있다.
+  const [v] = useState(() => view(state));
+  const subject = route?.params?.subject;
+  const year = v && typeof subject === "string" ? yearOf(v.d, subject) : null;
+  const ok = !!v?.journey && !!year && v.progress.years[year - 1].open;
+  const key = ok ? courseKey(v.d.id, subject) : "";
+  const game = ok ? gameOf(v.d, subject) : null;
+  const isFinal = game === "final";
   // 학과군 전공 실습이면 그 체험 데이터. 아니면 연습 문제 유형(이론 수업)이거나 null(체험 구현 예정).
   const practice = typeof game === "string" && game.startsWith("group:") ? v.d.practice : null;
   const typed = !practice && isLessonType(game);
   const quiz = useLessonGame(typed ? subject : null);
-  const [draft, setDraft] = useState(() => (ok ? state.drafts[key] ?? state.notes[key] ?? "" : ""));
+  const [draft, setDraft] = useState(() => (ok ? (state.drafts[key] ?? "") : ""));
   // 체험이나 기록을 이미 시작한 수업은 기록 단계부터 이어간다.
-  const [step, setStep] = useState(() => (ok && ((game && state.plays[key]) || state.drafts[key]) ? 2 : 0));
+  const [step, setStep] = useState(() => (ok && (state.plays[key] || state.drafts[key]) ? 2 : 0));
   const [reached, setReached] = useState(step);
   const [notice, setNotice] = useState("");
   const [shake, setShake] = useState(0);
-  // 휴강 확인 창을 띄웠는지.
-  const [skipping, setSkipping] = useState(false);
+  // 수업을 마치고 받은 결과: { grade, percent, best, opened, graduated }.
+  const [result, setResult] = useState(null);
   const timer = useRef(0);
   const scroller = useRef(null);
   const heading = useRef(null);
   const moved = useRef(false);
   useGuard(ok, nav, active);
-  useEffect(() => {
-    if (active && unchosen) nav.replace("choose");
-  }, [active, unchosen, nav]);
   useEffect(() => () => window.clearTimeout(timer.current), []);
-  // 연습 문제가 없어졌거나 형식이 맞지 않으면(404·422) 구현 예정 과목처럼 넘어갈 수 있게 체험을 마친 것으로 기록한다.
-  useEffect(() => {
-    if (typed && quiz.status === "basic")
-      setState((s) => (s.plays[key]?.game === game ? s : { ...s, plays: { ...s.plays, [key]: { game, summary: "" } } }));
-  }, [typed, quiz.status, key, game, setState]);
   // 단계를 옮기면 맨 위로 올리고 제목에 초점을 둔다(스크린 리더가 새 단계를 읽게).
   useEffect(() => {
     if (!moved.current) return;
     if (scroller.current) scroller.current.scrollTop = 0;
     heading.current?.focus({ preventScroll: true });
-  }, [step]);
-  if (!ok || unchosen) return null;
+  }, [step, result]);
+  if (!ok) return null;
 
-  const { d, index, total, year, final, retake } = v;
-  const label = stageLabel(d, index);
-  const header = <Header title={`${label} · ${subject}`} count={`${index + 1}/${total}`} onBack={nav.back} />;
-  // 휴강: 미이수로 기록하고 다음 자리로 넘어간다. 쓰던 기록은 다시 들을 때 이어서 쓰도록 남긴다.
-  const skip = () => {
-    window.clearTimeout(timer.current);
-    setSkipping(false);
-    setState((s) => skipLesson(draft ? { ...s, drafts: { ...s.drafts, [key]: draft } } : s, d.id, index));
-    if (isFinal) nav.replace("grades", undefined, "fade");
-    else nav.reset(["home"]);
-  };
-  const skipDialog = skipping && (
-    <Dialog
-      title="이 과제를 건너뛸까요?"
-      onClose={() => setSkipping(false)}
-      actions={
-        <>
-          <button className="button" onClick={() => setSkipping(false)}>
-            계속 풀기
-          </button>
-          <button className="button ghost" onClick={skip}>
-            휴강하기
-          </button>
-        </>
-      }
-    >
-      건너뛴 과제는 성적표에 ‘미이수’로 남아요. 나중에 다시 들을 수 있어요.
-    </Dialog>
-  );
-  const skipButton = (className, style) =>
-    retake ? null : (
-      <button onClick={() => setSkipping(true)} className={`pressable text-[13px] text-gray underline underline-offset-[3px] ${className}`} style={style}>
-        이번엔 자체 휴강할게요
-      </button>
-    );
+  const { d, final } = v;
+  const kind = isFinal ? "졸업 과제" : kindOf(d, subject);
+  const header = <Header title={`${year}학년 · ${subject}`} onBack={nav.back} />;
+  const record = recordOf(state, d.id, subject);
 
-  // 체험이 아직 없는 과목: 구현 예정이라고 알리고 다음 학기로 넘어간다. 성적표·리포트에는 '구현 예정'으로 남는다.
-  if (!isFinal && !practice && (!typed || quiz.status === "basic")) {
-    const pass = () => {
-      setState((s) => completeLesson(s, d.id, index, ""));
-      nav.reset(["home"]);
-    };
+  // 체험이 아직 없는 과목(연습 문제가 없어졌거나 형식이 맞지 않는 경우 포함): 구현 예정이라고 알린다. 성적은 남지 않는다.
+  if (!isFinal && !practice && (!typed || quiz.status === "basic"))
     return (
-      <Screen foot={700} footer={<FilledButton onClick={pass}>{retake ? "이수로 바꾸고 홈으로" : "다음 학기로 넘어가기"}</FilledButton>}>
+      <Screen foot={700} footer={<FilledButton onClick={nav.back}>과목 목록으로</FilledButton>}>
         {header}
         <div className="flow no-scrollbar absolute bottom-[174px] left-0 top-[100px] w-full overflow-y-auto px-[20px] pt-[18px]">
           <h1 className="a-up text-[26px] font-bold leading-[36px] text-navy">{subject}</h1>
           <p className="a-up mt-[6px] text-[14px] leading-[22px] text-gray" style={delay(0.06)}>
-            {`${label} 수업 · ${d.name}`}
+            {`${year}학년 · ${kind} · ${d.name}`}
           </p>
           <MintCard title="체험 구현 예정" className="a-up mt-[22px]">
-            <p style={delay(0.1)}>이 과목의 체험은 아직 만들고 있어요. 지금은 과목만 확인하고 다음 학기로 넘어가요. 성적표와 리포트에는 ‘구현 예정’으로 남아요.</p>
+            <p style={delay(0.1)}>
+              {isRequired(d, subject)
+                ? "이 과목의 체험은 아직 만들고 있어요. 필수과목이지만 체험이 생기기 전까지는 다음 학년이 열리는 조건에 들어가지 않아요."
+                : "이 과목의 체험은 아직 만들고 있어요. 다른 과목을 먼저 들어 보세요."}
+            </p>
           </MintCard>
-          {d.options?.[index] && !retake && (
-            <button className="text-button a-up mt-[14px]" onClick={() => nav.replace("choose")} style={delay(0.16)}>
-              다른 과목 고르기 →
-            </button>
+        </div>
+      </Screen>
+    );
+
+  // 수업을 마친다: 성적을 매겨 남기고(재수강이면 더 좋은 성적), 다음 학년이 열렸는지·졸업했는지 알려준다.
+  const finishWith = (base, text) => {
+    window.clearTimeout(timer.current);
+    const before = progressOf(base, d);
+    const after = completeCourse(base, d.id, subject, text);
+    if (after === base) return false;
+    const play = base.plays[key];
+    const got = gradeOf(play.score);
+    const progress = progressOf(after, d);
+    setState(after);
+    moved.current = true;
+    setResult({
+      ...got,
+      best: recordOf(after, d.id, subject),
+      // 새로 열린 학년들(체험이 있는 필수과목이 없는 학년은 함께 열린다).
+      opened: progress.openYear > before.openYear ? YEARS.filter((y) => y > before.openYear && y <= progress.openYear) : null,
+      graduated: progress.graduated && !before.graduated,
+    });
+    return true;
+  };
+  const again = () => {
+    moved.current = true;
+    setResult(null);
+    setDraft("");
+    setStep(0);
+    setReached(0);
+  };
+
+  if (result) {
+    const passed = passes(result.grade);
+    return (
+      <Screen
+        foot={700}
+        footer={
+          result.graduated ? (
+            <FilledButton onClick={() => nav.replace("grades", undefined, "fade")}>성적표와 졸업증명서 받기</FilledButton>
+          ) : (
+            <>
+              <div className="absolute inset-x-[20px] top-[708px] flex h-[36px] items-center justify-end">
+                <button onClick={again} className="pressable h-[36px] rounded-full border border-line bg-white px-[14px] text-[13px] font-semibold text-slate">
+                  다시 듣기
+                </button>
+              </div>
+              <FilledButton onClick={nav.back}>과목 목록으로</FilledButton>
+            </>
+          )
+        }
+      >
+        {header}
+        <div ref={scroller} className="flow no-scrollbar absolute bottom-[174px] left-0 top-[100px] w-full overflow-y-auto px-[20px] pt-[18px]">
+          <h1 ref={heading} tabIndex={-1} className="a-up text-[26px] font-bold leading-[36px] text-navy outline-none">
+            {`${subject} 성적`}
+          </h1>
+          <p className="a-pop mt-[18px] text-[56px] font-extrabold leading-[64px] text-mint-deep" style={delay(0.1)} aria-label={`이번 성적 ${result.grade}`}>
+            {result.grade}
+          </p>
+          <p className="a-up mt-[4px] text-[14px] leading-[22px] text-gray" style={delay(0.16)}>
+            {result.grade === PASS ? "끝까지 해서 통과(P)했어요." : `정답률 ${result.percent}%`}
+            {result.best && result.best.grade !== result.grade ? ` · 남는 성적은 가장 좋은 ${gradeText(result.best)}이에요` : ""}
+          </p>
+          <MintCard
+            title={result.graduated ? "졸업을 축하해요!" : result.opened ? `${result.opened.join("·")}학년이 열렸어요!` : passes(result.best?.grade) ? "이수했어요" : "재수강이 필요해요"}
+            className="a-up mt-[22px]"
+          >
+            <p style={delay(0.2)}>
+              {result.graduated
+                ? `${d.name} 체험 과정을 모두 마쳤어요. 성적표와 졸업증명서를 받아요.`
+                : result.opened
+                  ? `${result.opened[0] - 1}학년 필수과목을 모두 ${PASS_GRADE} 이상으로 이수했어요. 이제 ${result.opened.at(-1)}학년 과목까지 들을 수 있어요.` +
+                    (result.opened.length > 1 ? ` ${result.opened.slice(0, -1).join("·")}학년은 체험이 있는 필수과목이 아직 없어 함께 열렸어요.` : "")
+                  : passes(result.best?.grade)
+                    ? `${isRequired(d, subject) ? "필수과목으로 인정됐어요." : "선택과목으로 성적표에 남아요."} 다시 들으면 문제가 바뀌고, 가장 좋은 성적이 남아요.`
+                    : `${PASS_GRADE} 이상이어야 이수로 인정돼요.${isRequired(d, subject) ? " 필수과목이라 다음 학년이 열리려면 다시 들어야 해요." : ""} 다시 들으면 문제가 바뀌어요.`}
+            </p>
+          </MintCard>
+          {!passed && passes(result.best?.grade) && (
+            <p className="a-up mt-[12px] text-[12.5px] leading-[19px] text-ink-3" style={delay(0.24)}>
+              이번 성적은 낮지만 이전에 받은 더 좋은 성적이 남아 있어요.
+            </p>
           )}
         </div>
       </Screen>
@@ -1291,29 +1260,22 @@ export function Lesson({ active, nav, route, state, setState }) {
 
   if (isFinal && final.kind === "artwork")
     return (
-      <Screen overlay={skipDialog}>
-        <Header title={d.name} count={`${index + 1}/${total}`} onBack={nav.back} />
-        {skipButton("absolute right-[20px] top-[84px] z-20 h-[28px]")}
+      <Screen>
+        <Header title={d.name} onBack={nav.back} />
         <Rub
           data={final}
           year={year}
           onQuit={nav.back}
-          onDone={() => {
-            setState((s) => completeLesson({ ...s, artworks: { ...s.artworks, [d.id]: true } }, d.id, index, ""));
-            nav.replace("grades", undefined, "fade");
-          }}
+          onDone={() => finishWith(savePlay(state, d.id, subject, "final", `${final.name} 완성`, PASS), "")}
         />
       </Screen>
     );
 
   // 수업의 종류: 졸업 프로젝트(AI 가르치기 등), 학과군 전공 실습, 연습 문제(불러오는 중·오류 포함).
   const mode = isFinal ? "project" : practice ? "practice" : quiz.status === "ready" ? "quiz" : quiz.status;
-  const play = game && state.plays[key]?.game === game ? state.plays[key] : null;
+  const play = state.plays[key]?.game === game ? state.plays[key] : null;
   const played = play?.summary || "";
-  const projectDone = !!state.artworks[d.id];
-  const tried =
-    mode === "project" ? projectDone : !!played;
-
+  const preview = play ? gradeOf(play.score) : null;
   const headline = mode === "project" ? final.name : mode === "practice" ? practice.title : mode === "quiz" ? quiz.game.title : subject;
   const warn = (message) => {
     setNotice(message);
@@ -1332,24 +1294,16 @@ export function Lesson({ active, nav, route, state, setState }) {
     timer.current = window.setTimeout(() => setState((s) => ({ ...s, drafts: { ...s.drafts, [key]: text } })), 400);
   };
   const finish = () => {
-    if (!tried) return warn("먼저 직접 해보기를 끝까지 해보세요.");
-    // 느낀 점은 적지 않아도 된다. 비어 있으면 기록 없이 완료한다(건너뛰기).
-    window.clearTimeout(timer.current);
-    setState((s) => completeLesson(s, d.id, index, draft));
-    if (isFinal) nav.replace("grades", undefined, "fade");
-    else nav.reset(["home"]);
+    if (!play) return warn("먼저 직접 해보기를 끝까지 해보세요.");
+    if (!finishWith(state, draft)) warn("성적을 남기지 못했어요. 과목 목록에서 다시 들어와 주세요.");
   };
-  const next = d.lessons[index + 1];
   const written = !!draft.trim();
 
   let body;
   let action;
   if (step === 0) {
-    const task =
-      mode === "project" ? final.task
-      : mode === "practice" ? practice.task
-      : mode === "quiz" ? quizTask(quiz.game)
-      : null;
+    const task = mode === "project" ? final.task : mode === "practice" ? practice.task : mode === "quiz" ? quizTask(quiz.game) : null;
+    const learn = (mode === "practice" ? practice : mode === "project" ? final : null)?.learn;
     body = (
       <>
         {mode === "loading" && (
@@ -1365,23 +1319,23 @@ export function Lesson({ active, nav, route, state, setState }) {
             </button>
           </div>
         )}
-        {(mode === "practice" || mode === "project") && (mode === "practice" ? practice : final).learn && (
+        {learn && (
           <MintCard title="알아두기" className="a-up mt-[22px]">
-            <p style={delay(0.1)}>{(mode === "practice" ? practice : final).learn}</p>
+            <p style={delay(0.1)}>{learn}</p>
           </MintCard>
         )}
         {task && (
-          <MintCard
-            title="이 수업에서 해볼 것"
-            className={`a-up ${(mode === "practice" || mode === "project") && (mode === "practice" ? practice : final).learn ? "mt-[12px]" : "mt-[22px]"}`}
-          >
+          <MintCard title="이 수업에서 해볼 것" className={`a-up ${learn ? "mt-[12px]" : "mt-[22px]"}`}>
             <p style={delay(0.12)}>{task}</p>
           </MintCard>
         )}
-        {d.options?.[index] && !state.plays[key] && !retake && (
-          <button className="text-button a-up mt-[14px]" onClick={() => nav.replace("choose")} style={delay(0.16)}>
-            다른 과목 고르기 →
-          </button>
+        {(mode === "quiz" || mode === "practice" || mode === "project") && (
+          <p className="a-up mt-[12px] text-[12.5px] leading-[19px] text-ink-3" style={delay(0.16)}>
+            {final.kind === "artwork" && isFinal
+              ? "끝까지 하면 통과(P)예요."
+              : `처음 고른 답으로 성적을 매겨요. ${PASS_GRADE} 이상이면 이수예요.`}
+            {record ? ` 지금 성적은 ${gradeText(record)}이고, 다시 들으면 가장 좋은 성적이 남아요.` : ""}
+          </p>
         )}
       </>
     );
@@ -1393,33 +1347,17 @@ export function Lesson({ active, nav, route, state, setState }) {
   } else if (step === 1) {
     body = (
       <div className="a-up mt-[22px]">
-        {mode === "project" && (
-          <LessonGame
-            game={final}
-            played={projectDone ? "졸업 과제를 끝까지 해봤어요" : ""}
-            onComplete={() => {
-              setNotice("");
-              setState((s) => ({ ...s, artworks: { ...s.artworks, [d.id]: true } }));
-            }}
-          />
-        )}
-        {(mode === "practice" || mode === "quiz") && (
-          <LessonGame
-            game={mode === "practice" ? practice : quiz.game}
-            played={played}
-            onComplete={(summary) => {
-              setNotice("");
-              setState((s) => ({ ...s, plays: { ...s.plays, [key]: { game, summary } } }));
-            }}
-          />
-        )}
+        <LessonGame
+          game={mode === "project" ? final : mode === "practice" ? practice : quiz.game}
+          played={played}
+          onComplete={(summary, score) => {
+            setNotice("");
+            setState((s) => savePlay(s, d.id, subject, game, summary, score ?? PASS));
+          }}
+        />
       </div>
     );
-    action = (
-      <FilledButton onClick={() => (tried ? go(2) : warn("먼저 끝까지 해보세요."))}>
-        기록하러 가기
-      </FilledButton>
-    );
+    action = <FilledButton onClick={() => (play ? go(2) : warn("먼저 끝까지 해보세요."))}>기록하러 가기</FilledButton>;
   } else {
     body = (
       <>
@@ -1430,7 +1368,7 @@ export function Lesson({ active, nav, route, state, setState }) {
         )}
         {played && (
           <p className="a-up mt-[14px] text-[13px] leading-[20px] text-mint-deep" style={delay(0.06)}>
-            오늘 해본 것 · {played}
+            {`오늘 해본 것 · ${played}${preview ? ` · 예상 성적 ${preview.grade}` : ""}`}
           </p>
         )}
         <label className="note-card a-up mt-[16px] block" style={delay(0.12)}>
@@ -1438,11 +1376,7 @@ export function Lesson({ active, nav, route, state, setState }) {
           <textarea
             className="compact"
             rows={2}
-            placeholder={
-              isFinal
-                ? "이 전공을 체험하며 알게 된 점이나 달라진 생각을 남겨요."
-                : "직접 해보니 어땠나요? 느낀 점을 한 줄로 남겨요."
-            }
+            placeholder={isFinal ? "이 전공을 체험하며 알게 된 점이나 달라진 생각을 남겨요." : "직접 해보니 어땠나요? 느낀 점을 한 줄로 남겨요."}
             value={draft}
             maxLength={3000}
             onChange={(e) => edit(e.target.value)}
@@ -1451,31 +1385,15 @@ export function Lesson({ active, nav, route, state, setState }) {
         </label>
       </>
     );
-    // 적은 내용이 있으면 저장, 없으면 건너뛰기로 버튼이 바뀐다.
-    const label = isFinal
-      ? written ? `${final.name} 제출하고 ${retake ? "이수하기" : "졸업하기"}` : `생각은 건너뛰고 ${final.name} 제출하기`
-      : written ? "기록 저장하고 완료하기" : "기록 건너뛰고 완료하기";
-    action = <FilledButton onClick={finish}>{label}</FilledButton>;
+    action = <FilledButton onClick={finish}>{written ? "기록 저장하고 성적 받기" : "기록 건너뛰고 성적 받기"}</FilledButton>;
   }
 
-  // 아래 안내: 경고가 있으면 경고를, 기록 단계에서는 저장하면 어떻게 되는지를 보여준다.
-  const verb = written ? "저장하면" : "건너뛰면";
-  const guide =
-    notice ||
-    (step === 2
-      ? retake
-        ? `${verb} 미이수가 이수로 바뀌어요`
-        : isFinal
-          ? `${verb} 졸업이에요`
-          : `${verb} ${index + 1} / ${total} 완료 · 다음은 ${stageLabel(d, index + 1)} ${next}`
-      : "");
   return (
     <Screen
       foot={700}
-      overlay={skipDialog}
       footer={
         <>
-          {/* 이전 단계(첫 단계에서는 없음)와 휴강. 주 버튼과 구분되게 글씨 버튼으로 둔다. */}
+          {/* 이전 단계(첫 단계에서는 없음). 주 버튼과 구분되게 글씨 버튼으로 둔다. */}
           <div className="absolute inset-x-[20px] top-[708px] flex h-[36px] items-center justify-between">
             {step > 0 ? (
               <button onClick={() => go(step - 1)} className="pressable h-[36px] rounded-full border border-line bg-white px-[14px] text-[13px] font-semibold text-slate">
@@ -1484,7 +1402,6 @@ export function Lesson({ active, nav, route, state, setState }) {
             ) : (
               <span />
             )}
-            {skipButton("h-[36px]")}
           </div>
           {action}
           <p
@@ -1492,7 +1409,7 @@ export function Lesson({ active, nav, route, state, setState }) {
             role="status"
             className={`absolute inset-x-[20px] top-[818px] overflow-hidden text-ellipsis whitespace-nowrap text-center text-[12.5px] leading-[20px] ${notice ? "a-shake text-mint-deep" : "text-gray"}`}
           >
-            {guide}
+            {notice}
           </p>
         </>
       }
@@ -1509,8 +1426,11 @@ export function Lesson({ active, nav, route, state, setState }) {
             {headline}
           </h1>
           <p className="a-up mt-[6px] text-[14px] leading-[22px] text-gray" style={delay(0.06)}>
-            {isFinal ? `${label} · 졸업 과제 · ${subject}` : practice ? `${label} 수업 · ${subject} · ${groupName(d.studyGroup)} 전공 실습` : `${label} 수업 · ${subject}`}
-            {retake ? " · 다시 듣기" : ""}
+            {isFinal
+              ? `${year}학년 · 졸업 과제 · ${subject}`
+              : practice
+                ? `${year}학년 · ${kind} · ${subject} · ${groupName(d.studyGroup)} 전공 실습`
+                : `${year}학년 · ${kind} · ${subject}`}
           </p>
           {body}
         </div>
@@ -1520,78 +1440,97 @@ export function Lesson({ active, nav, route, state, setState }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 12-1 · 학기 과목 고르기 (제휴 대학의 학기별 편성이 있는 학과)         */
+/* 12-1 · 학년별 과목 (열린 학년의 과목을 아무 순서로나 듣는다)          */
 /* ------------------------------------------------------------------ */
 
-export function Choose({ active, nav, state, setState }) {
+export function Courses({ active, nav, route, state }) {
   const v = view(state);
-  const options = v?.journey && !v.finished && !v.journey.paused ? v.d.options?.[v.index] : null;
-  useGuard(!!options, nav, active);
-  if (!options) return null;
-  const { d, index, total } = v;
-  const label = stageLabel(d, index);
-  const current = state.choices[`${d.id}-${index}`] || null;
-  // 다른 학기에 이미 고른 과목은 다시 고를 수 없다.
-  const taken = new Set(d.options.map((items, i) => (items && i !== index ? state.choices[`${d.id}-${i}`] : null)).filter(Boolean));
-  // 체험이 있는 과목을 먼저, 구현 예정 과목을 그다음, 고를 수 없는 과목을 맨 뒤에 둔다. 그 안에서는 편성표 순서다.
-  const items = options
-    .map((subject) => ({ subject, type: gameOf(d, subject), taken: taken.has(subject) }))
-    .sort((a, b) => a.taken - b.taken || !a.type - !b.type);
-  const ready = items.filter((item) => item.type && !item.taken).length;
-  // 예시 제휴 대학이면 첫 학기 과목 고르기에서 한 번만 예시라고 알린다.
-  const exampleNote = d.partnerExample && d.options.findIndex(Boolean) === index;
-  const pick = (subject) => {
-    setState((s) => chooseSubject(s, d.id, index, subject));
-    nav.replace("lesson");
-  };
+  const ok = !!v?.journey;
+  const [year, setYear] = useState(() => (YEARS.includes(route?.params?.year) ? route.params.year : 1));
+  useGuard(ok, nav, active);
+  if (!ok) return null;
+  const { d, progress } = v;
+  const info = progress.years[year - 1];
+  // 필수를 먼저, 그 안에서 체험이 있는 과목을 먼저 둔다. 같으면 편성표 순서다.
+  const items = [...info.courses].sort((a, b) => b.required - a.required || a.planned - b.planned);
+  const required = info.courses.filter((course) => course.required);
+  const counted = required.filter((course) => !course.planned);
+  const before = progress.years[year - 2];
+  const guide = !info.open
+    ? `${year - 1}학년 필수과목을 모두 ${PASS_GRADE} 이상으로 이수하면 열려요.${before?.open ? ` 남은 과목: ${before.left.map((course) => course.subject).join(", ")}` : ""}`
+    : year < 4
+      ? info.left.length
+        ? `필수 ${counted.length}과목(체험이 있는 것) 중 ${info.left.length}과목이 남았어요. 모두 ${PASS_GRADE} 이상이면 ${year + 1}학년이 열려요.`
+        : `${year}학년 필수과목을 모두 이수했어요. ${year + 1}학년이 열렸어요.`
+      : progress.graduated
+        ? "졸업 조건을 모두 채웠어요."
+        : `4학년 필수과목을 ${PASS_GRADE} 이상으로 이수하고 졸업 과제(${d.finalSubject})를 마치면 졸업해요.`;
+  const badge = (course) =>
+    course.record ? (
+      <span
+        className={`flex h-[22px] shrink-0 items-center rounded-full border px-[8px] text-[11px] font-bold ${
+          course.passed ? "border-mint bg-mint-soft text-mint-deep" : "border-[#e8a33d] bg-cream text-[#9a5b00]"
+        }`}
+      >
+        {course.passed ? course.record.grade : `${course.record.grade} · 재수강`}
+      </span>
+    ) : course.planned ? (
+      <span className="flex h-[22px] shrink-0 items-center rounded-full border border-line bg-white px-[8px] text-[11px] font-semibold text-gray">구현 예정</span>
+    ) : null;
   return (
     <Screen>
-      <Header title={`${label} · 과목 고르기`} count={`${index + 1}/${total}`} onBack={nav.back} />
+      <Header title={`${d.name} · 과목 듣기`} onBack={nav.back} />
       <div className="flow no-scrollbar absolute bottom-0 left-0 top-[100px] w-full overflow-y-auto px-[20px] pb-[32px] pt-[12px]">
-        <h1 className="a-up whitespace-pre-line text-[24px] font-bold leading-[34px] text-navy">{`${label}에 들을 과목을\n하나 골라요`}</h1>
-        <p className="a-up mt-[8px] text-[13.5px] leading-[21px] text-gray" style={delay(0.06)}>
-          {`${d.school} ${d.name} 편성표의 ${d.yearNumbers[index]}학년 과목 ${options.length}개예요. `}
-          {ready ? `지금 체험할 수 있는 과목은 ${ready}개이고, 나머지는 구현 예정이에요.` : "이 학년 과목의 체험은 모두 구현 예정이에요. 골라서 다음 학기로 넘어갈 수 있어요."}
+        <div className="a-up grid grid-cols-4 gap-[6px]" role="tablist" aria-label="학년">
+          {YEARS.map((item) => {
+            const opened = progress.years[item - 1].open;
+            return (
+              <button
+                key={item}
+                role="tab"
+                aria-selected={item === year}
+                onClick={() => setYear(item)}
+                className={`pressable h-[40px] rounded-full border text-[13.5px] font-semibold ${
+                  item === year ? "border-mint bg-mint text-white" : opened ? "border-mint bg-white text-mint-deep" : "border-line bg-chalk text-mute"
+                }`}
+              >
+                {`${item}학년${opened ? "" : " 🔒"}`}
+              </button>
+            );
+          })}
+        </div>
+        <h1 className="a-up mt-[18px] text-[22px] font-bold leading-[32px] text-navy">{`${year}학년 과목 ${info.courses.length}개`}</h1>
+        <p className="a-up mt-[6px] text-[13.5px] leading-[21px] text-gray" style={delay(0.06)}>
+          {guide}
         </p>
-        {exampleNote && (
+        {d.partnerExample && year === 1 && (
           <p className="a-up mt-[12px] rounded-[12px] border border-mint bg-mint-soft px-[14px] py-[10px] text-[12.5px] leading-[19px] text-mint-deep" style={delay(0.08)}>
-            제휴 학교는 이렇게 학기별로 과목을 골라 체험할 수 있어요 (서비스 예시)
+            제휴 학교는 이렇게 학년별로 과목을 골라 체험할 수 있어요 (서비스 예시)
           </p>
         )}
         <ul className="mt-[18px] grid gap-[10px]">
-          {items.map(({ subject, type, taken: used }, i) => (
-            <li key={subject} className="a-up" style={delay(0.1 + Math.min(i, 8) * 0.03)}>
+          {items.map((course, i) => (
+            <li key={course.subject} className="a-up" style={delay(0.1 + Math.min(i, 8) * 0.03)}>
               <button
-                onClick={() => pick(subject)}
-                disabled={used}
-                aria-pressed={current === subject}
-                className={`pressable flex min-h-[62px] w-full items-center gap-[10px] rounded-[14px] border px-[16px] py-[10px] text-left ${
-                  used
-                    ? "border-faint bg-chalk opacity-60"
-                    : current === subject
-                      ? "border-mint bg-mint-soft"
-                      : type
-                        ? "border-cream-line bg-cream active:bg-cream-2"
-                        : "border-line bg-white active:bg-chalk"
+                onClick={() => nav.push("lesson", { subject: course.subject })}
+                disabled={!info.open}
+                className={`pressable flex min-h-[62px] w-full items-center gap-[10px] rounded-[14px] border px-[16px] py-[10px] text-left disabled:opacity-60 ${
+                  course.planned ? "border-line bg-white active:bg-chalk" : "border-cream-line bg-cream active:bg-cream-2"
                 }`}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold leading-[22px] text-ink-2">{subject}</span>
+                  <span className="flex items-center gap-[6px]">
+                    <span className="truncate text-[15px] font-semibold leading-[22px] text-ink-2">{course.subject}</span>
+                    {course.required && <span className="shrink-0 text-[11px] font-bold text-mint">필수</span>}
+                  </span>
                   <span className="block text-[12px] leading-[18px] text-gray">
-                    {used ? "다른 학기에 고른 과목이에요" : type ? `${kindOf(d, type)}로 체험해요` : "체험을 만들고 있어요"}
-                    {current === subject ? " · 지금 고른 과목" : ""}
+                    {course.final
+                      ? `졸업 과제 · ${d.final.name}`
+                      : `${course.kind} · ${course.planned ? "체험을 만들고 있어요" : `${experienceName(d, gameOf(d, course.subject))}로 체험해요`}`}
+                    {course.record && course.record.attempts > 1 ? ` · ${course.record.attempts}번 들음` : ""}
                   </span>
                 </span>
-                {!used &&
-                  (type ? (
-                    <span className="flex h-[22px] shrink-0 items-center rounded-full border border-mint bg-white px-[8px] text-[11px] font-semibold text-mint-deep">
-                      {type.startsWith("group:") ? "전공 실습" : "연습 문제"}
-                    </span>
-                  ) : (
-                    <span className="flex h-[22px] shrink-0 items-center rounded-full border border-line bg-white px-[8px] text-[11px] font-semibold text-gray">
-                      구현 예정
-                    </span>
-                  ))}
+                {badge(course)}
               </button>
             </li>
           ))}
@@ -1605,21 +1544,25 @@ export function Choose({ active, nav, state, setState }) {
 /* 15 · 졸업                                                           */
 /* ------------------------------------------------------------------ */
 
+// 학과에서 가장 최근에 남긴 기록(학년이 높은 과목부터).
 function lastNote(state, d) {
-  for (let i = d.lessons.length - 1; i >= 0; i--) if (state.notes[`${d.id}-${i}`]) return state.notes[`${d.id}-${i}`];
+  for (const year of [...YEARS].reverse())
+    for (const subject of [...d.years[year]].reverse()) {
+      const note = state.notes[courseKey(d.id, subject)];
+      if (note) return note;
+    }
   return "";
 }
 
 export function Graduation({ active, nav, state }) {
   const v = view(state);
-  const ok = !!v?.finished;
-  const grade = useCountUp(ok ? v.lastYear : 0, 700, 700);
-  // 휴강한 과목은 이수에 넣지 않는다.
-  const done = useCountUp(ok ? v.passed : 0, 900, 800);
-  const pct = useCountUp(ok ? Math.round((v.passed / v.total) * 100) : 0, 1200, 900);
+  const ok = !!v?.progress.graduated;
+  const taken = ok ? v.progress.taken : [];
+  const average = averagePoint(taken.map((course) => course.record.grade));
+  const done = useCountUp(ok ? v.progress.passedCount : 0, 900, 800);
   useGuard(ok, nav, active);
   if (!ok) return null;
-  const { d, total, skipped } = v;
+  const { d } = v;
   const title = `${d.school} ${d.name}`;
   return (
     <Screen
@@ -1656,9 +1599,9 @@ export function Graduation({ active, nav, state }) {
       </T>
       <div className="a-fade absolute left-0 top-[428px] h-[79px] w-full border-y-2 border-mint-line bg-mint-soft" style={delay(0.5)}>
         {[
-          { v: `${grade}학년`, l: "체험 단계", cx: 71.5, y: 21, size: 20, ly: 46.5 },
-          { v: `${done} / ${total}`, l: "학습 · 실습", cx: 198, y: 25.5, size: 19, ly: 51.5 },
-          { v: `${pct}%`, l: skipped.length ? "이수율" : "체험 완료", cx: 327.5, y: 22.5, size: 20, ly: 46.5 },
+          { v: "4학년", l: "체험 단계", cx: 71.5, y: 21, size: 20, ly: 46.5 },
+          { v: `${done}과목`, l: "이수 과목", cx: 198, y: 21, size: 20, ly: 46.5 },
+          { v: average === null ? "P" : average.toFixed(2), l: average === null ? "통과" : "평균 평점 / 4.5", cx: 327.5, y: 21, size: 20, ly: 46.5 },
         ].map((st) => (
           <div key={st.l} className="absolute top-0 w-[120px] text-center" style={{ left: st.cx - 60 }}>
             <T y={st.y} size={st.size} center className="font-bold text-mint-deep">
@@ -1678,12 +1621,10 @@ export function Graduation({ active, nav, state }) {
         </div>
         <div className="a-up pointer-events-none absolute inset-0" style={delay(0.75)}>
           <T y={105} size={13} left={20.5} className="font-bold text-mint-deep">
-            배운 내용
+            들은 과목
           </T>
           <div className="report-text absolute left-[20.5px] top-[124px] w-[360px] text-[12px] leading-[18px] text-ink-2" style={{ WebkitLineClamp: 2 }}>
-            {d.lessons
-              .map((lesson, i) => `${shortStage(d, i)} ${lesson}${skipped.includes(i) ? "(미이수)" : plannedAt(d, i) ? "(구현 예정)" : ""}`)
-              .join(" · ")}
+            {taken.map((course) => `${course.subject} ${course.record.grade}`).join(" · ")}
           </div>
         </div>
         <div className="a-up pointer-events-none absolute inset-0" style={delay(0.85)}>
@@ -1704,14 +1645,22 @@ export function Graduation({ active, nav, state }) {
 /* ------------------------------------------------------------------ */
 
 function reportText(state, d) {
-  const { completed, skipped, passed } = progressOf(state.journeys[d.id], d.lessons.length);
-  const notes = d.lessons
-    .map((lesson, i) => `${stageLabel(d, i)}. ${lesson}${skipped.includes(i) ? " [미이수]" : plannedAt(d, i) ? " [체험 구현 예정]" : ""}\n${state.notes[`${d.id}-${i}`] || "기록 없음"}`)
-    .join("\n\n");
-  const status = skipped.length
-    ? `${completed} / ${d.lessons.length} 진행 · 이수 ${passed} · 미이수 ${skipped.length}`
-    : `${completed} / ${d.lessons.length} 완료`;
-  return `${d.school} ${d.name} 체험 리포트\n\n${status}\n\n${notes}`;
+  const progress = progressOf(state, d);
+  const average = averagePoint(progress.taken.map((course) => course.record.grade));
+  const lines = progress.years.map(({ year, courses }) => {
+    const taken = courses.filter((course) => course.record);
+    const body = taken.length
+      ? taken
+          .map(
+            (course) =>
+              `- ${course.subject} (${course.final ? "졸업 과제" : course.kind}) ${gradeText(course.record)}${course.passed ? "" : " [재수강 필요]"}\n  ${state.notes[courseKey(d.id, course.subject)] || "기록 없음"}`,
+          )
+          .join("\n")
+      : "- 들은 과목 없음";
+    return `${year}학년\n${body}`;
+  });
+  const status = `${progress.graduated ? "졸업" : `${progress.openYear}학년 진행 중`} · 이수 ${progress.passedCount}과목${average === null ? "" : ` · 평균 평점 ${average.toFixed(2)} / 4.5`}`;
+  return `${d.school} ${d.name} 체험 리포트\n\n${status}\n\n${lines.join("\n\n")}`;
 }
 
 function download(name, text) {
@@ -1728,7 +1677,7 @@ function download(name, text) {
 export function My({ nav, state, setState }) {
   const [confirming, setConfirming] = useState(false);
   const journeys = Object.entries(state.journeys)
-    .map(([id, journey]) => ({ d: all(state).find((item) => item.id === id && item.school), journey }))
+    .map(([id]) => ({ d: all(state).find((item) => item.id === id && item.school) }))
     .filter((item) => item.d);
   const choose = (d, to) => {
     setState((s) => ({ ...s, current: d.id }));
@@ -1747,27 +1696,23 @@ export function My({ nav, state, setState }) {
           기록은 이 브라우저에만 저장돼요.
         </p>
         {journeys.length === 0 && <p className="a-fade mt-[40px] text-center text-[14px] text-mute">아직 체험한 학과가 없어요.</p>}
-        {journeys.map(({ d, journey }, i) => {
-          const total = d.lessons.length;
-          const { completed, skipped, passed, finished } = progressOf(journey, total);
-          const missed = skipped.length ? ` · 미이수 ${skipped.length}` : "";
+        {journeys.map(({ d }, i) => {
+          const progress = progressOf(state, d);
+          const finished = progress.graduated;
+          const average = averagePoint(progress.taken.map((course) => course.record.grade));
           return (
             <div key={d.id} className="a-up mt-[14px] rounded-[16px] border border-cream-line bg-cream p-[16px]" style={delay(0.12 + Math.min(i, 6) * 0.06)}>
               <strong className="block overflow-hidden text-ellipsis whitespace-nowrap text-[16px] font-semibold text-slate">
                 {d.school} {d.name}
               </strong>
               <p className="mt-[4px] text-[12px] leading-[18px] text-gray">
-                {finished
-                  ? skipped.length
-                    ? `졸업 · ${passed} / ${total} 이수${missed}`
-                    : `졸업 · 학습과 실습 ${total}개 완료`
-                  : `${stageLabel(d, Math.min(completed, total - 1))} · ${completed} / ${total} 완료${missed}`}
+                {`${finished ? "졸업" : `${progress.openYear}학년 진행 중`} · 이수 ${progress.passedCount}과목${average === null ? "" : ` · 평점 ${average.toFixed(2)}`}`}
               </p>
               <div className="mt-[12px] flex gap-[8px]">
                 <button className="button" onClick={() => choose(d, finished ? "graduation" : "home")}>
                   {finished ? "졸업 리포트 보기" : "이어서 체험하기"}
                 </button>
-                {finished && (
+                {progress.taken.length > 0 && (
                   <button className="button ghost" onClick={() => download(`${d.school}-${d.name}-체험-리포트.txt`, reportText(state, d))}>
                     리포트 내려받기
                   </button>
@@ -1821,7 +1766,7 @@ export const SCREENS = {
   welcome: Welcome,
   home: Home,
   lesson: Lesson,
-  choose: Choose,
+  courses: Courses,
   grades: Grades,
   diploma: Diploma,
   graduation: Graduation,

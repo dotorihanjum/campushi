@@ -88,8 +88,8 @@ async def server_error(request, exc):
 
 
 def check_department(item):
-    """학과 데이터가 화면이 기대하는 모양인지 확인한다. 학년마다 1·2학기에 하나씩 고를 수 있게 과목이 둘 이상 있어야 하고,
-    실습·졸업 과제 과목은 공식 편성표의 과목이어야 한다."""
+    """학과 데이터가 화면이 기대하는 모양인지 확인한다. 학년마다 과목이 있어야 하고, 실습·졸업 과제 과목과
+    이수구분(kinds: 전공기초·전공필수, 나머지는 전공선택)의 과목은 공식 편성표의 과목이어야 한다."""
     name = f"{item.get('id')}"
     years = item.get("years", {})
     if set(years) != set(YEARS):
@@ -100,8 +100,15 @@ def check_department(item):
     if item.get("final") not in years["4"]:
         raise ValueError(f"{name}: 졸업 과제는 4학년 편성표의 과목이어야 합니다.")
     for year in YEARS:
-        if len([subject for subject in years[year] if subject != item["final"]]) < 2:
-            raise ValueError(f"{name}: {year}학년에 고를 과목이 둘 이상 있어야 합니다(1·2학기에 하나씩 고름).")
+        if not years[year]:
+            raise ValueError(f"{name}: {year}학년 과목이 없습니다.")
+    subjects = {subject for year in YEARS for subject in years[year]}
+    kinds = item.get("kinds", {})
+    if not isinstance(kinds, dict) or set(kinds) - {"전공기초", "전공필수"}:
+        raise ValueError(f"{name}: 이수구분(kinds)은 전공기초·전공필수만 적습니다.")
+    listed = [subject for group in kinds.values() for subject in group]
+    if len(set(listed)) != len(listed) or not set(listed) <= subjects:
+        raise ValueError(f"{name}: 이수구분의 과목은 편성표에 있는 서로 다른 과목이어야 합니다.")
     if item.get("practice") and not any(item["practice"] in years[year] for year in YEARS):
         raise ValueError(f"{name}: 실습 과목은 편성표의 과목이어야 합니다.")
     if not str(item.get("source", {}).get("url", "")).startswith("https://"):
