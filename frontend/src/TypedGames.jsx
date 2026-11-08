@@ -41,8 +41,10 @@ function Questions({ game, onComplete, intro, unit, stack, renderText, after }) 
     if (answered) return;
     const next = [...picks, number];
     setPicks(next);
-    if (next.length === questions.length)
-      onComplete(`${questions.length}${unit} 중 ${countCorrect(questions, next)}개 정답`);
+    if (next.length === questions.length) {
+      const correct = countCorrect(questions, next);
+      onComplete(`${questions.length}${unit} 중 ${correct}개 정답`, { correct, total: questions.length });
+    }
   }
   function restart() {
     setQuestions(questionsOf(game));
@@ -187,7 +189,8 @@ function Match({ game, onComplete, after }) {
     const next = [...matched, item];
     setMatched(next);
     setFeedback(`맞아요. ${game.items[item].left} — ${game.items[item].right}`);
-    if (next.length === size) onComplete(`${size}쌍 짝 맞추기 · 틀린 시도 ${misses}번`);
+    // 점수: 짝마다 1점, 틀린 시도마다 1점씩 뺀다(0점 아래로는 내려가지 않는다).
+    if (next.length === size) onComplete(`${size}쌍 짝 맞추기 · 틀린 시도 ${misses}번`, { correct: Math.max(0, size - misses), total: size });
   }
   function restart() {
     setRights(shuffle(game.items.map((_, i) => i)));
@@ -251,16 +254,21 @@ const roundComponents = { match: Match, pick: Pick, ox: Ox, sort: Sort, order: O
 function Theory({ game, onComplete }) {
   const [play, setPlay] = useState(() => ({ id: 0, rounds: theoryRounds(game) }));
   const [index, setIndex] = useState(0);
-  const [results, setResults] = useState([]);
+  const [results, setResults] = useState([]); // 라운드마다 { summary, score }
   const round = play.rounds[index];
   const Round = roundComponents[round.type];
   const last = index === play.rounds.length - 1;
 
-  function complete(summary) {
+  // 점수: 세 라운드의 맞힌 수와 문항 수를 더한다.
+  function complete(summary, score) {
     if (results.length > index) return;
-    const next = [...results, summary];
+    const next = [...results, { summary, score }];
     setResults(next);
-    if (next.length === play.rounds.length) onComplete(`${ROUNDS}라운드 · ${next.join(" / ")}`.slice(0, 200));
+    if (next.length === play.rounds.length) {
+      const correct = next.reduce((sum, item) => sum + item.score.correct, 0);
+      const total = next.reduce((sum, item) => sum + item.score.total, 0);
+      onComplete(`${ROUNDS}라운드 · ${total}문항 중 ${correct}개 · ${next.map((item) => item.summary).join(" / ")}`.slice(0, 200), { correct, total });
+    }
   }
   function again() {
     setPlay((current) => ({ id: current.id + 1, rounds: theoryRounds(game, Math.random, current.rounds.map((r) => r.type)) }));

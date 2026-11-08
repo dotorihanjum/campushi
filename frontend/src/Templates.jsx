@@ -19,7 +19,8 @@ import {
 const PLAN_FIELDS = ["topic", "reason", "method"];
 
 // 체험 틀의 화면. 데이터 형식과 채점은 experiences.js에 있다.
-// 틀마다 data(검사를 통과한 체험 데이터)를 받고, 체험을 끝내면 onComplete(요약 한 줄)를 부른다.
+// 틀마다 data(검사를 통과한 체험 데이터)를 받고, 체험을 끝내면 onComplete(요약 한 줄, 점수)를 부른다.
+// 점수는 { correct, total }(처음 고른 답 기준으로 맞힌 수)이고 성적은 grades.js가 매긴다. 점수를 매길 수 없는 체험은 "P"다.
 
 const sceneImages = { sand: img.sceneSand, paint: img.scenePaint };
 // 마지막 글자에 받침이 있는지. 숫자는 읽는 소리로 본다(영·일·삼·육·칠·팔은 받침이 있다).
@@ -236,7 +237,12 @@ function AdjacentOrder({ data, onComplete }) {
       `${swap ? `${left} > ${because(right)} 바꿨어요.` : `${left} < ${because(right)} 그대로 뒀어요.`}` +
         (next.done ? " 정렬이 끝났어요." : passed ? ` ${next.pass}바퀴 끝, 오른쪽 끝 ${next.pass}칸이 자리를 잡았어요.` : ""),
     );
-    if (next.done) onComplete(`버블 정렬 ${next.pass}바퀴 · 비교 ${total.compares}번 · 교환 ${total.swaps}번 · 실수 ${total.mistakes}번`);
+    // 점수: 비교한 횟수 중 처음부터 규칙대로 고른 비율(실수할 때마다 한 번씩 더 고른 셈이다).
+    if (next.done)
+      onComplete(`버블 정렬 ${next.pass}바퀴 · 비교 ${total.compares}번 · 교환 ${total.swaps}번 · 실수 ${total.mistakes}번`, {
+        correct: total.compares,
+        total: total.compares + total.mistakes,
+      });
   }
   function restart() {
     const order = startOrder(size, "adjacent");
@@ -310,21 +316,25 @@ function MoveOrder({ data, onComplete, after }) {
     setOrder(moveStep(order, index, delta));
     setResult(null);
   }
+  // 점수: 처음 확인했을 때 제자리에 있던 단계 수.
+  const firstRight = useRef(0);
   function check() {
     const right = rightPlaces(order);
+    if (tries === 0) firstRight.current = right;
     setTries(tries + 1);
     setResult(right);
-    if (right === size) onComplete(`${size}단계 순서 맞추기 · ${tries + 1}번 만에 완성`);
+    if (right === size) onComplete(`${size}단계 순서 맞추기 · ${tries + 1}번 만에 완성`, { correct: firstRight.current, total: size });
   }
   function reveal() {
     setOrder(order.map((_, i) => i));
     setResult("shown");
-    onComplete(`${size}단계 순서 맞추기 · 정답을 보고 확인`);
+    onComplete(`${size}단계 순서 맞추기 · 정답을 보고 확인`, { correct: firstRight.current, total: size });
   }
   function restart() {
     setOrder(startOrder(size, "move"));
     setTries(0);
     setResult(null);
+    firstRight.current = 0;
   }
 
   return (
@@ -412,7 +422,7 @@ function Classify({ data, onComplete }) {
     setFirstTry(first);
     setTried(true);
     setFeedback(correct);
-    if (correct && index === total - 1) onComplete(`${data.noun} ${unit(total)} · 한 번에 맞힌 것 ${unit(first)}`);
+    if (correct && index === total - 1) onComplete(`${data.noun} ${unit(total)} · 한 번에 맞힌 것 ${unit(first)}`, { correct: first, total });
   }
   function goTo(number) {
     setIndex(number);
@@ -525,6 +535,7 @@ function Reaction({ data, onComplete }) {
       onComplete(
         `${result.total}문제 중 ${result.correct}개 정답` +
           (result.difference === null ? "" : ` · ${second} ${differenceText(result.difference)}`),
+        { correct: result.correct, total: result.total },
       );
     }
   }
@@ -809,7 +820,10 @@ function TrainTemplate({ data, onComplete }) {
             className="button"
             onClick={() => {
               setStage("launch");
-              onComplete(`학습 사진 ${data.train.length}장 · 시험 ${right}/${data.test.length} · 가르친 횟수 ${attempts}번`);
+              onComplete(`학습 사진 ${data.train.length}장 · 시험 ${right}/${data.test.length} · 가르친 횟수 ${attempts}번`, {
+                correct: right,
+                total: data.test.length,
+              });
             }}
           >
             출시하기

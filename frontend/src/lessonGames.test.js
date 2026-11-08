@@ -14,7 +14,7 @@ import {
   moveStep,
 } from "./lessonGames.js";
 import { gameFor, isGame } from "./games.js";
-import { createDepartment, completeLesson, chooseSubject, withChoices, loadState, initialState, STORAGE_KEY } from "./model.js";
+import { createDepartment, completeCourse, courseKey, gameOf, loadState, initialState, savePlay, STORAGE_KEY } from "./model.js";
 import { getLessonGame, ApiError } from "./api.js";
 import { RAW_CSE } from "./testFixtures.js";
 
@@ -202,25 +202,19 @@ test("과목의 체험은 연습 문제 유형이고, 모르는 유형이나 없
   assert.ok(!isGame("group:music") && !isGame("stroop") && !isGame("없는게임") && !isGame(undefined));
 });
 
-test("연습 문제가 있는 과목을 고르면 그 문제를 풀어야 완료되고, 저장했다 불러와도 그대로다", () => {
+test("연습 문제가 있는 과목은 그 문제를 끝까지 풀어야 성적을 받고, 저장했다 불러와도 그대로다", () => {
   const d = createDepartment(RAW_CSE);
-  assert.deepEqual(d.lessonGames, { 객체지향프로그래밍: "match", 운영체제: "sort" });
-  const key = `${d.id}-0`;
-  const enrolled = { ...structuredClone(initialState), catalog: [RAW_CSE], journeys: { [d.id]: { completed: 0, paused: false } } };
-  const state = chooseSubject(enrolled, d.id, 0, "객체지향프로그래밍");
-  assert.equal(withChoices(d, state.choices).games[0], "match");
-  assert.equal(completeLesson(state, d.id, 0, "기록"), state);
-  // 연습 문제를 받지 못해 기본 체험으로 진행한 기록(결과가 빈 문자열)으로도 수업을 마칠 수 있다.
-  for (const summary of ["4쌍 짝 맞추기 · 틀린 시도 1번", ""]) {
-    const played = { ...state, plays: { [key]: { game: "match", summary } } };
-    assert.equal(completeLesson(played, d.id, 0, "기록").journeys[d.id].completed, 1);
-  }
+  assert.deepEqual(d.lessonGames, { 객체지향프로그래밍: "match", 미분적분학: "theory", 운영체제: "sort" });
+  assert.equal(gameOf(d, "객체지향프로그래밍"), "match");
+  const key = courseKey(d.id, "객체지향프로그래밍");
+  const enrolled = { ...structuredClone(initialState), catalog: [RAW_CSE], journeys: { [d.id]: {} } };
+  assert.equal(completeCourse(enrolled, d.id, "객체지향프로그래밍", "기록"), enrolled);
+  const played = savePlay(enrolled, d.id, "객체지향프로그래밍", "match", "4쌍 짝 맞추기 · 틀린 시도 1번", { correct: 3, total: 4 });
+  assert.deepEqual(completeCourse(played, d.id, "객체지향프로그래밍", "기록").records[key], { grade: "B0", percent: 75, attempts: 1, last: "B0" });
   const restored = loadState({
-    getItem: (name) =>
-      name === STORAGE_KEY ? JSON.stringify({ ...state, plays: { [key]: { game: "match", summary: "결과" }, [`${d.id}-1`]: { game: "scenario", summary: "x" } } }) : null,
+    getItem: (name) => (name === STORAGE_KEY ? JSON.stringify({ ...played, plays: { ...played.plays, [courseKey(d.id, "운영체제")]: { game: "scenario", summary: "x", score: { correct: 1, total: 1 } } } }) : null),
   });
-  assert.deepEqual(restored.choices, { [key]: "객체지향프로그래밍" });
-  assert.deepEqual(restored.plays, { [key]: { game: "match", summary: "결과" } });
+  assert.deepEqual(restored.plays, { [key]: { game: "match", summary: "4쌍 짝 맞추기 · 틀린 시도 1번", score: { correct: 3, total: 4 } } });
 });
 
 test("연습 문제를 형식에 맞게 받는다", async (t) => {

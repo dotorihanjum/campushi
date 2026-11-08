@@ -12,7 +12,7 @@ const MIN_H = 560;
 const TRIM_TOP = 32;
 const TRIM_BOTTOM = 28;
 const DURATION = 520;
-const STACK_KEY = "campushi-stack";
+const STACK_KEY = "campushi-stack-v2";
 
 const ENTER = { push: "tr-push-in", fade: "tr-fade-in", rise: "tr-rise-in" };
 const EXIT = { push: "tr-push-out", fade: "tr-fade-out", rise: "tr-fade-out" };
