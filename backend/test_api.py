@@ -36,17 +36,19 @@ class ApiTest(unittest.TestCase):
         self.assertIn("데이터베이스", cse["years"]["3"])
         # 2023-1 ~ 2026-2 개설 기록이 없는 과목은 뺐다(SOURCE.md).
         self.assertNotIn("웹보안", cse["years"]["4"])
-        self.assertEqual(cse["games"]["객체지향프로그래밍"], "match")
+        # 지금 공개한 연습 문제는 1학년 이론 수업 5과목의 문제 은행뿐이다(2026-11-09 사용자 결정, 나머지는 구현 예정).
+        self.assertEqual(set(cse["games"]), {"이산구조", "미분적분학", "미분방정식", "선형대수", "실감미디어컴퓨팅기초"})
+        self.assertEqual(design["games"], {})
         self.assertEqual(len(design["years"]["2"]), 10)
 
     def test_lesson_game(self):
-        response = self.client.post("/api/lesson_game", json={"subject": "객체지향프로그래밍"})
+        response = self.client.post("/api/lesson_game", json={"subject": "이산구조"})
         self.assertEqual(response.status_code, 200)
         game = response.json()["game"]
-        self.assertEqual(game["course_name"], "객체지향프로그래밍")
+        self.assertEqual(game["course_name"], "이산구조")
         self.assertNotIn("check", game)
-        # 문제가 없는 과목, 이 서비스의 과목이 아닌 과목은 404다.
-        for subject in ["드로잉없음", "회계원리"]:
+        # 문제가 없는 과목(구현 예정), 이 서비스의 과목이 아닌 과목은 404다.
+        for subject in ["객체지향프로그래밍", "드로잉", "회계원리"]:
             response = self.client.post("/api/lesson_game", json={"subject": subject})
             self.assertEqual(response.status_code, 404)
             self.assertEqual(response.json()["detail"], "이 과목의 연습 문제가 아직 없어요.")
@@ -120,6 +122,11 @@ class ApiTest(unittest.TestCase):
 
 
 class TheoryBankTest(unittest.TestCase):
+    def test_meaning_must_not_contain_term(self):
+        bank = copy.deepcopy(theory_banks.load()[0])
+        bank["terms"][0]["meaning"] = bank["terms"][0]["term"] + "의 뜻"
+        self.assertTrue(any("뜻에 용어" in issue for issue in theory_banks.problems(bank)))
+
     def test_service_banks_are_valid(self):
         banks = theory_banks.load()
         self.assertTrue(banks)

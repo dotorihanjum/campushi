@@ -19,10 +19,24 @@ function fresh(terms, n, random, used) {
   return picked;
 }
 
-// 단원별 용어 묶음(분류하기용). 한 단원에 용어가 2개 이상이어야 칸이 된다.
+// 단원 이름과 단어가 겹치는 용어(예: 단원 '라플라스 변환'의 용어 '라플라스 변환', 단원 '적분'의 '부분적분')는
+// 분류하기 보기만 봐도 답이 보이므로 분류하기에 내지 않는다. 단원 이름은 '·'로 나눈 두 글자 이상의 낱말로 본다.
+const squash = (value) => value.replace(/[\s()]/g, "");
+export function revealsUnit(term, units) {
+  const word = squash(term);
+  return units.some((unit) =>
+    unit
+      .split("·")
+      .map(squash)
+      .filter((part) => part.length >= 2)
+      .some((part) => word.includes(part) || part.includes(word)),
+  );
+}
+
+// 단원별 용어 묶음(분류하기용). 답이 보이는 용어는 빼고, 한 단원에 용어가 2개 이상이어야 칸이 된다.
 const unitGroups = (bank) =>
   bank.units
-    .map((name, unit) => ({ name, terms: bank.terms.filter((item) => item.unit === unit) }))
+    .map((name, unit) => ({ name, terms: bank.terms.filter((item) => item.unit === unit && !revealsUnit(item.term, bank.units)) }))
     .filter((group) => group.terms.length >= 2);
 const SORT_ITEMS = 6;
 const SORT_MAX = 8;
