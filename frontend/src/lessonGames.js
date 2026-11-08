@@ -1,5 +1,5 @@
 // 미리 만들어 둔 유형별 연습 문제의 형식 검사와 채점. 화면은 TypedGames.jsx에 있다.
-// 문제는 backend/lesson_games.py로 넣고, 형식과 상한은 backend/SOURCE.md에 있다(여기 검사와 같아야 한다).
+// 고정 문제는 backend/data/lesson_games.jsonl, 이론 문제 은행은 backend/data/theory_banks.jsonl에 넣는다. 형식과 상한은 backend/SOURCE.md에 있다(여기 검사와 같아야 한다).
 
 export const BLANK = "___";
 

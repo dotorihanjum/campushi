@@ -26,7 +26,7 @@ function cleanRub(raw) {
   return phases && { phases };
 }
 
-// 순서 맞추기. items는 올바른 순서대로 적는다. swap이 "adjacent"면 이웃한 두 카드만 바꿀 수 있다(버블 정렬).
+// 순서 맞추기. items는 올바른 순서대로 적는다. swap이 "adjacent"면 버블 정렬 규칙대로 이웃한 두 카드를 비교하며 정렬한다.
 function cleanOrder(raw) {
   const adjacent = raw.swap === "adjacent";
   const items = all(list(raw.items, 4, 6)?.map((item) => text(item, adjacent ? 4 : 24)));
@@ -224,6 +224,24 @@ export function swapAdjacent(order, index) {
   [next[index], next[index + 1]] = [next[index + 1], next[index]];
   return next;
 }
+// 버블 정렬 따라 하기. order: 지금 놓인 카드(번호가 곧 크기 순서), pass: 끝낸 바퀴 수, at: 이번에 비교할 왼쪽 자리,
+// swapped: 이번 바퀴에 바꾼 적이 있는지. 바퀴마다 왼쪽부터 오른쪽 끝(고정된 카드 앞)까지 이웃한 두 카드를 비교한다.
+export const bubbleStart = (order) => ({ order, pass: 0, at: 0, swapped: false, done: isSorted(order) && order.length < 2 });
+// 지금 비교하는 두 카드를 바꿔야 하는지(왼쪽이 더 크면 바꾼다).
+export const bubbleShould = (state) => state.order[state.at] > state.order[state.at + 1];
+// 한 번 비교한다. swap이 버블 정렬 규칙과 다르면 상태를 그대로 둔다(ok: false).
+// 바퀴가 끝났을 때 이번 바퀴에 바꾼 것이 없거나 비교할 카드가 하나만 남으면 정렬이 끝난다.
+export function bubbleStep(state, swap) {
+  if (state.done || swap !== bubbleShould(state)) return { state, ok: false };
+  const order = swap ? swapAdjacent(state.order, state.at) : state.order;
+  const swapped = state.swapped || swap;
+  const at = state.at + 1;
+  if (at < order.length - 1 - state.pass) return { state: { ...state, order, at, swapped }, ok: true };
+  const pass = state.pass + 1;
+  const done = !swapped || order.length - 1 - pass <= 0;
+  return { state: { order, pass, at: 0, swapped: false, done }, ok: true };
+}
+
 // 섞은 시작 순서. 이웃 교환일 때는 너무 쉬운 배치를 피해 역순 쌍이 최대의 40% 이상이 되게 한다.
 export function startOrder(size, swap, random = Math.random) {
   if (swap !== "adjacent") return scramble(size, random);
@@ -321,12 +339,12 @@ const raw = {
   sorting: {
     template: "B",
     title: "버블 정렬 직접 해보기",
-    task: "이웃한 두 카드만 바꾸면서 카드를 작은 수부터 차례로 놓아요.",
+    task: "버블 정렬 규칙대로 이웃한 두 카드를 비교하며 카드를 작은 수부터 차례로 놓아요.",
     swap: "adjacent",
-    prompt: "카드를 작은 수부터 차례로 놓아요. 단, 이웃한 두 카드만 서로 바꿀 수 있어요. 카드 사이의 ⇄ 버튼을 눌러 바꿔요.",
+    prompt: "왼쪽부터 이웃한 두 카드를 비교해 왼쪽이 더 크면 바꿔요. 끝까지 가면 다시 왼쪽부터 하고, 한 바퀴 동안 바꾼 게 없으면 끝나요.",
     items: ["1", "3", "4", "6", "8", "9"],
     explanation:
-      "이웃끼리만 바꿀 수 있을 때 필요한 최소 횟수는 순서가 뒤집힌 쌍의 개수와 같아요. 버블 정렬이 바로 이 방식이라, 카드가 많아질수록 교환 횟수가 빠르게 늘어요. 그래서 더 빠른 정렬 방법을 배우게 돼요.",
+      "이웃끼리만 바꿀 수 있을 때 정렬하는 데 필요한 최소 교환 횟수는 순서가 뒤집힌 쌍의 개수와 같아요. 버블 정렬이 바로 이 방식이라, 카드가 많아질수록 교환 횟수가 빠르게 늘어요. 그래서 더 빠른 정렬 방법을 배우게 돼요.",
   },
   journal: {
     template: "C",

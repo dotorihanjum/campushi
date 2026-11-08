@@ -1,16 +1,17 @@
-import React, { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { img } from "./assets.js";
 import { T } from "./ui.jsx";
 import { moveStep, rightPlaces } from "./lessonGames.js";
 import {
+  bubbleShould,
+  bubbleStart,
+  bubbleStep,
   checkPicks,
   inversions,
-  isSorted,
   makeTrials,
   predict,
   startOrder,
   summarizeReaction,
-  swapAdjacent,
   trainStump,
 } from "./experiences.js";
 
@@ -21,10 +22,15 @@ const PLAN_FIELDS = ["topic", "reason", "method"];
 // 틀마다 data(검사를 통과한 체험 데이터)를 받고, 체험을 끝내면 onComplete(요약 한 줄)를 부른다.
 
 const sceneImages = { sand: img.sceneSand, paint: img.scenePaint };
+// 마지막 글자에 받침이 있는지. 숫자는 읽는 소리로 본다(영·일·삼·육·칠·팔은 받침이 있다).
 const hasBatchim = (word) => {
+  const last = word[word.length - 1];
+  if (/[0-9]/.test(last)) return "013678".includes(last);
   const code = word.charCodeAt(word.length - 1);
   return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0;
 };
+// "8 > 3이라서", "9 > 4라서"
+const because = (word) => `${word}${hasBatchim(word) ? "이라서" : "라서"}`;
 
 function Restart({ children, onClick }) {
   return (
@@ -202,59 +208,78 @@ export function Rub({ data, year, onDone, onQuit }) {
 }
 
 /* ---- B 순서 맞추기 ---- */
-// 이웃 교환(adjacent): 카드 사이의 ⇄로 이웃끼리 바꾼다. 최소 교환 횟수(역순 쌍의 수)와 비교해 보여준다.
+// 이웃 교환(adjacent): 버블 정렬을 규칙 그대로 따라 한다. 강조된 두 카드를 비교해 바꿀지 고르고,
+// 규칙과 다르게 고르면 반영하지 않고 이유를 알려준다. 바퀴가 끝날 때마다 오른쪽 끝 카드가 자리를 잡는다.
 function AdjacentOrder({ data, onComplete }) {
   const size = data.items.length;
-  const [order, setOrder] = useState(() => startOrder(size, "adjacent"));
-  const [minimum, setMinimum] = useState(() => inversions(order));
-  const [swaps, setSwaps] = useState(0);
-  const done = isSorted(order);
+  const [state, setState] = useState(() => bubbleStart(startOrder(size, "adjacent")));
+  const [minimum, setMinimum] = useState(() => inversions(state.order));
+  const [count, setCount] = useState({ compares: 0, swaps: 0, mistakes: 0 });
+  const [feedback, setFeedback] = useState("");
+  const card = (i) => data.items[state.order[i]];
 
-  function swap(index) {
-    const next = swapAdjacent(order, index);
-    setOrder(next);
-    setSwaps(swaps + 1);
-    if (isSorted(next)) onComplete(`교환 ${swaps + 1}번으로 정렬 · 최소 ${minimum}번`);
+  function choose(swap) {
+    if (state.done) return;
+    const [left, right] = [card(state.at), card(state.at + 1)];
+    const should = bubbleShould(state);
+    const { state: next, ok } = bubbleStep(state, swap);
+    if (!ok) {
+      setCount({ ...count, mistakes: count.mistakes + 1 });
+      setFeedback(should ? `${left} > ${because(right)} 바꿔야 해요.` : `${left} < ${because(right)} 그대로 둬야 해요.`);
+      return;
+    }
+    const total = { ...count, compares: count.compares + 1, swaps: count.swaps + (swap ? 1 : 0) };
+    setCount(total);
+    setState(next);
+    const passed = next.pass > state.pass;
+    setFeedback(
+      `${swap ? `${left} > ${because(right)} 바꿨어요.` : `${left} < ${because(right)} 그대로 뒀어요.`}` +
+        (next.done ? " 정렬이 끝났어요." : passed ? ` ${next.pass}바퀴 끝, 오른쪽 끝 ${next.pass}칸이 자리를 잡았어요.` : ""),
+    );
+    if (next.done) onComplete(`버블 정렬 ${next.pass}바퀴 · 비교 ${total.compares}번 · 교환 ${total.swaps}번 · 실수 ${total.mistakes}번`);
   }
   function restart() {
-    const next = startOrder(size, "adjacent");
-    setOrder(next);
-    setMinimum(inversions(next));
-    setSwaps(0);
+    const order = startOrder(size, "adjacent");
+    setState(bubbleStart(order));
+    setMinimum(inversions(order));
+    setCount({ compares: 0, swaps: 0, mistakes: 0 });
+    setFeedback("");
   }
+  const fixed = (i) => state.done || i >= size - state.pass;
+  const comparing = (i) => !state.done && (i === state.at || i === state.at + 1);
   return (
     <>
       <p className="body-copy">{data.prompt}</p>
-      <div className="sort-row">
-        {order.map((step, i) => (
-          <Fragment key={step}>
-            <span className="sort-card">{data.items[step]}</span>
-            {i < size - 1 && (
-              <button
-                className="sort-swap"
-                disabled={done}
-                aria-label={`${data.items[step]}와 ${data.items[order[i + 1]]} 바꾸기`}
-                onClick={() => swap(i)}
-              >
-                ⇄
-              </button>
-            )}
-          </Fragment>
+      <div className="sort-row" aria-label="카드">
+        {state.order.map((step, i) => (
+          <span
+            key={step}
+            className={`sort-card ${comparing(i) ? "is-compare" : ""} ${fixed(i) ? "is-fixed" : ""}`}
+            aria-current={comparing(i) ? "true" : undefined}
+          >
+            {data.items[step]}
+          </span>
         ))}
       </div>
-      <p className="game-progress" role="status">
-        교환 {swaps}번{done ? " · 정렬 완료!" : ""}
+      <p className="game-progress">
+        {state.done ? "정렬 완료!" : `${state.pass + 1}바퀴째 · ${card(state.at)}, ${card(state.at + 1)} 비교`}
       </p>
-      {done && (
+      <p className="game-feedback" role="status">
+        {feedback}
+      </p>
+      {state.done ? (
         <>
           <p className="body-copy">
-            {swaps === minimum
-              ? `가장 적은 횟수인 ${minimum}번 만에 정렬했어요.`
-              : `${swaps}번 만에 정렬했어요. 이 배치는 최소 ${minimum}번이면 돼요.`}{" "}
+            {`${state.pass}바퀴 동안 ${count.compares}번 비교하고 ${count.swaps}번 바꿨어요. 바꾼 횟수는 처음 배치에서 순서가 뒤집힌 쌍의 수(${minimum}개)와 같아요.`}{" "}
             {data.explanation}
           </p>
           <Restart onClick={restart}>새로 섞어서 다시 하기 →</Restart>
         </>
+      ) : (
+        <div className="game-choices" role="group" aria-label="고르기">
+          <button onClick={() => choose(true)}>바꾸기</button>
+          <button onClick={() => choose(false)}>그대로 두기</button>
+        </div>
       )}
     </>
   );

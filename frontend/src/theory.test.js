@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { cleanGame, questionsOf } from "./lessonGames.js";
-import { ROUNDS, roundTitles, roundTypesOf, theoryRounds } from "./theory.js";
+import { ROUNDS, revealsUnit, roundTitles, roundTypesOf, theoryRounds } from "./theory.js";
 
 // 형식 검사용 예시 은행. 서비스 데이터가 아니다.
 const BANK = cleanGame({
@@ -167,5 +167,25 @@ test("서비스의 이론 문제 은행은 모두 형식이 맞고 3라운드 �
     assert.ok(bank, raw.course_name);
     assert.ok(roundTypesOf(bank).length >= 4, `${raw.course_name}: ${roundTypesOf(bank)}`);
     for (let seed = 1; seed <= 30; seed++) assert.equal(theoryRounds(bank, seeded(seed)).length, ROUNDS);
+  }
+});
+
+test("분류하기에는 단원 이름만 보고 답이 보이는 용어를 내지 않는다", () => {
+  assert.ok(revealsUnit("라플라스 변환", ["일계 방정식", "라플라스 변환"]));
+  assert.ok(revealsUnit("부분적분", ["미분", "적분"]));
+  assert.ok(revealsUnit("트리", ["논리", "그래프·트리"]));
+  assert.ok(!revealsUnit("평균값 정리", ["미분", "적분"]));
+  assert.ok(!revealsUnit("명제", ["논리", "그래프·트리"]));
+  const bank = {
+    ...BANK,
+    units: ["라플라스 변환", "푸리에 급수"],
+    terms: [
+      ...["라플라스 변환", "푸리에 급수"].map((term, unit) => ({ term, meaning: `${unit}번 뜻`, unit })),
+      ...BANK.terms.slice(0, 8).map((item, n) => ({ ...item, unit: n % 2 })),
+    ],
+  };
+  for (let seed = 1; seed <= 100; seed++) {
+    const sort = theoryRounds(bank, seeded(seed)).find((round) => round.type === "sort");
+    if (sort) for (const item of sort.items) assert.ok(!revealsUnit(item.text, sort.categories), item.text);
   }
 });
