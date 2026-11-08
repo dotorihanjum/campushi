@@ -69,7 +69,7 @@ function seeded(seed) {
 }
 
 test("유형마다 이름과 형식 검사가 등록되어 있다", () => {
-  assert.deepEqual(Object.keys(lessonTypes), ["blank", "ox", "order", "match", "sort"]);
+  assert.deepEqual(Object.keys(lessonTypes), ["blank", "ox", "order", "match", "sort", "theory"]);
   assert.ok(Object.values(lessonTypes).every((type) => type.title && typeof type.clean === "function"));
   assert.ok(isLessonType("ox"));
   for (const bad of ["stroop", "constructor", "", null, 3]) assert.ok(!isLessonType(bad));

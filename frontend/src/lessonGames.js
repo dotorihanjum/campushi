@@ -95,6 +95,54 @@ function cleanSort(raw) {
     : null;
 }
 
+// ---- 이론 수업 문제 은행(theory): 한 세트가 아니라 재료를 받아, 체험할 때마다 theory.js가 라운드 3개를 새로 뽑는다.
+// units: 단원 이름, terms: 용어와 뜻(단원 번호), facts: 맞거나 틀린 문장, sequences: 순서가 있는 과정(없어도 된다).
+// 짝 맞추기·용어 고르기·OX 라운드는 늘 만들 수 있어야 하므로 용어 8개 이상, 맞는 문장과 틀린 문장이 2개 이상씩 있어야 한다.
+function cleanTheory(raw) {
+  const units =
+    Array.isArray(raw.units) && raw.units.length >= 2 && raw.units.length <= 6 && raw.units.every((unit) => text(unit, 8)) && distinct(raw.units)
+      ? raw.units
+      : null;
+  const terms =
+    units &&
+    all(
+      rows(raw.terms, 8, 40)?.map((item) =>
+        text(item.term, 10) && text(item.meaning, 22) && Number.isInteger(item.unit) && item.unit >= 0 && item.unit < units.length
+          ? { term: item.term, meaning: item.meaning, unit: item.unit }
+          : null,
+      ),
+    );
+  const facts = all(
+    rows(raw.facts, 5, 40)?.map((item) =>
+      text(item.text, 60) && typeof item.answer === "boolean" && text(item.explanation, 80)
+        ? { text: item.text, answer: item.answer, explanation: item.explanation }
+        : null,
+    ),
+  );
+  const sequences = all(
+    rows(raw.sequences ?? [], 0, 10)?.map((item) =>
+      text(item.prompt, 40) &&
+      Array.isArray(item.steps) &&
+      item.steps.length >= 4 &&
+      item.steps.length <= 5 &&
+      item.steps.every((step) => text(step, 24)) &&
+      distinct(item.steps) &&
+      text(item.explanation, 120)
+        ? { prompt: item.prompt, steps: item.steps, explanation: item.explanation }
+        : null,
+    ),
+  );
+  return terms &&
+    facts &&
+    sequences &&
+    distinct(terms.map((item) => item.term)) &&
+    distinct(terms.map((item) => item.meaning)) &&
+    facts.filter((item) => item.answer).length >= 2 &&
+    facts.filter((item) => !item.answer).length >= 2
+    ? { units, terms, facts, sequences }
+    : null;
+}
+
 // 유형을 추가하려면 여기에 형식 검사를 넣고, TypedGames.jsx의 typedComponents에 같은 이름으로 화면을 등록한다.
 export const lessonTypes = {
   blank: { title: "빈칸 채우기", clean: cleanBlank },
@@ -102,10 +150,11 @@ export const lessonTypes = {
   order: { title: "순서 맞추기", clean: cleanOrder },
   match: { title: "짝 맞추기", clean: cleanMatch },
   sort: { title: "분류하기", clean: cleanSort },
+  theory: { title: "이론 퀴즈", clean: cleanTheory },
 };
 export const isLessonType = (type) => typeof type === "string" && Object.hasOwn(lessonTypes, type);
 
-// 서버에서 받은 문제를 검사한다. 형식이 맞지 않으면 null이고, 화면은 기본 체험으로 넘어간다.
+// 서버에서 받은 문제를 검사한다. 형식이 맞지 않으면 null이고, 화면은 구현 예정 과목처럼 넘어간다.
 export function cleanGame(raw) {
   if (!raw || typeof raw !== "object" || !isLessonType(raw.type)) return null;
   const body = lessonTypes[raw.type].clean(raw);
@@ -130,8 +179,9 @@ export function shuffle(items, random = Math.random) {
 }
 
 // ---- 하나씩 고르는 유형(빈칸 채우기, OX, 분류하기): 문항마다 보기 중 하나가 정답이다.
+// pick(용어 고르기)은 이론 퀴즈의 라운드로만 나온다(theory.js가 만든다). 모양은 빈칸 채우기와 같다.
 export function questionsOf(game, random = Math.random) {
-  if (game.type === "blank")
+  if (game.type === "blank" || game.type === "pick")
     return game.items.map((item) => ({
       text: item.text,
       options: shuffle(

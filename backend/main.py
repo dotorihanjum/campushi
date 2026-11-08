@@ -16,6 +16,7 @@ logger = logging.getLogger("uvicorn.error")
 DATA_DIR = Path(__file__).parent / "data"
 DEPARTMENTS_PATH = DATA_DIR / "departments.json"
 GAMES_PATH = DATA_DIR / "lesson_games.jsonl"
+THEORY_PATH = DATA_DIR / "theory_banks.jsonl"
 DIST_PATH = Path(__file__).parent.parent / "frontend" / "dist"
 MAX_BODY_BYTES = 16 * 1024
 YEARS = ("1", "2", "3", "4")
@@ -116,17 +117,26 @@ def departments():
     return items
 
 
+def verified_lines(path, subjects):
+    """jsonl에서 검증을 통과했고(status: verified) 편성표 과목인 것만 과목 → 내용으로. 검증 기록(check)은 내보내지 않는다."""
+    found = {}
+    if path.exists():
+        with path.open(encoding="utf-8") as file:
+            for line in file:
+                item = json.loads(line) if line.strip() else {}
+                if item.get("status") == "verified" and item.get("course_name") in subjects:
+                    found[item["course_name"]] = {key: value for key, value in item.items() if key != "check"}
+    return found
+
+
 @lru_cache(maxsize=1)
 def lesson_games():
-    """검증을 통과한 연습 문제: 과목 → 문제. 두 학과 편성표의 과목 것만 둔다."""
+    """검증을 통과한 연습 문제: 과목 → 문제. 두 학과 편성표의 과목 것만 둔다.
+    이론 수업 문제 은행(theory_banks.jsonl, 유형 theory)이 있는 과목은 고정된 문제 대신 은행을 쓴다."""
     subjects = {subject for item in departments() for year in YEARS for subject in item["years"][year]}
-    games = {}
-    if GAMES_PATH.exists():
-        with GAMES_PATH.open(encoding="utf-8") as file:
-            for line in file:
-                game = json.loads(line) if line.strip() else {}
-                if game.get("status") == "verified" and game.get("course_name") in subjects:
-                    games[game["course_name"]] = {key: value for key, value in game.items() if key != "check"}
+    games = verified_lines(GAMES_PATH, subjects)
+    for subject, bank in verified_lines(THEORY_PATH, subjects).items():
+        games[subject] = {**bank, "type": "theory"}
     return games
 
 
