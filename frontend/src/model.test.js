@@ -47,8 +47,10 @@ test("실제 학과 데이터(서버 파일)는 프런트 형식 검사를 통�
     assert.equal(d.lessons[7], raw.final);
     assert.ok(d.partner && d.partnerExample);
     assert.ok(d.source.url.startsWith("https://"));
-    assert.ok(d.practiceSubject && d.practice, `${raw.id} 실습 과목`);
   }
+  // 학과군 실습은 컴퓨터·AI(알고리즘 → 버블 정렬)만 공개한다. 디자인 실습은 다시 만들 때까지 구현 예정이다.
+  assert.ok(createDepartment(departments[0]).practiceSubject && createDepartment(departments[0]).practice);
+  assert.equal(createDepartment(departments[1]).practice, null);
   assert.equal(createDepartment(departments[0]).final.template, "G");
   assert.equal(createDepartment(departments[1]).final.kind, "artwork");
 });

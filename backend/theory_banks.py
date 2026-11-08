@@ -27,6 +27,10 @@ def _text(value, limit):
     return isinstance(value, str) and value.strip() != "" and len(value) <= limit
 
 
+def _squash(value):
+    return "".join(value.split())
+
+
 def problems(bank):
     """형식 문제 목록. 비어 있으면 화면에서 쓸 수 있다."""
     found = []
@@ -49,6 +53,10 @@ def problems(bank):
                 and isinstance(item.get("unit"), int) and not isinstance(item.get("unit"), bool) and 0 <= item["unit"] < len(units)):
             found.append(f"terms[{i}]: term 1~10자, meaning 1~22자, unit은 단원 번호입니다.")
     good = [item for item in terms if isinstance(item, dict)]
+    for item in good:
+        # 뜻에 용어가 그대로 들어 있으면 용어 고르기·짝 맞추기에서 답이 보인다.
+        if _text(item.get("term"), 10) and isinstance(item.get("meaning"), str) and _squash(item["term"]) in _squash(item["meaning"]):
+            found.append(f"terms '{item['term']}': 뜻에 용어가 그대로 들어 있습니다.")
     if len({item.get("term") for item in good}) != len(good) or len({item.get("meaning") for item in good}) != len(good):
         found.append("terms의 용어와 뜻은 서로 달라야 합니다.")
     facts = bank.get("facts")

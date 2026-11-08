@@ -717,20 +717,13 @@ body {
   color: #fff;
   text-align: center;
 }
-.sort-swap {
-  width: 24px;
-  height: 44px;
-  border-radius: 8px;
-  font-size: 15px;
-  color: #302b27;
-  cursor: pointer;
+.sort-card.is-compare {
+  background: #27d8cd;
+  outline: 3px solid #fee99a;
+  outline-offset: 1px;
 }
-.sort-swap:active:not(:disabled) {
-  background: #d6f8f6;
-}
-.sort-swap:disabled {
-  opacity: 0.25;
-  cursor: default;
+.sort-card.is-fixed {
+  background: #827d76;
 }
 .journal-text {
   border-radius: 12px;

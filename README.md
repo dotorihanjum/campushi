@@ -42,7 +42,6 @@ npm run build
 | `frontend/` | React 19 + Vite + Tailwind CSS v4 화면 |
 | `backend/main.py` | FastAPI: `/api/health`, `/api/departments`, `/api/lesson_game` |
 | `backend/data/departments.json` | 두 학과의 공식 편성표 (출처: `backend/SOURCE.md`) |
-| `backend/data/lesson_games.jsonl` | 검증을 통과한 연습 문제 |
 | `backend/data/theory_banks.jsonl` | 이론 수업 문제 은행 (체험할 때마다 3라운드를 새로 뽑음) |
 | `api/index.py`, `vercel.json` | Vercel 배포 설정(정적 프런트 + 서버리스 API) |
 

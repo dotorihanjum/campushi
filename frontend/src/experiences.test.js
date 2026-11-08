@@ -13,6 +13,9 @@ import {
   swapAdjacent,
   templates,
   trainStump,
+  bubbleShould,
+  bubbleStart,
+  bubbleStep,
 } from "./experiences.js";
 import { createDepartment, finalReady } from "./model.js";
 import { groupData } from "./groupData.js";
@@ -236,4 +239,41 @@ test("프로젝트형 졸업 과제는 끝까지 해봐야 완료할 수 있다"
   assert.equal(d.final.kind, "project");
   assert.equal(finalReady({ artworks: {} }, d), false);
   assert.equal(finalReady({ artworks: { [d.id]: true } }, d), true);
+});
+
+test("버블 정렬 실습은 규칙대로 고를 때만 진행되고, 바꾼 횟수는 뒤집힌 쌍의 수와 같다", () => {
+  // 규칙과 다른 선택은 상태를 바꾸지 않는다.
+  const start = bubbleStart([2, 0, 1, 3]);
+  assert.equal(bubbleShould(start), true);
+  assert.deepEqual(bubbleStep(start, false), { state: start, ok: false });
+  // 첫 바퀴: (2,0) 바꿈 → (2,1) 바꿈 → (2,3) 그대로. 바퀴가 끝나면 다음 바퀴는 왼쪽부터, 비교 범위가 하나 줄어든다.
+  let state = bubbleStep(start, true).state;
+  assert.deepEqual(state.order, [0, 2, 1, 3]);
+  state = bubbleStep(state, true).state;
+  state = bubbleStep(state, false).state;
+  assert.deepEqual(state, { order: [0, 1, 2, 3], pass: 1, at: 0, swapped: false, done: false });
+  // 둘째 바퀴에서 한 번도 바꾸지 않으면 끝난다.
+  state = bubbleStep(state, false).state;
+  state = bubbleStep(state, false).state;
+  assert.equal(state.done, true);
+  assert.equal(state.pass, 2);
+  assert.deepEqual(bubbleStep(state, false), { state, ok: false });
+
+  for (let seed = 1; seed <= 100; seed++) {
+    const order = startOrder(6, "adjacent", seeded(seed));
+    let current = bubbleStart(order);
+    let swaps = 0;
+    let compares = 0;
+    while (!current.done) {
+      const swap = bubbleShould(current);
+      // 반대로 고르면 언제나 거절된다.
+      assert.equal(bubbleStep(current, !swap).ok, false);
+      current = bubbleStep(current, swap).state;
+      swaps += swap ? 1 : 0;
+      compares++;
+      assert.ok(compares <= 15);
+    }
+    assert.deepEqual(current.order, [0, 1, 2, 3, 4, 5]);
+    assert.equal(swaps, inversions(order));
+  }
 });
