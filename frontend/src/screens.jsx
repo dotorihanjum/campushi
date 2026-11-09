@@ -39,7 +39,7 @@ import LessonGame, { useLessonGame } from "./Games.jsx";
 import { Rub } from "./Templates.jsx";
 import { templates } from "./experiences.js";
 import { groupName } from "./groups.js";
-import { CAMPUS, PLACES, departmentsIn } from "./campus.js";
+import { CAMPUS, CAMPUSES, PLACES, departmentsIn } from "./campus.js";
 import CampusMap, { MAP_SHOWN, MAP_W } from "./CampusMap.jsx";
 
 /* ------------------------------------------------------------------ */
@@ -138,10 +138,11 @@ const stamp = (date) =>
 /* 01 · 스플래시                                                       */
 /* ------------------------------------------------------------------ */
 
-export function Splash({ nav, setState }) {
+export function Splash({ nav, state, setState }) {
+  // 시작하기 → 학교(캠퍼스) 고르기 → 지도. 이미 캠퍼스를 골랐으면 바로 지도로 간다.
   const start = () => {
     setState((s) => ({ ...s, onboarded: true }));
-    nav.reset(["home"]);
+    nav.reset([state.campus ? "home" : "school"]);
   };
   return (
     <Screen
@@ -168,6 +169,69 @@ export function Splash({ nav, setState }) {
           style={delay(0.55)}
         />
       </Center>
+    </Screen>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 02 · 학교(캠퍼스) 고르기                                            */
+/* ------------------------------------------------------------------ */
+
+export function School({ nav, setState }) {
+  // 준비 중인 캠퍼스를 눌렀을 때의 안내.
+  const [hint, setHint] = useState("");
+  const timer = useRef(0);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const pick = (campus) => {
+    if (!campus.open) {
+      setHint(`${campus.school} ${josa(campus.name, "은", "는")} 아직 준비 중이에요.`);
+      window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => setHint(""), 2600);
+      return;
+    }
+    setState((s) => ({ ...s, onboarded: true, campus: campus.id }));
+    nav.reset(["home"], "fade");
+  };
+  return (
+    <Screen>
+      <T y={104} size={28} lh={38} left={20} className="a-up font-bold text-navy">
+        {"어느 학교로\n가볼까요?"}
+      </T>
+      <T y={194} size={14.5} left={20.5} clip={360} className="a-up text-gray" style={delay(0.06)}>
+        캠퍼스를 고르면 그 캠퍼스 지도로 이동해요.
+      </T>
+      {CAMPUSES.map((campus, i) => (
+        <button
+          key={campus.id}
+          onClick={() => pick(campus)}
+          aria-label={`${campus.school} ${campus.name}${campus.open ? "" : ", 준비 중"}`}
+          className={`pressable a-up absolute left-[20px] flex h-[96px] w-[362px] items-center gap-[14px] rounded-[18px] border-2 px-[16px] text-left ${
+            campus.open ? "border-mint bg-white shadow-[0_8px_20px_rgba(39,216,205,0.18)]" : "border-line bg-chalk"
+          }`}
+          style={{ top: 250 + i * 112, ...delay(0.12 + i * 0.06) }}
+        >
+          <span className={`h-[60px] w-[60px] shrink-0 ${campus.open ? "" : "opacity-40 grayscale"}`}>
+            <SchoolLogo school={campus.school} size={56} />
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className={`truncate text-[17px] font-bold leading-[24px] ${campus.open ? "text-ink-2" : "text-gray"}`}>{`${campus.school} ${campus.name}`}</span>
+            <span className="truncate text-[12.5px] leading-[19px] text-gray">{campus.region}</span>
+          </span>
+          {campus.open ? (
+            <span className="flex h-[28px] shrink-0 items-center rounded-full bg-mint px-[12px] text-[13px] font-bold text-white">입장 →</span>
+          ) : (
+            <span className="flex h-[28px] shrink-0 items-center rounded-full border border-line bg-white px-[10px] text-[12px] font-semibold text-gray">🔒 준비 중</span>
+          )}
+        </button>
+      ))}
+      <p
+        key={hint || "none"}
+        role="status"
+        className={`absolute left-[20px] right-[20px] text-center text-[13px] leading-[20px] text-mint-deep ${hint ? "a-shake" : ""}`}
+        style={{ top: 250 + CAMPUSES.length * 112 + 6 }}
+      >
+        {hint}
+      </p>
     </Screen>
   );
 }
@@ -659,8 +723,8 @@ function TabBar({ active, nav, state }) {
     if (id === "home") nav.reset(["home"]);
     if (id === "explore") nav.push("departments");
     // 전공: 지금 보고 있는(또는 체험 중인) 학과의 상세. 아직 고른 학과가 없으면 학과 둘러보기로 간다.
-    // 전공: 입학한 학과가 있으면 그 학과 홈(지금 체험 중인 학과), 없으면 보고 있던 학과 상세나 학과 목록.
-    if (id === "major") nav.push(Object.keys(state.journeys).length ? "major" : state.current ? "detail" : "departments");
+    // 전공: 지금 체험 중인 학과의 홈. 입학한 학과가 없으면 그 화면이 안내를 보여준다.
+    if (id === "major") nav.push("major");
     if (id === "my") nav.push("my");
   };
   return (
@@ -902,8 +966,28 @@ export function Major({ active, nav, state, setState }) {
   const step = v?.journey ? nextStepOf(v.progress) : null;
   const percent = step ? step.percent : 0;
   const pct = useCountUp(percent);
-  // 입학한 학과가 하나도 없으면 지도로 돌려보낸다.
-  useGuard(!!v?.journey || !!fallback, nav, active);
+  // 입학한 학과가 하나도 없으면 안내와 함께 학과를 고르러 갈 수 있게 한다.
+  if (!v?.journey && !fallback)
+    return (
+      <Screen foot={739} veil={false} footer={<TabBar active="major" nav={nav} state={state} />}>
+        <Header title="나의 전공" />
+        <div className="a-pop absolute left-[121px] top-[176px] h-[160px] w-[160px]" style={delay(0.05)}>
+          <img src={yearCharacter(1).src} alt="" className="loop h-full w-full object-contain" style={{ animation: "float 2.6s ease-in-out 0.9s infinite" }} />
+        </div>
+        <T y={370} size={22} center className="a-up font-bold text-navy" style={delay(0.15)}>
+          아직 체험 중인 전공이 없어요
+        </T>
+        <T y={408} size={14} lh={22} center clip={340} className="a-up text-gray" style={delay(0.22)}>
+          {"캠퍼스 지도에서 건물을 골라 학과에 체험 입학하면\n여기에서 진행 상황과 과목을 볼 수 있어요."}
+        </T>
+        <FilledButton top={500} onClick={() => nav.reset(["home"])}>
+          캠퍼스 지도에서 학과 고르기
+        </FilledButton>
+        <button className="text-button a-up absolute left-0 right-0 top-[578px] text-center" onClick={() => nav.push("departments")} style={delay(0.3)}>
+          학과 목록으로 보기 →
+        </button>
+      </Screen>
+    );
   if (!v?.journey) return null;
   const { d, progress } = v;
   const { openYear, graduated, years, passedCount } = progress;
@@ -1724,6 +1808,7 @@ export function My({ nav, state, setState }) {
 
 export const SCREENS = {
   splash: Splash,
+  school: School,
   departments: Departments,
   detail: Detail,
   enrolled: Enrolled,

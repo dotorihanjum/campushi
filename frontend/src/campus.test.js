@@ -27,3 +27,14 @@ test("서비스의 학과는 모두 지도의 단과대 건물에 있고, 그 �
   assert.deepEqual(open.sort(), ["예술·디자인대학관", "전자정보/응용과학대학관"]);
   assert.equal(placeOf("정문"), null);
 });
+
+test("시작할 때 고르는 캠퍼스는 경희대 국제캠퍼스(열림)와 서울캠퍼스(준비 중)이고, 열린 캠퍼스만 저장된다", async () => {
+  const { CAMPUSES, isOpenCampus } = await import("./campus.js");
+  const { normalize } = await import("./model.js");
+  assert.deepEqual(CAMPUSES.map((c) => [c.name, c.open]), [["국제캠퍼스", true], ["서울캠퍼스", false]]);
+  assert.equal(CAMPUS.id, "khu-global");
+  assert.ok(isOpenCampus("khu-global") && !isOpenCampus("khu-seoul") && !isOpenCampus("없음"));
+  assert.equal(normalize({ campus: "khu-global" }).campus, "khu-global");
+  assert.equal(normalize({ campus: "khu-seoul" }).campus, null);
+  assert.equal(normalize({}).campus, null);
+});
