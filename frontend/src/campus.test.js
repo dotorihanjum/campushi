@@ -14,8 +14,8 @@ test("캠퍼스 지도의 건물은 공식 캠퍼스맵의 번호와 오픈스�
     assert.ok(["college", "landmark"].includes(place.kind), place.name);
     assert.ok(place.x > 0 && place.x < 1 && place.y > 0 && place.y < 1, place.name);
   }
-  // 단과대 건물의 이름표(CampusMap.jsx: 글자 10px, 높이 15px)는 서로 겹치지 않는다.
-  const box = (p) => ({ x: p.x * MAP_W, y: p.y * MAP_H + (p.labelDy || 0), w: p.name.length * 10 + 28 });
+  // 단과대 건물의 이름표(CampusMap.jsx: 건물 아래 끝에 달고, 글자 10px, 높이 15px)는 서로 겹치지 않는다.
+  const box = (p) => ({ x: p.x * MAP_W, y: p.bottom * MAP_H + (p.labelDy || 0), w: p.name.length * 10 + 28 });
   const colleges = PLACES.filter((p) => p.kind === "college").map((p) => ({ p, ...box(p) }));
   for (const a of colleges)
     for (const b of colleges)
@@ -24,7 +24,10 @@ test("캠퍼스 지도의 건물은 공식 캠퍼스맵의 번호와 오픈스�
 
 test("지도 데이터: 공식 캠퍼스맵처럼 가로로 긴 그림이고, 건물·길·나무가 그림 안에 있다", () => {
   assert.ok(MAP_W > MAP_H);
-  for (const b of BUILDINGS) assert.ok(b.cx > 0 && b.cx < MAP_W && b.cy > 0 && b.cy < MAP_H && b.w > 0 && b.h > 0, String(b.id));
+  for (const b of BUILDINGS) {
+    assert.ok(b.cx > 0 && b.cx < MAP_W && b.cy > 0 && b.cy < MAP_H && b.w > 0 && b.h > 0 && b.bottom >= b.cy && b.height > 0, String(b.id));
+    assert.ok(b.floor.startsWith("M") && b.roof.startsWith("M") && b.walls.length > 0, String(b.id));
+  }
   for (const d of ROADS) assert.match(d, /^M[\d.]+ [\d.]+(L-?[\d.]+ -?[\d.]+)+$/);
   for (const [x, y, r] of TREES) assert.ok(x >= 0 && x <= MAP_W && y >= 0 && y <= MAP_H && r > 0);
 });

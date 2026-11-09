@@ -3,7 +3,7 @@ import { PLACES, departmentsIn } from "./campus.js";
 import { BUILDINGS, MAP_H, MAP_W, ROADS, SHAPES, STADIUMS, TREES } from "./campusMapData.js";
 
 // 국제캠퍼스 지도 그림. 건물·길·숲·연못·운동장의 자리는 오픈스트리트맵의 실제 데이터(campusMapData.js)를 따르고,
-// 그림은 일러스트로 그린다(건물은 입체 블록, 숲은 동그란 나무). 건물 이름·번호는 공식 캠퍼스맵(campus.js)을 따르며,
+// 그림은 일러스트로 그린다(건물은 실제 윤곽을 세운 입체, 숲은 동그란 나무). 건물 이름·번호는 공식 캠퍼스맵(campus.js)을 따르며,
 // 공식 캠퍼스맵처럼 북쪽이 오른쪽이다. 디자인 시안이 나오면 이 파일의 그림(색·모양)만 바꾼다.
 
 export { MAP_H, MAP_W };
@@ -12,73 +12,49 @@ export const MAP_SHOWN = MAP_H;
 
 const px = (x) => x * MAP_W;
 const py = (y) => y * MAP_H;
-const PLACE_IDS = new Set(PLACES.map((p) => p.osm));
 
-const BLOCK_COLORS = {
-  open: { wall: "#5fd6cd", side: "#26b0a7", roof: "#c9f5f1", window: "#f2fffd" },
-  locked: { wall: "#d3d9e0", side: "#b6c0ca", roof: "#eef1f4", window: "#f8fafb" },
-  other: { wall: "#e3e7eb", side: "#c8cfd6", roof: "#f4f6f8", window: "#fbfcfd" },
+const COLORS = {
+  open: { roof: "#a8efe9", front: "#4fcfc5", side: "#22a49b", window: "#effffd", line: "#1f9e95" },
+  locked: { roof: "#e8ecf0", front: "#c9d1da", side: "#a9b4c0", window: "#f8fafb", line: "#a9b3be" },
+  other: { roof: "#eef1f4", front: "#d6dce2", side: "#bcc5ce", window: "#fbfcfd", line: "#bcc4cc" },
 };
+const f1 = (n) => Math.round(n * 10) / 10;
 
-/** 입체 건물 블록(56×44). 단과대·다른 건물 모두 이 모양을 쓰고 색만 다르다. */
-function BlockShape({ c }) {
+/** 입체 건물: 그림자, 보이는 벽(창문 줄), 지붕. */
+function Building({ b, c }) {
+  const h = b.height;
   return (
-    <>
-      <ellipse cx="27" cy="40" rx="25" ry="3.6" fill="rgba(20,60,40,0.16)" />
-      <polygon points="4,12 34,12 49,5 19,5" fill={c.roof} />
-      <rect x="4" y="12" width="30" height="27" fill={c.wall} />
-      <polygon points="34,12 49,5 49,32 34,39" fill={c.side} />
-      {[0, 1, 2].map((r) => [0, 1, 2, 3].map((k) => <rect key={`${r}-${k}`} x={7.2 + k * 6.4} y={15 + r * 6.6} width="3.6" height="4" rx="0.6" fill={c.window} />))}
-      {[0, 1].map((k) => [0, 1, 2].map((r) => (
-        <polygon key={`s${k}-${r}`} points={`${37.5 + k * 5.5},${16.5 + r * 6.6 - k * 2.5} ${40.5 + k * 5.5},${15 + r * 6.6 - k * 2.5} ${40.5 + k * 5.5},${19 + r * 6.6 - k * 2.5} ${37.5 + k * 5.5},${20.5 + r * 6.6 - k * 2.5}`} fill={c.window} opacity="0.75" />
-      )))}
-      <rect x="16" y="32" width="6" height="7" fill={c.side} />
-    </>
+    <g>
+      <path d={b.floor} transform="translate(3 2)" fill="rgba(20,60,40,0.16)" />
+      {b.walls.map(([x1, y1, x2, y2, side, windows], i) => (
+        <g key={i}>
+          <path d={`M${x1} ${y1}L${x2} ${y2}L${x2} ${f1(y2 - h)}L${x1} ${f1(y1 - h)}Z`} fill={side ? c.side : c.front} />
+          {windows === 1 &&
+            [0.35, 0.68].map((t) => (
+              <path key={t} d={`M${x1} ${f1(y1 - h * t)}L${x2} ${f1(y2 - h * t)}`} stroke={c.window} strokeWidth="1.6" strokeDasharray="2.4 2" opacity="0.9" />
+            ))}
+        </g>
+      ))}
+      <path d={b.roof} fill={c.roof} stroke={c.line} strokeWidth="0.8" strokeLinejoin="round" fillRule="evenodd" />
+    </g>
   );
 }
 
-function Block({ open }) {
+/** 정문 그림(아치). 실제 정문은 가는 구조물이라 윤곽 대신 이 그림을 쓴다. */
+function Gate() {
   return (
-    <svg width="56" height="44" viewBox="0 0 56 44" aria-hidden>
-      <BlockShape c={open ? BLOCK_COLORS.open : BLOCK_COLORS.locked} />
+    <svg width="40" height="30" viewBox="0 0 40 30" aria-hidden>
+      <rect x="4" y="8" width="6" height="20" fill="#f4f1ea" stroke="#cfc6b4" />
+      <rect x="30" y="8" width="6" height="20" fill="#f4f1ea" stroke="#cfc6b4" />
+      <path d="M4 9 Q20 -4 36 9" fill="none" stroke="#cfc6b4" strokeWidth="4" />
+      <path d="M4 9 Q20 -4 36 9" fill="none" stroke="#f4f1ea" strokeWidth="2" />
     </svg>
   );
 }
 
-/** 랜드마크 그림: 정문(아치), 도서관(기둥), 학생회관(작은 건물). 대운동장은 바탕 그림에 그린다. */
-function LandmarkIcon({ name }) {
-  if (name === "정문")
-    return (
-      <svg width="40" height="30" viewBox="0 0 40 30" aria-hidden>
-        <rect x="4" y="8" width="6" height="20" fill="#f4f1ea" stroke="#cfc6b4" />
-        <rect x="30" y="8" width="6" height="20" fill="#f4f1ea" stroke="#cfc6b4" />
-        <path d="M4 9 Q20 -4 36 9" fill="none" stroke="#cfc6b4" strokeWidth="4" />
-        <path d="M4 9 Q20 -4 36 9" fill="none" stroke="#f4f1ea" strokeWidth="2" />
-      </svg>
-    );
-  const library = name === "중앙도서관";
-  return (
-    <svg width={library ? 50 : 38} height="30" viewBox={library ? "0 0 50 30" : "0 0 38 30"} aria-hidden>
-      <ellipse cx={library ? 25 : 19} cy="27" rx={library ? 23 : 17} ry="2.6" fill="rgba(20,60,40,0.14)" />
-      {library ? (
-        <>
-          <polygon points="3,9 25,2 47,9" fill="#e9e3d6" />
-          <rect x="4" y="9" width="42" height="17" fill="#fbf8f1" stroke="#d9d1bf" />
-          {[0, 1, 2, 3, 4, 5].map((k) => <rect key={k} x={8 + k * 6.6} y="11" width="2.6" height="13" fill="#e2dac8" />)}
-        </>
-      ) : (
-        <>
-          <rect x="4" y="7" width="30" height="19" fill="#fbe9c9" stroke="#e7cf9f" />
-          {[0, 1, 2].map((k) => <rect key={k} x={8 + k * 9} y="11" width="5" height="5" fill="#fffaf0" />)}
-          <rect x="16" y="19" width="6" height="7" fill="#e7cf9f" />
-        </>
-      )}
-    </svg>
-  );
-}
-
-// 이름표가 없는 건물(기숙사·실험동 등)은 실제 크기에 맞춰 작은 블록으로 그린다.
-const others = BUILDINGS.filter((b) => !PLACE_IDS.has(b.id)).map((b) => ({ ...b, s: Math.min(0.8, Math.max(0.42, Math.max(b.w, b.h) / 60)) }));
+const GATE = PLACES.find((p) => p.name === "정문");
+const byId = new Map(BUILDINGS.map((b) => [b.id, b]));
+const placeOfId = new Map(PLACES.map((p) => [p.osm, p]));
 
 /**
  * 지도. departments: 학과 목록(학과가 있는 건물만 열림), onOpen(건물 이름): 열린 건물을 눌렀을 때, onLocked(건물 이름): 잠긴 건물을 눌렀을 때.
@@ -122,37 +98,27 @@ export default function CampusMap({ departments, onOpen, onLocked }) {
             <circle cx={-r * 0.3} cy={-r * 0.3} r={r * 0.55} fill="#78c983" />
           </g>
         ))}
-        {others.map((b) => (
-          <g key={b.id} transform={`translate(${b.cx - 27 * b.s} ${b.cy - 30 * b.s}) scale(${b.s})`}>
-            <BlockShape c={BLOCK_COLORS.other} />
-          </g>
-        ))}
+        {BUILDINGS.filter((b) => b.id !== GATE.osm).map((b) => {
+          const place = placeOfId.get(b.id);
+          const open = place?.kind === "college" && departmentsIn(departments, place.name).length > 0;
+          const c = open ? COLORS.open : place?.kind === "college" ? COLORS.locked : COLORS.other;
+          if (place?.kind !== "college") return <Building key={b.id} b={b} c={c} />;
+          // 단과대 건물 그림도 누를 수 있다(키보드·화면 낭독기는 아래 이름표 버튼으로 누른다).
+          return (
+            <g key={b.id} className="cursor-pointer" style={{ pointerEvents: "auto" }} onClick={() => (open ? onOpen(place.name) : onLocked(place.name))}>
+              <Building b={b} c={c} />
+            </g>
+          );
+        })}
       </svg>
 
-      {/* 랜드마크(누를 수 없음) */}
-      {PLACES.filter((p) => p.kind === "landmark").map((p) => (
-        <div
-          key={p.no}
-          className="pointer-events-none absolute flex -translate-x-1/2 flex-col items-center"
-          style={{ left: px(p.x), top: py(p.y) - (p.name === "대운동장" ? 9 : 22) }}
-        >
-          {p.name !== "대운동장" && <LandmarkIcon name={p.name} />}
-          <span className="mt-[1px] whitespace-nowrap rounded-full bg-white/80 px-[7px] py-[1px] text-[10px] font-medium text-ink-3">{p.name}</span>
-        </div>
-      ))}
-
-      {/* 단과대 건물 그림(눌러도 된다). 이름표가 이웃 건물 그림에 가려지지 않게 그림은 아래 층, 이름표는 위 층에 둔다. */}
-      {PLACES.filter((p) => p.kind === "college").map((p) => {
-        const open = departmentsIn(departments, p.name).length > 0;
+      {/* 랜드마크 이름(누를 수 없음). 건물은 지붕 가운데, 정문은 아치 그림 아래에 단다. */}
+      {PLACES.filter((p) => p.kind === "landmark").map((p) => {
+        const top = p === GATE ? py(p.y) - 26 : py(p.y) - (byId.get(p.osm)?.height ?? 0) - 9;
         return (
-          <div
-            key={p.no}
-            aria-hidden
-            onClick={() => (open ? onOpen(p.name) : onLocked(p.name))}
-            className="pressable absolute -translate-x-1/2 cursor-pointer"
-            style={{ left: px(p.x), top: py(p.y) + (p.labelDy || 0) - 30 }}
-          >
-            <Block open={open} />
+          <div key={p.no} className="pointer-events-none absolute flex -translate-x-1/2 flex-col items-center" style={{ left: px(p.x), top }}>
+            {p === GATE && <Gate />}
+            <span className="mt-[1px] whitespace-nowrap rounded-full bg-white/85 px-[7px] py-[1px] text-[10px] font-medium text-ink-3">{p.name}</span>
           </div>
         );
       })}
@@ -161,16 +127,19 @@ export default function CampusMap({ departments, onOpen, onLocked }) {
       {PLACES.filter((p) => p.kind === "college").map((p) => {
         const here = departmentsIn(departments, p.name);
         const open = here.length > 0;
+        // 이름표는 건물 아래 끝에, 핀은 지붕 가운데 위에 둔다.
+        const labelTop = py(p.bottom) + 3 + (p.labelDy || 0);
+        const pinTop = py(p.y) - (byId.get(p.osm)?.height ?? 0) - 26;
         return (
           <button
             key={p.no}
             onClick={() => (open ? onOpen(p.name) : onLocked(p.name))}
             aria-label={open ? `${p.name}, ${here.map((d) => d.name).join(", ")}` : `${p.name}, 준비 중`}
             className="pressable absolute flex w-[96px] -translate-x-1/2 flex-col items-center"
-            style={{ left: px(p.x), top: py(p.y) + (p.labelDy || 0) + 13, zIndex: open ? 3 : 2 }}
+            style={{ left: px(p.x), top: labelTop, zIndex: open ? 3 : 2 }}
           >
             {open && (
-              <svg className="loop absolute -top-[65px]" style={{ animation: "float 1.8s ease-in-out infinite" }} width="20" height="26" viewBox="0 0 20 26" aria-hidden>
+              <svg className="loop absolute" style={{ top: pinTop - labelTop, animation: "float 1.8s ease-in-out infinite" }} width="20" height="26" viewBox="0 0 20 26" aria-hidden>
                 <path d="M10 25S1.5 15.4 1.5 9.6a8.5 8.5 0 0 1 17 0C18.5 15.4 10 25 10 25Z" fill="#27d8cd" stroke="#087f77" strokeWidth="1.5" />
                 <circle cx="10" cy="9.5" r="3.3" fill="#fff" />
               </svg>

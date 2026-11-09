@@ -12,6 +12,8 @@ import { join } from "node:path";
 const CAMPUS_RELATION = 11246784; // 경희대학교 국제캠퍼스
 const MAP_H = 560; // 지도 그림의 높이(px). 폭은 실제 비율대로 정해진다.
 const MARGIN_M = 45; // 건물·운동장 바깥으로 더 보여줄 여백(m)
+// 건물 벽 높이(px). 오픈스트리트맵에 층수가 있으면 한 층에 4px(최소 12, 최대 24), 없으면 16.
+const WALL = (tags) => (tags["building:levels"] ? Math.min(24, Math.max(12, Number(tags["building:levels"]) * 4)) : 16);
 const OUT = new URL("../frontend/src/campusMapData.js", import.meta.url);
 
 const QUERY_FEATURES = `[out:json][timeout:90];rel(${CAMPUS_RELATION});map_to_area->.c;(way["building"](area.c);way["highway"](area.c);way["natural"](area.c);way["leisure"](area.c);way["landuse"](area.c);way["amenity"="parking"](area.c););out geom tags;`;
@@ -120,7 +122,31 @@ function joinRings(members) {
 }
 
 // 그림 스타일(일러스트)에 맞게 고른다: 차가 다니는 길·보행로만 굵게 그리고(주차장 칸·오솔길·계단은 뺀다),
-// 숲은 그 안에 동그란 나무를 심어 그린다. 건물은 위치(중심)만 쓰고 모양은 아이콘으로 그린다.
+// 숲은 그 안에 동그란 나무를 심어 그린다. 건물은 실제 윤곽을 바닥으로 벽을 세워 입체(2.5D)로 그린다.
+
+// 입체 건물: 바닥 윤곽(rings)에서 보는 쪽(아래)을 향한 벽과, 벽 높이만큼 올린 지붕을 만든다.
+function extrude(rings, tags) {
+  const height = WALL(tags);
+  const pts = rings.map((g) => simplify(g.map(toMap)));
+  const walls = [];
+  for (const ring of pts) {
+    let area = 0;
+    for (let i = 0; i < ring.length - 1; i++) area += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+    const sign = area > 0 ? 1 : -1;
+    for (let i = 0; i < ring.length - 1; i++) {
+      const [a, z] = [ring[i], ring[i + 1]];
+      const nx = (z[1] - a[1]) * sign;
+      const ny = -(z[0] - a[0]) * sign;
+      if (ny <= 0) continue;
+      // [x1, y1, x2, y2, 옆면(1)·앞면(0), 창문 줄을 그릴 만큼 긴가(1·0)]
+      walls.push([r1(a[0]), r1(a[1]), r1(z[0]), r1(z[1]), Math.abs(nx) / Math.hypot(nx, ny) > 0.6 ? 1 : 0, Math.hypot(z[0] - a[0], z[1] - a[1]) > 8 ? 1 : 0]);
+    }
+  }
+  walls.sort((p, q) => p[1] + p[3] - (q[1] + q[3]));
+  const d = (dy) => pts.map((ring) => ring.map(([x, y], i) => `${i ? "L" : "M"}${r1(x)} ${r1(y - dy)}`).join("") + "Z").join("");
+  const bottom = r1(Math.max(...pts.flat().map((q) => q[1])));
+  return { height, floor: d(0), roof: d(height), walls, bottom };
+}
 const shapes = { wood: [], water: [], pitch: [] };
 const roads = [];
 const stadiums = [];
@@ -138,7 +164,7 @@ for (const w of ways) {
   const t = w.tags;
   if (t.building) {
     const [cx, cy] = centroid(w.geometry);
-    buildings.push({ id: w.id, name: t.name || "", cx, cy, ...bbox(w.geometry) });
+    buildings.push({ id: w.id, name: t.name || "", cx, cy, ...bbox(w.geometry), ...extrude([w.geometry], t) });
   } else if (t.highway) {
     if ((t.highway === "service" && !t.service) || t.highway === "pedestrian") {
       roads.push(line(w.geometry, false, 2));
@@ -161,9 +187,9 @@ for (const w of ways) {
 for (const r of buildingRelations) {
   const outer = joinRings(r.members.filter((m) => m.role === "outer"));
   const [cx, cy] = centroid(outer[0]);
-  buildings.push({ id: r.id, name: r.tags.name || "", cx, cy, ...bbox(outer[0]) });
+  buildings.push({ id: r.id, name: r.tags.name || "", cx, cy, ...bbox(outer[0]), ...extrude(outer, r.tags) });
 }
-buildings.sort((a, b) => a.cy - b.cy || a.id - b.id);
+buildings.sort((a, b) => a.bottom - b.bottom || a.id - b.id);
 
 // 나무: 고른 간격(+고정 난수로 조금 흔듦)의 자리 중 숲 안은 절반쯤, 숲 밖 잔디는 드문드문 심는다.
 // 길·건물·운동장 위에는 심지 않는다.
@@ -202,7 +228,8 @@ const header = `// 자동 생성 파일: node scripts/campus-map.mjs 로 다시 
 // 경희대 국제캠퍼스의 실제 건물 위치·길·숲·운동장. 데이터 © OpenStreetMap contributors, ODbL 1.0
 // (https://www.openstreetmap.org/copyright), ${new Date().toISOString().slice(0, 10)} 받음.
 // 좌표는 지도 그림의 px(폭 MAP_W, 높이 MAP_H)이고, 공식 캠퍼스맵처럼 실제 지도를 시계 방향으로 90도 돌렸다(북쪽이 오른쪽).
-// BUILDINGS의 cx·cy는 건물 윤곽의 중심, w·h는 윤곽을 담는 상자의 크기다. TREES는 [x, y, 반지름]이다.
+// BUILDINGS(아래쪽 끝 순서): cx·cy는 바닥 윤곽의 중심, w·h는 윤곽을 담는 상자, bottom은 윤곽의 아래 끝, height는 벽 높이,
+// floor·roof는 바닥·지붕 윤곽, walls는 보이는 벽 [x1, y1, x2, y2, 옆면, 창문]이다. TREES는 [x, y, 반지름]이다.
 `;
 const body = [
   `export const MAP_W = ${MAP_W};`,
