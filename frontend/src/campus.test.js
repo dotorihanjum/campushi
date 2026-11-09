@@ -52,16 +52,18 @@ test("시작할 때 고르는 캠퍼스는 경희대 국제캠퍼스(열림)와 
   assert.equal(normalize({}).campus, null);
 });
 
-test("학교 검색: 띄어쓰기·대소문자 무시, 학교·캠퍼스 이름·지역·'○○대' 줄임말로 찾고, 없으면 빈 목록", async () => {
+test("학교 검색: 학교 이름(띄어쓰기 무시, '○○대' 줄임말 포함)으로만 찾고, 없으면 빈 목록", async () => {
   const { findCampuses } = await import("./campus.js");
   const ids = (q) => findCampuses(q).map((c) => c.id);
   assert.deepEqual(ids(""), ["khu-global", "khu-seoul"]);
   assert.deepEqual(ids("   "), ["khu-global", "khu-seoul"]);
   assert.deepEqual(ids("경희"), ["khu-global", "khu-seoul"]);
-  assert.deepEqual(ids("경희대 국제"), ["khu-global"]);
-  assert.deepEqual(ids("경희대학교 서울캠퍼스"), ["khu-seoul"]);
-  assert.deepEqual(ids("용인"), ["khu-global"]);
-  assert.deepEqual(ids("동대문"), ["khu-seoul"]);
+  assert.deepEqual(ids("경희대"), ["khu-global", "khu-seoul"]);
+  assert.deepEqual(ids("경희 대학교"), ["khu-global", "khu-seoul"]);
+  // 지역·캠퍼스 이름으로는 찾지 않는다.
+  assert.deepEqual(ids("용인"), []);
+  assert.deepEqual(ids("국제캠퍼스"), []);
+  assert.deepEqual(ids("경희대 국제"), []);
   assert.deepEqual(ids("연세대"), []);
   assert.deepEqual(ids("x".repeat(500)), []);
 });

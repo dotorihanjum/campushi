@@ -184,7 +184,7 @@ export function School({ nav, state, setState, route }) {
   const [hint, setHint] = useState("");
   const timer = useRef(0);
   useEffect(() => () => window.clearTimeout(timer.current), []);
-  // 학교 검색: 학교·캠퍼스 이름이나 지역으로 찾는다(campus.js의 findCampuses).
+  // 학교 검색: 학교 이름으로 찾는다(campus.js의 findCampuses).
   const [query, setQuery] = useState("");
   const found = findCampuses(query);
   const pick = (campus) => {
@@ -228,7 +228,7 @@ export function School({ nav, state, setState, route }) {
           value={query}
           maxLength={40}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="학교 이름이나 지역으로 찾기"
+          placeholder="학교 이름으로 찾기 (예: 경희대)"
           autoComplete="off"
           enterKeyHint="search"
           className="h-[48px] w-full rounded-[14px] border border-line bg-chalk pl-[42px] pr-[44px] text-[16px] text-ink-2 outline-none placeholder:text-mute focus:border-mint focus:bg-white [&::-webkit-search-cancel-button]:hidden"
