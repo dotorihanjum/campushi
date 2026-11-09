@@ -8,8 +8,6 @@ export const RAW_CSE = {
   building: "전자정보/응용과학대학관",
   group: "computing",
   duration: "4년",
-  partner: true,
-  partner_example: true,
   intro: "소프트웨어를 설계하고 만드는 방법을 배워요.",
   tags: ["프로그래밍", "인공지능"],
   source: { title: "교육과정 편성표", url: "https://ce.khu.ac.kr/편성표.pdf", curriculum_year: 2026, checked_at: "2026-11-03" },

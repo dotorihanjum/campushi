@@ -2,17 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { AVATAR_COLORS, SCHOOL_LOGOS, avatarColor, logoImage, schoolInitials } from "./logos.js";
 
-test("로고 이미지는 제휴 학교이고 이미지가 있을 때만 쓴다", () => {
-  assert.equal(logoImage("경희대학교", true), "khuLogo");
-  assert.equal(logoImage("경희대학교", true, "seal"), "seal");
-  // 제휴가 아니면(예시 여부를 모르는 옛 기록 포함) 이미지가 있어도 텍스트 아바타다.
-  assert.equal(logoImage("경희대학교", false), null);
-  assert.equal(logoImage("경희대학교", undefined), null);
-  // 이름이 비슷한 다른 학교, 이미지가 없는 제휴 학교도 텍스트 아바타다.
-  assert.equal(logoImage("경희사이버대학교", true), null);
-  assert.equal(logoImage("가나대학교", true), null);
-  assert.equal(logoImage("경희대학교", true, "banner"), null);
-  assert.equal(logoImage(null, true), null);
+test("로고 이미지는 저장소에 이미지가 있는 학교만 쓴다", () => {
+  assert.equal(logoImage("경희대학교"), "khuLogo");
+  assert.equal(logoImage("경희대학교", "seal"), "seal");
+  // 이름이 비슷한 다른 학교, 이미지가 없는 학교는 텍스트 아바타다.
+  assert.equal(logoImage("경희사이버대학교"), null);
+  assert.equal(logoImage("가나대학교"), null);
+  assert.equal(logoImage("경희대학교", "banner"), null);
+  assert.equal(logoImage(null), null);
   assert.deepEqual(Object.keys(SCHOOL_LOGOS), ["경희대학교"]);
 });
 

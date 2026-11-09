@@ -25,7 +25,7 @@ class ApiTest(unittest.TestCase):
         items = self.client.get("/api/departments").json()["departments"]
         self.assertEqual([item["id"] for item in items], ["khu-cse", "khu-id"])
         for item in items:
-            self.assertTrue(item["partner"] and item["partner_example"])
+            self.assertNotIn("partner", item)
             self.assertTrue(item["source"]["url"].startswith("https://"))
             self.assertIn(item["final"], item["years"]["4"])
             # 연습 문제 유형은 편성표 과목의 것만 보낸다.

@@ -3,12 +3,12 @@ import { confetti, icon, img } from "./assets.js";
 import { avatarColor, logoImage, schoolInitials } from "./logos.js";
 
 /**
- * 학교 로고. 제휴 학교이고 로고 이미지가 있으면 이미지를, 아니면(또는 이미지를 불러오지 못하면) 원 안에 학교 이름 앞 두 글자를 쓴
+ * 학교 로고. 로고 이미지가 있으면 이미지를, 아니면(또는 이미지를 불러오지 못하면) 원 안에 학교 이름 앞 두 글자를 쓴
  * 텍스트 아바타를 그린다. 상자 크기는 부르는 쪽이 정하고, size는 아바타 원의 지름이다.
  * kind가 seal이면 증명서 도장 이미지를 쓰고, 도장은 꾸밈이라 화면 낭독기에 읽히지 않게 둔다.
  */
-export function SchoolLogo({ school, partner, kind = "logo", size = 64, className = "", style }) {
-  const name = logoImage(school, partner, kind);
+export function SchoolLogo({ school, kind = "logo", size = 64, className = "", style }) {
+  const name = logoImage(school, kind);
   const src = name ? img[name] : null;
   // 불러오지 못한 이미지 주소. 학교가 바뀌면 다시 시도한다.
   const [failed, setFailed] = useState(null);
