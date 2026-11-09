@@ -177,7 +177,9 @@ export function Splash({ nav, state, setState }) {
 /* 02 · 학교(캠퍼스) 고르기                                            */
 /* ------------------------------------------------------------------ */
 
-export function School({ nav, setState }) {
+// 처음(시작하기 다음)에는 뒤로 갈 곳이 없고, 지도·마이페이지에서 "학교 바꾸기"로 들어오면 뒤로 갈 수 있다.
+export function School({ nav, state, setState, route }) {
+  const changing = !!route?.params?.change;
   // 준비 중인 캠퍼스를 눌렀을 때의 안내.
   const [hint, setHint] = useState("");
   const timer = useRef(0);
@@ -194,11 +196,12 @@ export function School({ nav, setState }) {
   };
   return (
     <Screen>
+      {changing && <BackButton onClick={nav.back} />}
       <T y={104} size={28} lh={38} left={20} className="a-up font-bold text-navy">
-        {"어느 학교로\n가볼까요?"}
+        {changing ? "다른 학교로\n가볼까요?" : "어느 학교로\n가볼까요?"}
       </T>
       <T y={194} size={14.5} left={20.5} clip={360} className="a-up text-gray" style={delay(0.06)}>
-        캠퍼스를 고르면 그 캠퍼스 지도로 이동해요.
+        {changing ? "학교를 바꿔도 체험 기록과 크레딧은 그대로 남아요." : "캠퍼스를 고르면 그 캠퍼스 지도로 이동해요."}
       </T>
       {CAMPUSES.map((campus, i) => (
         <button
@@ -218,7 +221,9 @@ export function School({ nav, setState }) {
             <span className="truncate text-[12.5px] leading-[19px] text-gray">{campus.region}</span>
           </span>
           {campus.open ? (
-            <span className="flex h-[28px] shrink-0 items-center rounded-full bg-mint px-[12px] text-[13px] font-bold text-white">입장 →</span>
+            <span className="flex h-[28px] shrink-0 items-center rounded-full bg-mint px-[12px] text-[13px] font-bold text-white">
+              {state.campus === campus.id ? "지금 캠퍼스" : "입장 →"}
+            </span>
           ) : (
             <span className="flex h-[28px] shrink-0 items-center rounded-full border border-line bg-white px-[10px] text-[12px] font-semibold text-gray">🔒 준비 중</span>
           )}
@@ -886,9 +891,16 @@ export function Home({ nav, state, setState, catalog }) {
   return (
     <Screen h={874} foot={739} veil={false} overlay={sheet} footer={<TabBar active="home" nav={nav} state={state} />}>
       <Mask src={icon.cap} w={24} h={18} color="#087f77" className="absolute left-[23px] top-[59px]" />
-      <T y={61} size={16} left={56} clip={220} className="font-semibold text-mint">
-        {`${CAMPUS.school} ${CAMPUS.name}`}
-      </T>
+      <button
+        onClick={() => nav.push("school", { change: true })}
+        aria-label={`${CAMPUS.school} ${CAMPUS.name}, 학교 바꾸기`}
+        className="pressable absolute left-[52px] top-[52px] flex h-[36px] max-w-[250px] items-center gap-[4px] rounded-full px-[4px] text-[16px] font-semibold text-mint"
+      >
+        <span className="truncate">{`${CAMPUS.school} ${CAMPUS.name}`}</span>
+        <svg width="12" height="8" viewBox="0 0 12 8" aria-hidden>
+          <path d="M1.5 1.5 6 6l4.5-4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
       <CreditPill credits={state.credits || 0} className="absolute right-[20px] top-[55px]" />
       <T y={112} size={26} lh={34} left={20} className="a-up font-bold text-navy">
         어느 건물로 가볼까요?
@@ -1796,9 +1808,15 @@ export function My({ nav, state, setState }) {
               </div>
             </div>
           ) : (
-            <button className="text-button" onClick={() => setConfirming(true)}>
+            <>
+              <button className="button ghost mb-[14px]" onClick={() => nav.push("school", { change: true })}>
+                {`학교 바꾸기 · 지금 ${CAMPUS.school} ${CAMPUS.name}`}
+              </button>
+              <br />
+              <button className="text-button" onClick={() => setConfirming(true)}>
               처음부터 다시 시작하기
-            </button>
+              </button>
+            </>
           )}
         </div>
       </div>
