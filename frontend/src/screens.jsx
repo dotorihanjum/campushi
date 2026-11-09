@@ -920,14 +920,15 @@ export function Home({ nav, state, setState, catalog }) {
       </T>
       {/* 지도와 그 바로 밑의 캐릭터·말풍선 줄. 탭바 위까지의 높이에 맞춰, 화면이 낮으면 지도 보이는 영역이 줄어든다
           (줄어든 만큼은 지도를 위아래로 밀어 본다). 캐릭터·말풍선 줄은 높이가 정해져 있어서 말이 바뀌어도 지도 크기가
-          변하지 않고, 지도 위로는 그려지지 않는다(처음 도착할 때 떨어지는 캐릭터도 이 줄 안에서만 보인다). */}
+          변하지 않고, 지도 위로는 그려지지 않는다(처음 도착할 때 떨어지는 캐릭터도 이 줄 안에서만 보인다).
+          캐릭터와 말풍선은 세로 가운데로 맞추고, 캐릭터는 지도와 약 20px 떨어진다(줄 위 여백 8 + 가운데 맞춤 12). */}
       <div className="absolute inset-x-0 isolate flex flex-col" style={{ top: 164, bottom: "calc((135 - var(--bt)) * 1px)" }}>
         <div ref={map} className="no-scrollbar min-h-[120px] flex-1 overflow-auto overscroll-contain" style={{ maxHeight: MAP_SHOWN + 14 }} aria-label={`${CAMPUS.name} 지도`}>
           <div className="pt-[14px]">
             <CampusMap departments={list} onOpen={setBuilding} onLocked={locked} />
           </div>
         </div>
-        <div className="flex h-[108px] shrink-0 items-start gap-[10px] pl-[16px] pr-[18px] pt-[10px]" style={{ clipPath: "inset(0 -24px -24px -24px)" }}>
+        <div className="flex h-[112px] shrink-0 items-center gap-[10px] py-[8px] pl-[16px] pr-[18px]" style={{ clipPath: "inset(0 -24px -24px -24px)" }}>
           <div className="relative h-[72px] w-[72px] shrink-0">
             <span className="a-fade absolute bottom-[-2px] left-[8px] h-[10px] w-[56px] rounded-[50%] bg-[rgba(20,60,40,0.14)]" style={delay(landing ? 1 : 0)} aria-hidden />
             <img
@@ -941,10 +942,10 @@ export function Home({ nav, state, setState, catalog }) {
           <div
             key={line}
             role="status"
-            className="a-pop relative mt-[2px] min-w-0 flex-1 rounded-[16px] border border-mint bg-white px-[14px] py-[10px] shadow-[0_6px_16px_rgba(8,127,119,0.12)]"
+            className="a-pop relative min-w-0 flex-1 rounded-[16px] border border-mint bg-white px-[14px] py-[10px] shadow-[0_6px_16px_rgba(8,127,119,0.12)]"
             style={delay(landing && !hint ? 1.1 : 0)}
           >
-            <span className="absolute left-[-8px] top-[22px] h-[14px] w-[14px] rotate-45 border-b border-l border-mint bg-white" aria-hidden />
+            <span className="absolute left-[-8px] top-1/2 -mt-[7px] h-[14px] w-[14px] rotate-45 border-b border-l border-mint bg-white" aria-hidden />
             <p className="relative text-[12.5px] leading-[18px] text-ink-2">{line}</p>
             {!list.length && catalog.status === "error" && (
               <button className="text-button relative mt-[2px]" onClick={catalog.retry}>
