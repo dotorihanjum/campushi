@@ -797,11 +797,17 @@ function useCountUp(target, ms = 1100, startDelay = 400) {
   return value;
 }
 
+// 하단 탭바. 민트 윗선부터 아이콘·라벨까지 TAB_BAR(64), 그 아래 TRIM_BOTTOM(28, 홈 인디케이터 자리, App.jsx에서 화면이
+// 낮으면 먼저 줄어든다)을 더한 높이를 아트보드 아래에 붙인다. 탭바를 쓰는 화면은 foot={TAB_TOP}을 주고,
+// 아래를 가리지 않게 TAB_H(- var(--bt))만큼 비운다.
+const TAB_BAR = 64;
+const TAB_H = TAB_BAR + 28;
+const TAB_TOP = 874 - TAB_H;
 const TABS = [
-  { id: "home", label: "홈", icon: icon.home, w: 38, h: 38, x: 33, y: 762, cx: 52 },
-  { id: "major", label: "전공", icon: icon.major, w: 37, h: 39, x: 126.5, y: 761, cx: 145 },
-  { id: "community", label: "커뮤니티", icon: icon.community, w: 39, h: 39, x: 223, y: 761, cx: 242.5 },
-  { id: "my", label: "마이페이지", icon: icon.my, w: 40, h: 39, x: 316, y: 761, cx: 336 },
+  { id: "home", label: "홈", icon: icon.home, w: 38, h: 38, cx: 52 },
+  { id: "major", label: "전공", icon: icon.major, w: 37, h: 39, cx: 145 },
+  { id: "community", label: "커뮤니티", icon: icon.community, w: 39, h: 39, cx: 242.5 },
+  { id: "my", label: "마이페이지", icon: icon.my, w: 40, h: 39, cx: 336 },
 ];
 
 function TabBar({ active, nav, state }) {
@@ -814,28 +820,22 @@ function TabBar({ active, nav, state }) {
     if (id === "my") nav.push("my");
   };
   return (
-    <div className="absolute left-0 top-[739px] h-[135px] w-full border-t border-mint bg-white">
+    <div className="absolute left-0 w-full border-t border-mint bg-white" style={{ top: TAB_TOP, height: TAB_H }}>
       {TABS.map((t) => {
         const on = t.id === active;
+        // 아이콘(39px 칸) + 4px + 라벨(15px)을 위 여백 5px로 쌓는다.
         return (
           <button
             key={t.id}
             onClick={() => go(t.id)}
             aria-current={on ? "page" : undefined}
-            className="pressable absolute"
-            style={{ left: t.cx - 44, top: 16, width: 88, height: 70 }}
+            className="pressable absolute flex flex-col items-center gap-[4px] pt-[5px]"
+            style={{ left: t.cx - 44, top: 0, width: 88, height: TAB_BAR }}
           >
-            <Mask
-              src={t.icon}
-              w={t.w}
-              h={t.h}
-              color={on ? "#27d8cd" : "#c4c4c4"}
-              className="absolute"
-              style={{ left: t.x - (t.cx - 44), top: t.y - 739 - 16 }}
-            />
-            <T y={807 - 739 - 16} size={12.5} center className={on ? "font-medium text-mint" : "font-medium text-[#c4c4c4]"}>
-              {t.label}
-            </T>
+            <span className="flex h-[39px] items-center justify-center">
+              <Mask src={t.icon} w={t.w} h={t.h} color={on ? "#27d8cd" : "#c4c4c4"} />
+            </span>
+            <span className={`text-[12.5px] font-medium leading-[15px] ${on ? "text-mint" : "text-[#c4c4c4]"}`}>{t.label}</span>
           </button>
         );
       })}
@@ -917,7 +917,7 @@ const HOME_TOP = 164;
 // 학과 둘러보기 제목 높이.
 const DEPT_HEAD = 44;
 const PEEK = 34;
-const HOME_FOLD = `calc((var(--vh) + var(--tt) + var(--bt) - 135 - ${PEEK}) * 1px)`;
+const HOME_FOLD = `calc((var(--vh) + var(--tt) + var(--bt) - ${TAB_H} - ${PEEK}) * 1px)`;
 
 export function Home({ nav, route, state, setState, catalog }) {
   const list = all(state);
@@ -988,8 +988,8 @@ export function Home({ nav, route, state, setState, catalog }) {
   );
   return (
     <Screen
-      h={`calc((var(--vh) + var(--tt) + var(--bt) - 135 - ${PEEK} + ${DEPT_HEAD + Math.max(pickerHeight(list.length), 60) + 16}) * 1px)`}
-      foot={739}
+      h={`calc((var(--vh) + var(--tt) + var(--bt) - ${TAB_H} - ${PEEK} + ${DEPT_HEAD + Math.max(pickerHeight(list.length), 60) + 16}) * 1px)`}
+      foot={TAB_TOP}
       veil={false}
       overlay={sheet}
       footer={<TabBar active="home" nav={nav} state={state} />}
@@ -1095,7 +1095,7 @@ export function Major({ active, nav, state, setState }) {
   // 입학한 학과가 하나도 없으면 안내와 함께 학과를 고르러 갈 수 있게 한다.
   if (!v?.journey && !fallback)
     return (
-      <Screen foot={739} veil={false} footer={<TabBar active="major" nav={nav} state={state} />}>
+      <Screen foot={TAB_TOP} veil={false} footer={<TabBar active="major" nav={nav} state={state} />}>
         <Header title="나의 전공" />
         <div className="a-pop absolute left-[121px] top-[176px] h-[160px] w-[160px]" style={delay(0.05)}>
           <img src={yearCharacter(1).src} alt="" className="loop h-full w-full object-contain" style={{ animation: "float 2.6s ease-in-out 0.9s infinite" }} />
@@ -1129,7 +1129,7 @@ export function Major({ active, nav, state, setState }) {
   const open = () => nav.push("courses", { year: graduated ? (untaken[0]?.year ?? 4) : openYear });
   const listEnd = shownTodo.length ? 565 + shownTodo.length * 84 + (todo.length > SHOWN_TODO ? 30 : 0) : 615;
   return (
-    <Screen h={Math.max(874, listEnd + 150)} foot={739} veil={false} footer={<TabBar active="major" nav={nav} state={state} />}>
+    <Screen h={listEnd + 24} foot={TAB_TOP} veil={false} footer={<TabBar active="major" nav={nav} state={state} />}>
       <BackButton onClick={() => nav.reset(["home"])} />
       <T y={61} size={16} center clip={220} className="font-semibold text-mint">
         {`${d.school} · ${d.building}`}
@@ -1852,11 +1852,11 @@ export function My({ nav, state, setState }) {
     else nav.push(to);
   };
   return (
-    <Screen foot={739} veil={false} footer={<TabBar active="my" nav={nav} state={state} />}>
+    <Screen foot={TAB_TOP} veil={false} footer={<TabBar active="my" nav={nav} state={state} />}>
       <Header title="마이페이지" onBack={nav.back} />
       <div
         className="flow no-scrollbar absolute left-0 top-[104px] w-full overflow-y-auto px-[20px] pb-[24px] pt-[20px]"
-        style={{ bottom: "calc(135px - var(--bt) * 1px)" }}
+        style={{ bottom: `calc(${TAB_H}px - var(--bt) * 1px)` }}
       >
         <div className="flex items-center justify-between">
           <h1 className="a-up text-[20px] font-semibold leading-[28px] text-mint">나의 체험 기록</h1>
@@ -2180,7 +2180,7 @@ export function Community({ nav, route, state, active }) {
   );
   return (
     <Screen
-      foot={739}
+      foot={TAB_TOP}
       veil={false}
       overlay={overlay}
       footer={
@@ -2190,7 +2190,8 @@ export function Community({ nav, route, state, active }) {
             <button
               onClick={() => setWriting(true)}
               disabled={!departments.length}
-              className="pressable absolute right-[20px] top-[672px] z-10 flex h-[52px] items-center gap-[6px] rounded-full bg-mint px-[20px] text-[15.5px] font-bold text-white shadow-[0_8px_20px_rgba(39,216,205,0.35)] active:brightness-95 disabled:opacity-40"
+              style={{ top: TAB_TOP - 15 - 52 }}
+              className="pressable absolute right-[20px] z-10 flex h-[52px] items-center gap-[6px] rounded-full bg-mint px-[20px] text-[15.5px] font-bold text-white shadow-[0_8px_20px_rgba(39,216,205,0.35)] active:brightness-95 disabled:opacity-40"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                 <path d="M10.6 2.4 13.6 5.4 5.4 13.6H2.4V10.6L10.6 2.4Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
@@ -2215,7 +2216,7 @@ export function Community({ nav, route, state, active }) {
           </button>
         ))}
       </div>
-      <div className="flow no-scrollbar absolute left-0 right-0 top-[152px] overflow-y-auto" style={{ bottom: "calc((135 - var(--bt) - var(--tt)) * 1px)" }} role="tabpanel">
+      <div className="flow no-scrollbar absolute left-0 right-0 top-[152px] overflow-y-auto" style={{ bottom: `calc((${TAB_H} - var(--bt)) * 1px)` }} role="tabpanel">
         {tab === "questions" && (
           <>
             <div ref={chipRow} className="no-scrollbar flex gap-[8px] overflow-x-auto scroll-px-[20px] px-[20px] pb-[12px]" role="group" aria-label="학과 필터">
