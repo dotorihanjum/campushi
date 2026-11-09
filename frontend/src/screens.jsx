@@ -39,7 +39,7 @@ import LessonGame, { useLessonGame } from "./Games.jsx";
 import { Rub } from "./Templates.jsx";
 import { templates } from "./experiences.js";
 import { groupName } from "./groups.js";
-import { CAMPUS, CAMPUSES, PLACES, departmentsIn } from "./campus.js";
+import { CAMPUS, CAMPUSES, PLACES, departmentsIn, findCampuses } from "./campus.js";
 import CampusMap, { MAP_H, MAP_SHOWN, MAP_W } from "./CampusMap.jsx";
 
 /* ------------------------------------------------------------------ */
@@ -184,6 +184,9 @@ export function School({ nav, state, setState, route }) {
   const [hint, setHint] = useState("");
   const timer = useRef(0);
   useEffect(() => () => window.clearTimeout(timer.current), []);
+  // 학교 검색: 학교·캠퍼스 이름이나 지역으로 찾는다(campus.js의 findCampuses).
+  const [query, setQuery] = useState("");
+  const found = findCampuses(query);
   const pick = (campus) => {
     if (!campus.open) {
       setHint(`${campus.school} ${josa(campus.name, "은", "는")} 아직 준비 중이에요.`);
@@ -203,7 +206,62 @@ export function School({ nav, state, setState, route }) {
       <T y={194} size={14.5} left={20.5} clip={360} className="a-up text-gray" style={delay(0.06)}>
         {changing ? "학교를 바꿔도 체험 기록과 크레딧은 그대로 남아요." : "캠퍼스를 고르면 그 캠퍼스 지도로 이동해요."}
       </T>
-      {CAMPUSES.map((campus, i) => (
+      <form
+        role="search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.currentTarget.querySelector("input").blur();
+        }}
+        className="a-up absolute left-[20px] top-[232px] w-[362px]"
+        style={delay(0.09)}
+      >
+        <label htmlFor="school-search" className="sr-only">
+          학교 검색
+        </label>
+        <svg className="pointer-events-none absolute left-[15px] top-[15px] text-gray" width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+          <circle cx="7.8" cy="7.8" r="5.8" stroke="currentColor" strokeWidth="2" />
+          <path d="m12.2 12.2 4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+        <input
+          id="school-search"
+          type="search"
+          value={query}
+          maxLength={40}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="학교 이름이나 지역으로 찾기"
+          autoComplete="off"
+          enterKeyHint="search"
+          className="h-[48px] w-full rounded-[14px] border border-line bg-chalk pl-[42px] pr-[44px] text-[16px] text-ink-2 outline-none placeholder:text-mute focus:border-mint focus:bg-white [&::-webkit-search-cancel-button]:hidden"
+        />
+        {query && (
+          <button
+            type="button"
+            aria-label="검색어 지우기"
+            onClick={(e) => {
+              setQuery("");
+              e.currentTarget.previousElementSibling.focus();
+            }}
+            className="pressable absolute right-[6px] top-[6px] flex h-[36px] w-[36px] items-center justify-center rounded-full text-gray"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+              <circle cx="8" cy="8" r="8" fill="#d1d5da" />
+              <path d="m5.2 5.2 5.6 5.6M10.8 5.2l-5.6 5.6" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
+      </form>
+      {found.length === 0 && (
+        <div className="absolute left-[20px] right-[20px] top-[304px] rounded-[18px] border border-line bg-chalk px-[18px] py-[20px] text-center" role="status">
+          <p className="truncate text-[15px] font-semibold leading-[22px] text-ink-2">{`'${query.trim()}'에 맞는 학교가 아직 없어요`}</p>
+          <p className="mt-[4px] text-[13px] leading-[20px] text-gray" style={{ wordBreak: "keep-all" }}>
+            {`지금은 ${[...new Set(CAMPUSES.map((c) => c.school))].join(", ")} 캠퍼스만 있어요.`}
+          </p>
+          <button className="text-button mt-[8px]" onClick={() => setQuery("")}>
+            전체 보기
+          </button>
+        </div>
+      )}
+      {found.map((campus, i) => (
         <button
           key={campus.id}
           onClick={() => pick(campus)}
@@ -211,7 +269,7 @@ export function School({ nav, state, setState, route }) {
           className={`pressable a-up absolute left-[20px] flex h-[96px] w-[362px] items-center gap-[14px] rounded-[18px] border-2 px-[16px] text-left ${
             campus.open ? "border-mint bg-white shadow-[0_8px_20px_rgba(39,216,205,0.18)]" : "border-line bg-chalk"
           }`}
-          style={{ top: 250 + i * 112, ...delay(0.12 + i * 0.06) }}
+          style={{ top: 304 + i * 112, ...delay(0.12 + i * 0.06) }}
         >
           {/* 로고 원본은 가로가 긴 3:2라서 칸도 3:2로 둔다(찌그러지지 않게). */}
           <span className={`h-[48px] w-[72px] shrink-0 ${campus.open ? "" : "opacity-40 grayscale"}`}>
@@ -235,7 +293,7 @@ export function School({ nav, state, setState, route }) {
         key={hint || "none"}
         role="status"
         className={`absolute left-[20px] right-[20px] text-center text-[13px] leading-[20px] text-mint-deep ${hint ? "a-shake" : ""}`}
-        style={{ top: 250 + CAMPUSES.length * 112 + 6 }}
+        style={{ top: 304 + Math.max(found.length, 1) * 112 + 6 }}
       >
         {hint}
       </p>

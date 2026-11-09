@@ -11,6 +11,18 @@ export const CAMPUSES = [
 ];
 export const isOpenCampus = (id) => CAMPUSES.some((campus) => campus.id === id && campus.open);
 
+// 학교 검색: 띄어쓰기와 대소문자를 무시하고 학교 이름·캠퍼스 이름·지역에 검색어가 들어 있는 캠퍼스. 빈 검색어면 전부.
+// 학교 이름의 "대학교"를 "대"로 줄여 써도 찾는다(예: 경희대).
+const squash = (text) => text.replace(/\s+/g, "").toLowerCase();
+export function findCampuses(query, campuses = CAMPUSES) {
+  const q = squash(query || "");
+  if (!q) return campuses;
+  return campuses.filter((c) => {
+    const text = squash(`${c.school}${c.name}${c.school.replace(/대학교$/, "대")}${c.name}${c.region}`);
+    return text.includes(q);
+  });
+}
+
 export const CAMPUS = {
   id: "khu-global",
   school: "경희대학교",
