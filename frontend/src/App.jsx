@@ -32,7 +32,7 @@ function initialStack(state) {
   } catch {
     // 저장된 화면 기록을 읽을 수 없으면 처음부터 시작한다.
   }
-  return [make(state.onboarded || Object.keys(state.journeys).length ? "home" : "splash")];
+  return [make(!state.onboarded ? "splash" : state.introSeen ? "home" : "intro")];
 }
 
 // 폭이 좁은 화면(휴대폰)에서는 폭을 꽉 채우고 아트보드의 높이를 화면에 맞춘다. 주소창 때문에 화면이

@@ -222,17 +222,6 @@ export function Header({ title, count, onBack, backColor }) {
   );
 }
 
-export function ProgressBar({ value }) {
-  return (
-    <div className="absolute left-[24px] top-[103px] h-[8px] w-[354px] overflow-hidden rounded-full bg-track">
-      <div
-        className="h-full rounded-full bg-mint"
-        style={{ width: `${value * 100}%`, transition: "width 0.7s cubic-bezier(0.22, 1, 0.36, 1)" }}
-      />
-    </div>
-  );
-}
-
 export function OutlineButton({ children, onClick, top = 756, className = "", style }) {
   return (
     <button

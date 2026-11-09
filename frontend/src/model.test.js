@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  CREDIT_PER_PASS,
   OLD_STORAGE_KEYS,
-  QUESTIONS,
   STORAGE_KEY,
   completeCourse,
   courseKey,
@@ -17,7 +17,6 @@ import {
   loadState,
   normalize,
   progressOf,
-  recommend,
   recordOf,
   refreshCatalog,
   savePlay,
@@ -207,30 +206,18 @@ test("서버에서 새 학과 데이터를 받으면 바꾸고, 쓸 수 없는 �
   assert.deepEqual(departmentsOf(next).map((d) => d.id), [RAW_ID.id]);
 });
 
-test("학과 추천은 답이 가리키는 학과를 세고, 같으면 함께 추천한다", () => {
-  const list = [createDepartment(RAW_CSE), createDepartment(RAW_ID)];
-  const answer = (ids) => Object.fromEntries(QUESTIONS.map((q, i) => [i + 1, q.options.find((o) => o.id === ids[i]).label]));
-  assert.equal(recommend({}, list), null);
-  assert.equal(recommend({ 1: QUESTIONS[0].options[0].label }, list), null);
-  assert.equal(recommend(answer(["khu-cse", "khu-cse", "khu-cse", "khu-id"]), []), null);
-  const cse = recommend(answer(["khu-cse", "khu-cse", "khu-cse", "khu-id"]), list);
-  assert.equal(cse.best.id, "khu-cse");
-  assert.deepEqual(cse.others.map((d) => d.id), ["khu-id"]);
-  assert.equal(cse.count, 3);
-  assert.equal(cse.total, 4);
-  assert.equal(cse.tie, false);
-  assert.equal(recommend(answer(["khu-id", "khu-id", "khu-id", "khu-id"]), list).best.id, "khu-id");
-  const tie = recommend(answer(["khu-id", "khu-cse", "khu-id", "khu-cse"]), list);
-  assert.equal(tie.tie, true);
-  assert.equal(tie.count, 2);
-  // 질문의 보기는 모두 두 학과 중 하나를 가리키고, 질문마다 두 학과가 반반이다.
-  for (const q of QUESTIONS) {
-    assert.deepEqual(
-      q.options.map((o) => o.id).sort(),
-      ["khu-cse", "khu-cse", "khu-id", "khu-id"],
-      q.title,
-    );
-  }
+test("과목을 이수(B- 이상 또는 P)할 때마다 크레딧을 받고, 재수강해서 이수해도 받는다", () => {
+  let state = enrolled();
+  state = take(state, RAW_CSE.id, "미분적분학", 5); // D+ — 이수가 아니라 크레딧 없음
+  assert.equal(state.credits, 0);
+  state = take(state, RAW_CSE.id, "미분적분학", 7); // B-
+  assert.equal(state.credits, CREDIT_PER_PASS);
+  state = take(state, RAW_CSE.id, "미분적분학", 10);
+  assert.equal(state.credits, CREDIT_PER_PASS * 2);
+  // 저장했다 불러와도 그대로이고, 이상한 값은 0으로 둔다.
+  assert.equal(normalize(state).credits, CREDIT_PER_PASS * 2);
+  for (const credits of [-3, 1.5, "10", null]) assert.equal(normalize({ ...state, credits }).credits, 0);
+  assert.equal(normalize({ ...state, introSeen: true }).introSeen, true);
 });
 
 test("처음 상태는 학과 데이터 없이 시작한다", () => {

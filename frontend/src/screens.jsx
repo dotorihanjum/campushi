@@ -1,4 +1,4 @@
-import React, { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { icon, img } from "./assets.js";
 import {
   BackButton,
@@ -11,17 +11,15 @@ import {
   OutlineButton,
   Paper,
   PaperFold,
-  ProgressBar,
   Screen,
   T,
+  Dialog,
   SchoolLogo,
 } from "./ui.jsx";
 import {
-  QUESTIONS,
+  CREDIT_PER_PASS,
   YEARS,
-  answeredAll,
   departmentsOf,
-  recommend,
   completeCourse,
   courseKey,
   initialState,
@@ -43,6 +41,7 @@ import LessonGame, { useLessonGame } from "./Games.jsx";
 import { Rub } from "./Templates.jsx";
 import { templates } from "./experiences.js";
 import { groupName } from "./groups.js";
+import { CAMPUS, PLACES, departmentsIn } from "./campus.js";
 
 /* ------------------------------------------------------------------ */
 /* 공통                                                                */
@@ -122,7 +121,9 @@ function useGuard(ok, nav, active) {
   }, [ok, nav, active]);
 }
 
+// 마지막 글자에 받침이 있는지. 숫자는 읽는 소리로 본다(영·일·삼·육·칠·팔은 받침이 있다).
 const hasBatchim = (word) => {
+  if (/[0-9]$/.test(word)) return "013678".includes(word[word.length - 1]);
   const code = word.charCodeAt(word.length - 1);
   return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0;
 };
@@ -138,10 +139,10 @@ const stamp = (date) =>
 /* 01 · 스플래시                                                       */
 /* ------------------------------------------------------------------ */
 
-export function Splash({ nav, setState }) {
+export function Splash({ nav, state, setState }) {
   const start = () => {
     setState((s) => ({ ...s, onboarded: true }));
-    nav.reset(["home"]);
+    nav.reset([state.introSeen ? "home" : "intro"]);
   };
   return (
     <Screen
@@ -173,82 +174,45 @@ export function Splash({ nav, setState }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 02 · 관심 분야가 있는지                                             */
+/* 02 · 인트로: 캐릭터가 캠퍼스에 쿵 떨어진다                            */
 /* ------------------------------------------------------------------ */
 
-function OptionButton({ label, selected, top, onClick, index }) {
-  return (
-    <button
-      onClick={onClick}
-      role="radio"
-      aria-checked={selected}
-      className={`pressable a-up absolute left-[20px] flex h-[46px] w-[362px] items-center justify-center rounded-[10px] border text-[16px] ${
-        selected ? "border-mint bg-mint font-semibold text-white" : "border-faint bg-chalk text-mute"
-      }`}
-      style={{ top, animationDelay: `${0.18 + index * 0.06}s` }}
-    >
-      {label}
-    </button>
-  );
-}
-
-function QuestionTitle({ title, sub }) {
-  return (
-    <>
-      <T y={184} size={20} left={36} className="a-up font-semibold text-mint">
-        {title}
-      </T>
-      <T y={220} size={16} left={36} className="a-up text-gray" style={delay(0.06)}>
-        {sub}
-      </T>
-    </>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* 02 · 학과 추천 질문                                                 */
-/* ------------------------------------------------------------------ */
-
-const progressFor = (step) => Math.max(0.04, step / QUESTIONS.length);
-
-// 질문마다 보기 하나를 고르고 다음으로 넘어간다. 들어올 때마다 지난번 답은 비우고 새로 시작한다.
-export function Quiz({ nav, state, setState }) {
-  const [step, setStep] = useState(1);
-  const [shake, setShake] = useState(0);
-  useEffect(() => {
-    setState((s) => ({ ...s, answers: {} }));
-  }, [setState]);
-
-  const back = () => (step === 1 ? nav.back() : setStep((s) => s - 1));
-  const q = QUESTIONS[step - 1];
-  const answer = state.answers[step] ?? null;
-  const pick = (label) => setState((s) => ({ ...s, answers: { ...s.answers, [step]: label } }));
-  const next = () => {
-    if (!answer) return setShake((n) => n + 1);
-    if (step < QUESTIONS.length) setStep(step + 1);
-    else nav.replace("result", undefined, "fade");
+export function Intro({ nav, setState }) {
+  const go = () => {
+    setState((s) => ({ ...s, introSeen: true }));
+    nav.reset(["home"], "fade");
   };
-
   return (
     <Screen
-      h={295 + q.options.length * 62}
-      resetOn={step}
-      footer={<OutlineButton onClick={next}>{step < QUESTIONS.length ? "다음" : "추천 결과 보기"}</OutlineButton>}
+      bg="#e8faf7"
+      foot={724}
+      footer={
+        <OutlineButton top={740} onClick={go} className="a-up" style={delay(1.6)}>
+          캠퍼스 둘러보기
+        </OutlineButton>
+      }
     >
-      <Header title="나에게 맞는 학과 찾기" count={`${step}/${QUESTIONS.length}`} onBack={back} />
-      <ProgressBar value={progressFor(step)} />
-      <Fragment key={step}>
-        <QuestionTitle title={q.title} sub={q.sub} />
-        <div key={`s${shake}`} className={shake ? "a-shake" : ""} role="radiogroup" aria-label={q.title}>
-          {q.options.map((opt, i) => (
-            <OptionButton key={opt.label} index={i} top={295 + i * 62} label={opt.label} selected={answer === opt.label} onClick={() => pick(opt.label)} />
-          ))}
+      <Center>
+        <div className="a-fade absolute left-[111px] top-[448px] h-[22px] w-[180px] rounded-[50%] bg-mint/25" style={delay(0.9)} aria-hidden />
+        <div className="a-fall absolute left-[121px] top-[312px] h-[150px] w-[160px]">
+          <img src={img.mascotResult} alt="캠퍼스하이 캐릭터" className="h-full w-full" />
         </div>
-      </Fragment>
+        <T y={250} size={34} left={262} className="a-thud font-extrabold text-mint" style={delay(1.05)}>
+          쿵!
+        </T>
+        <T y={500} size={24} lh={34} center clip={360} className="a-up font-bold text-navy" style={delay(1.15)}>
+          {`${CAMPUS.school} ${CAMPUS.name}에\n도착했어요!`}
+        </T>
+        <T y={584} size={14.5} lh={22} center clip={340} className="a-up text-ink-3" style={delay(1.3)}>
+          {"건물을 둘러보고 마음에 드는 학과에\n체험 입학해 수업을 들어 봐요."}
+        </T>
+      </Center>
     </Screen>
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* 03 · 학과 카드                                                      */
 /* ------------------------------------------------------------------ */
 /* 03 · 추천 결과 · 학과 고르기                                        */
 /* ------------------------------------------------------------------ */
@@ -304,85 +268,14 @@ const openDepartment = (nav, setState, d) => {
   nav.push("detail");
 };
 
-export function Result({ active, nav, state, setState }) {
-  const result = recommend(state.answers, all(state));
-  useGuard(!!result, nav, active);
-  if (!result) return null;
-  const { best, others, count, total, tie } = result;
-  const open = (d) => openDepartment(nav, setState, d);
-  return (
-    <Screen
-      h={737}
-      footer={
-        <OutlineButton onClick={() => open(best)} className="a-up" style={delay(0.7)}>
-          {`${best.name} 살펴보기`}
-        </OutlineButton>
-      }
-    >
-      <Header title="나에게 맞는 학과 찾기" onBack={nav.back} />
-      <div className="a-pop absolute left-[117px] top-[149px] h-[124px] w-[140px]" style={delay(0.05)}>
-        <img
-          src={img.mascotResult}
-          alt=""
-          className="loop h-full w-full"
-          style={{ animation: "sway 2.8s ease-in-out 0.8s infinite", transformOrigin: "50% 90%" }}
-        />
-      </div>
-      <Confetti originX={187} originY={212} />
-      <T y={310} size={20} left={37.5} clip={330} className="a-up font-semibold text-mint" style={delay(0.35)}>
-        {tie ? "두 학과 모두에 끌리시네요!" : `${best.name}에 더 끌리시네요!`}
-      </T>
-      <button
-        onClick={() => open(best)}
-        className="pressable a-up absolute left-[20px] top-[355px] h-[180px] w-[362px] rounded-[16px] border border-mint text-left"
-        style={{ background: "linear-gradient(180deg, #f0fcfb 0%, #d6f8f6 100%)", animationDelay: "0.45s" }}
-      >
-        <T y={22.5} size={12} left={17.5} className="font-medium text-mint">
-          {tie ? "먼저 만나볼 학과" : "추천 학과"}
-        </T>
-        <T y={54} size={20} left={17} className="flex items-center gap-[6px] font-semibold text-slate" style={{ maxWidth: 330 }}>
-          <NameWithBadge partner={best.partner}>{`${best.school} ${best.name}`}</NameWithBadge>
-        </T>
-        <T y={84.5} size={11} lh={17} left={17.5} clip={330} className="text-gray">
-          {`질문 ${total}개 중 ${count}개의 답이 ${best.name} 쪽이었어요.\n${best.intro}`}
-        </T>
-        <div className="absolute left-[17px] top-[146px] flex gap-[8px]">
-          {best.tags.map((tag) => (
-            <TagPill key={tag}>{tag}</TagPill>
-          ))}
-        </div>
-      </button>
-      {others.map((d, i) => (
-        <YellowCard
-          key={d.id}
-          top={550 + i * 95}
-          title={`${d.name}도 궁금하다면?`}
-          partner={d.partner}
-          sub={d.intro}
-          onClick={() => open(d)}
-          className="a-up"
-          style={delay(0.55 + i * 0.07)}
-        />
-      ))}
-      {showsExampleNote(all(state)) && (
-        <T y={550 + others.length * 95 + 4} size={10.5} left={24} className="a-fade text-gray" style={delay(0.7)}>
-          {PARTNER_EXAMPLE_NOTE}
-        </T>
-      )}
-    </Screen>
-  );
-}
-
 /**
- * 학과 고르기: 학과 추천 카드와 학과 카드. 홈(입학 전)과 탐색 화면이 함께 쓴다. top부터 그리고, 다 그린 높이를 돌려준다.
- * 학과 데이터를 받는 중이거나 받지 못했으면 그 상태를 보여준다.
+ * 학과 고르기: 학과 카드 목록(탐색 탭). 학과 데이터를 받는 중이거나 받지 못했으면 그 상태를 보여준다.
  */
 function pickerHeight(count) {
-  return 128 + count * 95 + 24;
+  return count * 95 + 24;
 }
 function DepartmentPicker({ top, nav, state, setState, catalog }) {
   const list = all(state);
-  const result = recommend(state.answers, list);
   if (!list.length)
     return catalog.status === "error" ? (
       <div className="a-up absolute left-[20px] w-[362px]" style={{ top }} role="alert">
@@ -398,25 +291,10 @@ function DepartmentPicker({ top, nav, state, setState, catalog }) {
     );
   return (
     <>
-      <button
-        onClick={() => nav.push("quiz")}
-        className="pressable a-up absolute left-[20px] h-[112px] w-[362px] rounded-[16px] border border-mint text-left"
-        style={{ top, background: "linear-gradient(180deg, #f0fcfb 0%, #d6f8f6 100%)", animationDelay: "0.2s" }}
-      >
-        <T y={20} size={12} left={17.5} className="font-medium text-mint">
-          학과 추천
-        </T>
-        <T y={44} size={18} left={17} clip={330} className="font-semibold text-slate">
-          {result ? `지난 추천: ${result.tie ? "두 학과 모두" : result.best.name}` : "나에게 맞는 학과 찾기"}
-        </T>
-        <T y={74} size={11} left={17.5} clip={330} className="text-gray">
-          {result ? "다시 답하면 새로 추천해요" : `질문 ${QUESTIONS.length}개에 답하면 더 맞는 학과를 알려줘요`}
-        </T>
-      </button>
       {list.map((d, i) => (
         <YellowCard
           key={d.id}
-          top={top + 128 + i * 95}
+          top={top + i * 95}
           title={`${d.school} ${d.name}`}
           partner={d.partner}
           sub={d.intro}
@@ -426,7 +304,7 @@ function DepartmentPicker({ top, nav, state, setState, catalog }) {
         />
       ))}
       {showsExampleNote(list) && (
-        <T y={top + 128 + list.length * 95 + 2} size={10.5} left={24} className="a-fade text-gray" style={delay(0.4)}>
+        <T y={top + list.length * 95 + 2} size={10.5} left={24} className="a-fade text-gray" style={delay(0.4)}>
           {PARTNER_EXAMPLE_NOTE}
         </T>
       )}
@@ -495,7 +373,7 @@ export function Detail({ active, nav, state, setState }) {
   const enroll = () => {
     if (finished) return nav.push("graduation");
     setState((s) => ({ ...s, studying: d.id }));
-    if (journey) return nav.reset(["home"]);
+    if (journey) return nav.reset(["home", "major"]);
     setState((s) => ({ ...s, journeys: { ...s.journeys, [d.id]: {} } }));
     nav.push("enrolled", undefined, "rise");
   };
@@ -765,7 +643,7 @@ export function Welcome({ active, nav, state }) {
       footer={
         <>
           <button
-            onClick={() => nav.reset(["home"], "fade")}
+            onClick={() => nav.reset(["home", "major"], "fade")}
             className="pressable a-up absolute left-[20px] top-[737px] flex h-[67px] w-[362px] items-center justify-center rounded-[14px] bg-mint text-[18px] font-semibold text-white active:brightness-95"
             style={delay(0.9)}
           >
@@ -851,7 +729,8 @@ function TabBar({ active, nav, state }) {
     if (id === "home") nav.reset(["home"]);
     if (id === "explore") nav.push("departments");
     // 전공: 지금 보고 있는(또는 체험 중인) 학과의 상세. 아직 고른 학과가 없으면 학과 둘러보기로 간다.
-    if (id === "major") nav.push(state.current ? "detail" : "departments");
+    // 전공: 입학한 학과가 있으면 그 학과 홈(지금 체험 중인 학과), 없으면 보고 있던 학과 상세나 학과 목록.
+    if (id === "major") nav.push(Object.keys(state.journeys).length ? "major" : state.current ? "detail" : "departments");
     if (id === "my") nav.push("my");
   };
   return (
@@ -913,33 +792,173 @@ function CourseCard({ top, d, course, wait, onClick }) {
   );
 }
 
-// 입학 전 홈: 학과 추천과 학과 카드.
-function HomeStart({ nav, state, setState, catalog }) {
-  const list = all(state);
-  const schools = [...new Set(list.map((d) => d.school))];
+/* ------------------------------------------------------------------ */
+/* 11 · 홈: 국제캠퍼스 지도                                            */
+/* ------------------------------------------------------------------ */
+
+// 지도 크기(공식 지도 비율). 폭이 화면보다 넓어 좌우로 밀어서 본다.
+const MAP_H = 560;
+const MAP_W = Math.round(MAP_H * CAMPUS.ratio);
+// 건물이 공식 지도의 위쪽 70%에 모여 있어 아래쪽(운동장·숲)은 잘라서 보여준다.
+const MAP_SHOWN = Math.round(MAP_H * 0.72);
+const BUILDING_W = 80;
+
+/** 크레딧 표시(모든 학과 공용). */
+function CreditPill({ credits, className = "", style }) {
   return (
-    <Screen h={250 + pickerHeight(list.length)} foot={739} veil={false} footer={<TabBar active="home" nav={nav} state={state} />}>
+    <span
+      className={`flex h-[28px] items-center gap-[5px] rounded-full border border-mint bg-mint-soft px-[10px] text-[12.5px] font-bold text-mint-deep ${className}`}
+      style={style}
+      aria-label={`크레딧 ${credits}`}
+    >
+      <span className="flex h-[16px] w-[16px] items-center justify-center rounded-full bg-sun text-[10px] font-extrabold text-ink" aria-hidden>
+        C
+      </span>
+      {credits.toLocaleString()}
+    </span>
+  );
+}
+
+// 학과의 진행 상태 한 줄.
+function journeyText(state, d) {
+  if (!state.journeys[d.id]) return "아직 입학 전이에요";
+  const progress = progressOf(state, d);
+  return progress.graduated ? `졸업 · 이수 ${progress.passedCount}과목` : `${progress.openYear}학년 진행 중 · 이수 ${progress.passedCount}과목`;
+}
+
+export function Home({ nav, state, setState, catalog }) {
+  const list = all(state);
+  // 누른 건물(학과를 고르는 창)과, 잠긴 건물을 눌렀을 때의 안내.
+  const [building, setBuilding] = useState(null);
+  const [hint, setHint] = useState("");
+  const hintTimer = useRef(0);
+  const map = useRef(null);
+  useEffect(() => () => window.clearTimeout(hintTimer.current), []);
+  // 처음에는 열린 건물들이 화면 가운데 오게 지도를 민다.
+  const opened = PLACES.filter((place) => place.kind === "college" && departmentsIn(list, place.name).length);
+  const center = opened.length ? (Math.min(...opened.map((p) => p.x)) + Math.max(...opened.map((p) => p.x))) / 2 : 0.5;
+  useLayoutEffect(() => {
+    if (map.current) map.current.scrollLeft = Math.max(0, center * MAP_W - map.current.clientWidth / 2);
+  }, [center]);
+  const tap = (place) => {
+    if (departmentsIn(list, place.name).length) return setBuilding(place.name);
+    setHint(`${place.name}은 아직 준비 중이에요. 민트색 건물을 눌러 보세요.`);
+    window.clearTimeout(hintTimer.current);
+    hintTimer.current = window.setTimeout(() => setHint(""), 2600);
+  };
+  const open = (d) => {
+    setBuilding(null);
+    setState((s) => ({ ...s, current: d.id }));
+    nav.push(state.journeys[d.id] ? "major" : "detail");
+  };
+  const inside = building ? departmentsIn(list, building) : [];
+  const sheet = building && (
+    <Dialog title={building} onClose={() => setBuilding(null)} actions={<button className="button ghost" onClick={() => setBuilding(null)}>닫기</button>}>
+      <p className="text-[13px] leading-[20px] text-ink-3">이 건물에 있는 학과예요.</p>
+      <ul className="mt-[12px] grid gap-[8px]">
+        {inside.map((d) => (
+          <li key={d.id}>
+            <button onClick={() => open(d)} className="pressable w-full rounded-[14px] border border-cream-line bg-cream px-[14px] py-[12px] text-left active:bg-cream-2">
+              <span className="flex items-center gap-[6px] text-[15px] font-semibold text-slate">
+                <NameWithBadge partner={d.partner}>{d.name}</NameWithBadge>
+              </span>
+              <span className="mt-[2px] block text-[12px] leading-[18px] text-gray">{journeyText(state, d)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {showsExampleNote(inside) && <p className="mt-[8px] text-[10.5px] text-gray">{PARTNER_EXAMPLE_NOTE}</p>}
+    </Dialog>
+  );
+  return (
+    <Screen h={Math.max(874, 196 + MAP_SHOWN + 170)} foot={739} veil={false} overlay={sheet} footer={<TabBar active="home" nav={nav} state={state} />}>
       <Mask src={icon.cap} w={24} h={18} color="#087f77" className="absolute left-[23px] top-[59px]" />
-      <T y={61} size={16} center clip={270} className="font-semibold text-mint">
-        {schools.length === 1 ? schools[0] : "캠퍼스하이"}
+      <T y={61} size={16} left={56} clip={220} className="font-semibold text-mint">
+        {`${CAMPUS.school} ${CAMPUS.name}`}
       </T>
-      <T y={122.5} size={28.5} lh={36} left={20} className="a-up font-bold text-navy">
-        {"어떤 전공이\n나에게 맞을까?"}
+      <CreditPill credits={state.credits || 0} className="absolute right-[20px] top-[55px]" />
+      <T y={112} size={26} lh={34} left={20} className="a-up font-bold text-navy">
+        어느 건물로 가볼까요?
       </T>
-      <T y={201.5} size={14.5} left={20.5} clip={230} className="a-up text-gray" style={delay(0.08)}>
-        학과에 입학해 학년마다 수업을 체험해요.
-      </T>
-      <div className="a-pop absolute left-[244px] top-[104px] h-[106px] w-[143px]" style={delay(0.2)}>
-        <img src={img.mascotHome} alt="" className="loop h-full w-full" style={{ animation: "float 2.6s ease-in-out 0.9s infinite" }} />
+      <p
+        key={hint || "guide"}
+        role="status"
+        className={`absolute left-[20px] right-[20px] top-[154px] text-[13.5px] leading-[20px] ${hint ? "a-shake text-mint-deep" : "a-up text-gray"}`}
+        style={hint ? undefined : delay(0.06)}
+      >
+        {hint ||
+          (list.length
+            ? "민트색 건물을 누르면 그 건물의 학과를 볼 수 있어요."
+            : catalog.status === "error"
+              ? catalog.message
+              : "학과 정보를 불러오는 중이에요…")}
+      </p>
+      {!list.length && catalog.status === "error" && (
+        <button className="text-button absolute right-[20px] top-[152px]" onClick={catalog.retry}>
+          다시 시도
+        </button>
+      )}
+      <div ref={map} className="no-scrollbar absolute left-0 top-[196px] w-full overflow-x-auto" style={{ height: MAP_SHOWN }} aria-label={`${CAMPUS.name} 지도`}>
+        <div
+          className="relative rounded-[24px]"
+          style={{ width: MAP_W + 40, height: MAP_SHOWN, background: "radial-gradient(120% 90% at 40% 45%, #eaf8e6 0%, #d8f0d4 70%, #cfe9cb 100%)" }}
+        >
+          {PLACES.map((place) => {
+            const left = 20 + place.x * MAP_W;
+            const top = place.y * MAP_H;
+            if (place.kind === "landmark")
+              return (
+                <span
+                  key={place.no}
+                  className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-[4px] whitespace-nowrap rounded-full bg-white/70 px-[8px] py-[3px] text-[10.5px] font-medium text-ink-3"
+                  style={{ left, top }}
+                >
+                  <span className="h-[5px] w-[5px] rounded-full bg-mute" aria-hidden />
+                  {place.name}
+                </span>
+              );
+            const here = departmentsIn(list, place.name);
+            const ready = here.length > 0;
+            return (
+              <button
+                key={place.no}
+                onClick={() => tap(place)}
+                aria-label={ready ? `${place.name}, ${here.map((d) => d.name).join(", ")}` : `${place.name}, 준비 중`}
+                className={`pressable absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-[12px] border-2 px-[4px] py-[6px] text-center ${
+                  ready ? "a-pop border-mint bg-white shadow-[0_8px_18px_rgba(39,216,205,0.35)]" : "border-[#c9cfd6] bg-[#f3f5f7]"
+                }`}
+                style={{ left, top, width: BUILDING_W, ...(ready ? delay(0.2) : {}) }}
+              >
+                <span className={`text-[10.5px] font-semibold leading-[14px] ${ready ? "text-ink-2" : "text-gray"}`} style={{ wordBreak: "keep-all" }}>
+                  {place.name.replace("/", "/​")}
+                </span>
+                <span className={`mt-[3px] text-[9.5px] font-bold leading-[12px] ${ready ? "text-mint-deep" : "text-mute"}`}>
+                  {ready ? here.map((d) => d.name).join(" · ") : "준비 중 🔒"}
+                </span>
+                {ready && <span className="loop pointer-events-none absolute -inset-[5px] rounded-[16px] border-2 border-mint/50" style={{ animation: "glow 2.4s ease-in-out 1s infinite" }} aria-hidden />}
+              </button>
+            );
+          })}
+        </div>
       </div>
-      <DepartmentPicker top={250} nav={nav} state={state} setState={setState} catalog={catalog} />
+      <p className="absolute left-[20px] right-[20px] text-[11px] leading-[16px] text-gray" style={{ top: 196 + MAP_SHOWN + 10 }}>
+        {"건물 위치: "}
+        <a href={CAMPUS.source} target="_blank" rel="noopener noreferrer" className="underline underline-offset-[2px]">
+          경희대학교 공식 캠퍼스맵
+        </a>
+        {" · 지도는 좌우로 밀어서 볼 수 있어요."}
+      </p>
     </Screen>
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* 11-1 · 학과 홈: 입학한 학과의 진행 상황                              */
+/* ------------------------------------------------------------------ */
+
 const SHOWN_TODO = 3;
 
-export function Home({ active, nav, state, setState, catalog }) {
+export function Major({ active, nav, state, setState }) {
   const v = view(state);
   // 탐색에서 다른 학과를 열어 보면 current가 그 학과로 바뀐다. 그 학과에 입학하지 않은 채 홈으로 돌아오면
   // 홈에 보여 주던 학과(없으면 가장 최근에 입학한 학과)를 다시 보여준다.
@@ -953,7 +972,9 @@ export function Home({ active, nav, state, setState, catalog }) {
   }, [active, fallback, shown, state.studying, setState]);
   const percent = v?.journey ? v.progress.percent : 0;
   const pct = useCountUp(percent);
-  if (!v?.journey) return fallback ? null : <HomeStart nav={nav} state={state} setState={setState} catalog={catalog} />;
+  // 입학한 학과가 하나도 없으면 지도로 돌려보낸다.
+  useGuard(!!v?.journey || !!fallback, nav, active);
+  if (!v?.journey) return null;
   const { d, progress } = v;
   const { openYear, graduated, years, passedCount } = progress;
   const now = years[openYear - 1];
@@ -965,22 +986,13 @@ export function Home({ active, nav, state, setState, catalog }) {
   const shownTodo = todo.slice(0, SHOWN_TODO);
   const open = () => (graduated ? nav.push("graduation") : nav.push("courses", { year: openYear }));
   const listEnd = shownTodo.length ? 565 + shownTodo.length * 84 + (todo.length > SHOWN_TODO ? 30 : 0) : 615;
-  // 맨 아래에 학과 추천과 학과 카드(다른 학과도 둘러볼 수 있게).
-  const pickerTop = listEnd + 52;
   return (
-    <Screen h={pickerTop + pickerHeight(all(state).length)} foot={739} veil={false} footer={<TabBar active="home" nav={nav} state={state} />}>
-      <Mask src={icon.cap} w={24} h={18} color="#087f77" className="absolute left-[23px] top-[59px]" />
-      <T y={61} size={16} center clip={270} className="font-semibold text-mint">
-        {d.school}
+    <Screen h={Math.max(874, listEnd + 150)} foot={739} veil={false} footer={<TabBar active="major" nav={nav} state={state} />}>
+      <BackButton onClick={() => nav.reset(["home"])} />
+      <T y={61} size={16} center clip={220} className="font-semibold text-mint">
+        {`${d.school} · ${d.building}`}
       </T>
-      <Mask
-        src={icon.bell}
-        w={22}
-        h={24}
-        color="#949494"
-        className="loop absolute left-[356px] top-[56px] origin-top"
-        style={{ animation: "sway 1.2s ease-in-out 1.2s 2" }}
-      />
+      <CreditPill credits={state.credits || 0} className="absolute right-[20px] top-[55px]" />
       <T y={122.5} size={28.5} lh={36} left={20} className="a-up font-bold text-navy">
         {"한 걸음씩,\n나의 전공을 알아가는 중"}
       </T>
@@ -1043,10 +1055,6 @@ export function Home({ active, nav, state, setState, catalog }) {
           모든 과제를 마쳤어요.
         </T>
       )}
-      <T y={pickerTop - 30} size={15} left={21} className="a-up font-bold text-ink-2" style={delay(0.5)}>
-        학과 둘러보기
-      </T>
-      <DepartmentPicker top={pickerTop} nav={nav} state={state} setState={setState} catalog={catalog} />
     </Screen>
   );
 }
@@ -1187,6 +1195,7 @@ export function Lesson({ active, nav, route, state, setState }) {
     setResult({
       ...got,
       best: recordOf(after, d.id, subject),
+      credits: (after.credits || 0) - (base.credits || 0),
       // 새로 열린 학년들(체험이 있는 필수과목이 없는 학년은 함께 열린다).
       opened: progress.openYear > before.openYear ? YEARS.filter((y) => y > before.openYear && y <= progress.openYear) : null,
       graduated: progress.graduated && !before.graduated,
@@ -1233,6 +1242,8 @@ export function Lesson({ active, nav, route, state, setState }) {
             {result.grade === PASS ? "끝까지 해서 통과(P)했어요." : `정답률 ${result.percent}%`}
             {result.best && result.best.grade !== result.grade ? ` · 남는 성적은 가장 좋은 ${gradeText(result.best)}이에요` : ""}
           </p>
+          {result.credits > 0 && <CreditPill credits={result.credits} className="a-pop mt-[12px] inline-flex" style={delay(0.2)} />}
+          {result.credits > 0 && <span className="sr-only">{`크레딧 ${josa(String(result.credits), "을", "를")} 받았어요`}</span>}
           <MintCard
             title={result.graduated ? "졸업을 축하해요!" : result.opened ? `${result.opened.join("·")}학년이 열렸어요!` : passes(result.best?.grade) ? "이수했어요" : "재수강이 필요해요"}
             className="a-up mt-[22px]"
@@ -1681,7 +1692,7 @@ export function My({ nav, state, setState }) {
     .filter((item) => item.d);
   const choose = (d, to) => {
     setState((s) => ({ ...s, current: d.id }));
-    if (to === "home") nav.reset(["home"]);
+    if (to === "major") nav.reset(["home", "major"]);
     else nav.push(to);
   };
   return (
@@ -1691,9 +1702,12 @@ export function My({ nav, state, setState }) {
         className="flow no-scrollbar absolute left-0 top-[104px] w-full overflow-y-auto px-[20px] pb-[24px] pt-[20px]"
         style={{ bottom: "calc(135px - var(--bt) * 1px)" }}
       >
-        <h1 className="a-up text-[20px] font-semibold leading-[28px] text-mint">나의 체험 기록</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="a-up text-[20px] font-semibold leading-[28px] text-mint">나의 체험 기록</h1>
+          <CreditPill credits={state.credits || 0} className="a-up" />
+        </div>
         <p className="a-up mt-[4px] text-[14px] leading-[22px] text-gray" style={delay(0.06)}>
-          기록은 이 브라우저에만 저장돼요.
+          {`과목을 이수할 때마다 크레딧 ${josa(String(CREDIT_PER_PASS), "을", "를")} 받아요. 모은 크레딧은 멘토링이 생기면 쓸 수 있어요. 기록은 이 브라우저에만 저장돼요.`}
         </p>
         {journeys.length === 0 && <p className="a-fade mt-[40px] text-center text-[14px] text-mute">아직 체험한 학과가 없어요.</p>}
         {journeys.map(({ d }, i) => {
@@ -1709,7 +1723,7 @@ export function My({ nav, state, setState }) {
                 {`${finished ? "졸업" : `${progress.openYear}학년 진행 중`} · 이수 ${progress.passedCount}과목${average === null ? "" : ` · 평점 ${average.toFixed(2)}`}`}
               </p>
               <div className="mt-[12px] flex gap-[8px]">
-                <button className="button" onClick={() => choose(d, finished ? "graduation" : "home")}>
+                <button className="button" onClick={() => choose(d, finished ? "graduation" : "major")}>
                   {finished ? "졸업 리포트 보기" : "이어서 체험하기"}
                 </button>
                 {progress.taken.length > 0 && (
@@ -1758,13 +1772,13 @@ export function My({ nav, state, setState }) {
 
 export const SCREENS = {
   splash: Splash,
-  quiz: Quiz,
-  result: Result,
+  intro: Intro,
   departments: Departments,
   detail: Detail,
   enrolled: Enrolled,
   welcome: Welcome,
   home: Home,
+  major: Major,
   lesson: Lesson,
   courses: Courses,
   grades: Grades,

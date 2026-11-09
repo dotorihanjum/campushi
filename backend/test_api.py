@@ -37,6 +37,7 @@ class ApiTest(unittest.TestCase):
         self.assertIn("객체지향프로그래밍", cse["kinds"]["전공필수"])
         self.assertNotIn("이산구조", cse["kinds"]["전공필수"] + cse["kinds"]["전공기초"])
         self.assertEqual(len(design["kinds"]["전공기초"]), 7)
+        self.assertEqual((cse["building"], design["building"]), ("전자정보/응용과학대학관", "예술·디자인대학관"))
         self.assertEqual(len(cse["years"]["3"]), 35)
         self.assertIn("데이터베이스", cse["years"]["3"])
         # 2023-1 ~ 2026-2 개설 기록이 없는 과목은 뺐다(SOURCE.md).
@@ -88,6 +89,9 @@ class ApiTest(unittest.TestCase):
         broken.append(item)
         item = copy.deepcopy(original)
         item["source"]["url"] = "http://example.com"
+        broken.append(item)
+        item = copy.deepcopy(original)
+        item["building"] = ""
         broken.append(item)
         item = copy.deepcopy(original)
         del item["years"]["4"]

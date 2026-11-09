@@ -14,8 +14,6 @@ import gradeAplus from "./assets/grade-aplus.png";
 import gradeSign from "./assets/grade-sign.png";
 import icBack from "./assets/ic-back.png";
 import icCap from "./assets/ic-cap.png";
-import icBell from "./assets/ic-bell.png";
-import icEye from "./assets/ic-eye.png";
 import icHome from "./assets/ic-home.png";
 import icExplore from "./assets/ic-explore.png";
 import icMajor from "./assets/ic-major.png";
@@ -49,8 +47,6 @@ export const img = {
 export const icon = {
   back: icBack,
   cap: icCap,
-  bell: icBell,
-  eye: icEye,
   home: icHome,
   explore: icExplore,
   major: icMajor,

@@ -111,6 +111,8 @@ def check_department(item):
         raise ValueError(f"{name}: 이수구분의 과목은 편성표에 있는 서로 다른 과목이어야 합니다.")
     if item.get("practice") and not any(item["practice"] in years[year] for year in YEARS):
         raise ValueError(f"{name}: 실습 과목은 편성표의 과목이어야 합니다.")
+    if not isinstance(item.get("building"), str) or not item["building"].strip():
+        raise ValueError(f"{name}: 학과가 있는 국제캠퍼스 건물(building)이 필요합니다.")
     if not str(item.get("source", {}).get("url", "")).startswith("https://"):
         raise ValueError(f"{name}: 교육과정 출처 주소가 필요합니다.")
 
