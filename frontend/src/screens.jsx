@@ -797,10 +797,10 @@ function useCountUp(target, ms = 1100, startDelay = 400) {
   return value;
 }
 
-// 하단 탭바. 민트 윗선부터 아이콘·라벨까지 TAB_BAR(64), 그 아래 TRIM_BOTTOM(28, 홈 인디케이터 자리, App.jsx에서 화면이
+// 하단 탭바. 민트 윗선부터 아이콘·라벨까지 TAB_BAR(80), 그 아래 TRIM_BOTTOM(28, 홈 인디케이터 자리, App.jsx에서 화면이
 // 낮으면 먼저 줄어든다)을 더한 높이를 아트보드 아래에 붙인다. 탭바를 쓰는 화면은 foot={TAB_TOP}을 주고,
 // 아래를 가리지 않게 TAB_H(- var(--bt))만큼 비운다.
-const TAB_BAR = 64;
+const TAB_BAR = 80;
 const TAB_H = TAB_BAR + 28;
 const TAB_TOP = 874 - TAB_H;
 const TABS = [
@@ -823,13 +823,13 @@ function TabBar({ active, nav, state }) {
     <div className="absolute left-0 w-full border-t border-mint bg-white" style={{ top: TAB_TOP, height: TAB_H }}>
       {TABS.map((t) => {
         const on = t.id === active;
-        // 아이콘(39px 칸) + 4px + 라벨(15px)을 위 여백 5px로 쌓는다.
+        // 아이콘(39px 칸) + 4px + 라벨(15px)을 위 여백 10px로 쌓는다(아래 여백은 남는 12px).
         return (
           <button
             key={t.id}
             onClick={() => go(t.id)}
             aria-current={on ? "page" : undefined}
-            className="pressable absolute flex flex-col items-center gap-[4px] pt-[5px]"
+            className="pressable absolute flex flex-col items-center gap-[4px] pt-[10px]"
             style={{ left: t.cx - 44, top: 0, width: 88, height: TAB_BAR }}
           >
             <span className="flex h-[39px] items-center justify-center">
