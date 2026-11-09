@@ -659,8 +659,8 @@ function TabBar({ active, nav, state }) {
     if (id === "home") nav.reset(["home"]);
     if (id === "explore") nav.push("departments");
     // 전공: 지금 보고 있는(또는 체험 중인) 학과의 상세. 아직 고른 학과가 없으면 학과 둘러보기로 간다.
-    // 전공: 입학한 학과가 있으면 그 학과 홈(지금 체험 중인 학과), 없으면 보고 있던 학과 상세나 학과 목록.
-    if (id === "major") nav.push(Object.keys(state.journeys).length ? "major" : state.current ? "detail" : "departments");
+    // 전공: 지금 체험 중인 학과의 홈. 입학한 학과가 없으면 그 화면이 안내를 보여준다.
+    if (id === "major") nav.push("major");
     if (id === "my") nav.push("my");
   };
   return (
@@ -902,8 +902,28 @@ export function Major({ active, nav, state, setState }) {
   const step = v?.journey ? nextStepOf(v.progress) : null;
   const percent = step ? step.percent : 0;
   const pct = useCountUp(percent);
-  // 입학한 학과가 하나도 없으면 지도로 돌려보낸다.
-  useGuard(!!v?.journey || !!fallback, nav, active);
+  // 입학한 학과가 하나도 없으면 안내와 함께 학과를 고르러 갈 수 있게 한다.
+  if (!v?.journey && !fallback)
+    return (
+      <Screen foot={739} veil={false} footer={<TabBar active="major" nav={nav} state={state} />}>
+        <Header title="나의 전공" />
+        <div className="a-pop absolute left-[121px] top-[176px] h-[160px] w-[160px]" style={delay(0.05)}>
+          <img src={yearCharacter(1).src} alt="" className="loop h-full w-full object-contain" style={{ animation: "float 2.6s ease-in-out 0.9s infinite" }} />
+        </div>
+        <T y={370} size={22} center className="a-up font-bold text-navy" style={delay(0.15)}>
+          아직 체험 중인 전공이 없어요
+        </T>
+        <T y={408} size={14} lh={22} center clip={340} className="a-up text-gray" style={delay(0.22)}>
+          {"캠퍼스 지도에서 건물을 골라 학과에 체험 입학하면\n여기에서 진행 상황과 과목을 볼 수 있어요."}
+        </T>
+        <FilledButton top={500} onClick={() => nav.reset(["home"])}>
+          캠퍼스 지도에서 학과 고르기
+        </FilledButton>
+        <button className="text-button a-up absolute left-0 right-0 top-[578px] text-center" onClick={() => nav.push("departments")} style={delay(0.3)}>
+          학과 목록으로 보기 →
+        </button>
+      </Screen>
+    );
   if (!v?.journey) return null;
   const { d, progress } = v;
   const { openYear, graduated, years, passedCount } = progress;
