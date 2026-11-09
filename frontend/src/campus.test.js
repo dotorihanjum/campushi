@@ -2,21 +2,33 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CAMPUS, PLACES, departmentsIn, placeOf } from "./campus.js";
+import { BUILDINGS, CAMPUS_AREA, MAP_H, MAP_W } from "./campusMapData.js";
 import { createDepartment } from "./model.js";
 
-test("캠퍼스 지도의 건물은 공식 캠퍼스맵의 번호와 위치(0~1)를 가진다", () => {
+test("캠퍼스 지도의 건물은 공식 캠퍼스맵의 번호와 오픈스트리트맵의 실제 위치(0~1)를 가진다", () => {
   assert.ok(CAMPUS.source.startsWith("https://www.khu.ac.kr/"));
   assert.equal(new Set(PLACES.map((p) => p.no)).size, PLACES.length);
   assert.equal(new Set(PLACES.map((p) => p.name)).size, PLACES.length);
+  assert.equal(new Set(PLACES.map((p) => p.osm)).size, PLACES.length);
   for (const place of PLACES) {
     assert.ok(["college", "landmark"].includes(place.kind), place.name);
     assert.ok(place.x > 0 && place.x < 1 && place.y > 0 && place.y < 1, place.name);
   }
-  // 단과대 건물은 지도에서 서로 겹치지 않게 떨어져 있다(CampusMap.jsx: 지도 폭 MAP_W, 건물 표시 폭 84px·높이 약 60px).
-  const colleges = PLACES.filter((p) => p.kind === "college");
+  // 단과대 건물의 이름표(CampusMap.jsx: 글자 10px, 높이 15px)는 서로 겹치지 않는다.
+  const box = (p) => ({ x: p.x * MAP_W, y: p.y * MAP_H + (p.labelDy || 0), w: p.name.length * 10 + 28 });
+  const colleges = PLACES.filter((p) => p.kind === "college").map((p) => ({ p, ...box(p) }));
   for (const a of colleges)
     for (const b of colleges)
-      if (a !== b) assert.ok(Math.abs(a.x - b.x) * 805 >= 84 || Math.abs(a.y - b.y) * 560 >= 60, `${a.name} · ${b.name}`);
+      if (a !== b) assert.ok(Math.abs(a.x - b.x) >= (a.w + b.w) / 2 || Math.abs(a.y - b.y) >= 15, `${a.p.name} · ${b.p.name}`);
+});
+
+test("지도 데이터: 공식 캠퍼스맵처럼 가로로 긴 그림이고, 이름표를 단 건물은 실제 윤곽이 있다", () => {
+  assert.ok(MAP_W > MAP_H);
+  assert.ok(CAMPUS_AREA.startsWith("M"));
+  for (const place of PLACES.filter((p) => p.kind === "college")) {
+    const building = BUILDINGS.find((b) => b.id === place.osm);
+    assert.ok(building && /^M[\d.]+ [\d.]+(L[\d.]+ [\d.]+){2,}Z/.test(building.d), place.name);
+  }
 });
 
 test("서비스의 학과는 모두 지도의 단과대 건물에 있고, 그 건물만 열린다", () => {

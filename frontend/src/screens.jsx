@@ -857,7 +857,7 @@ export function Home({ nav, state, setState, catalog }) {
   useLayoutEffect(() => {
     const el = map.current;
     if (!el) return;
-    el.scrollLeft = Math.max(0, 20 + center * MAP_W - el.clientWidth / 2);
+    el.scrollLeft = Math.max(0, center * MAP_W - el.clientWidth / 2);
     // 화면이 낮아 지도가 다 보이지 않으면 열린 건물(이름표까지)이 가운데 오게 위아래도 민다.
     el.scrollTop = Math.max(0, 14 + middle * MAP_H + 30 - el.clientHeight / 2);
   }, [center, middle]);
