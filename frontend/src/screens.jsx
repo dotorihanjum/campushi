@@ -213,12 +213,14 @@ export function School({ nav, state, setState, route }) {
           }`}
           style={{ top: 250 + i * 112, ...delay(0.12 + i * 0.06) }}
         >
-          <span className={`h-[60px] w-[60px] shrink-0 ${campus.open ? "" : "opacity-40 grayscale"}`}>
-            <SchoolLogo school={campus.school} size={56} />
+          {/* 로고 원본은 가로가 긴 3:2라서 칸도 3:2로 둔다(찌그러지지 않게). */}
+          <span className={`h-[48px] w-[72px] shrink-0 ${campus.open ? "" : "opacity-40 grayscale"}`}>
+            <SchoolLogo school={campus.school} size={46} />
           </span>
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className={`truncate text-[17px] font-bold leading-[24px] ${campus.open ? "text-ink-2" : "text-gray"}`}>{`${campus.school} ${campus.name}`}</span>
-            <span className="truncate text-[12.5px] leading-[19px] text-gray">{campus.region}</span>
+            <span className="truncate text-[12.5px] font-semibold leading-[18px] text-gray">{campus.school}</span>
+            <span className={`truncate text-[18px] font-bold leading-[25px] ${campus.open ? "text-ink-2" : "text-gray"}`}>{campus.name}</span>
+            <span className="truncate text-[12px] leading-[18px] text-gray">{campus.region}</span>
           </span>
           {campus.open ? (
             <span className="flex h-[28px] shrink-0 items-center rounded-full bg-mint px-[12px] text-[13px] font-bold text-white">

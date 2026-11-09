@@ -18,7 +18,7 @@ export function SchoolLogo({ school, kind = "logo", size = 64, className = "", s
         src={src}
         alt={kind === "seal" ? "" : `${school} 로고`}
         onError={() => setFailed(src)}
-        className={`h-full w-full ${className}`}
+        className={`h-full w-full object-contain ${className}`}
         style={style}
       />
     );
