@@ -6,8 +6,8 @@ import { CAMPUS, PLACES, departmentsIn } from "./campus.js";
 
 export const MAP_H = 560;
 export const MAP_W = Math.round(MAP_H * CAMPUS.ratio);
-// 건물이 공식 지도의 위쪽 3/4에 모여 있어 아래쪽(운동장·숲)은 잘라서 보여준다.
-export const MAP_SHOWN = Math.round(MAP_H * 0.76);
+// 건물이 공식 지도의 위쪽 3/4에 모여 있어 맨 아래(운동장·숲)는 잘라서 보여준다.
+export const MAP_SHOWN = Math.round(MAP_H * 0.9);
 const PAD = 20;
 const px = (x) => PAD + x * MAP_W;
 const py = (y) => y * MAP_H;
@@ -25,12 +25,12 @@ const path = (points) => points.map(([x, y], i) => `${i ? "L" : "M"}${px(x).toFi
 
 // 나무(꾸밈): 숲과 가장자리에 고정된 난수로 흩어 놓고, 건물·길 표시와 겹치는 것은 뺀다.
 const FORESTS = [
-  { x: [0.8, 1.0], y: [0.36, 0.72], n: 46 },
+  { x: [0.8, 1.0], y: [0.36, 0.88], n: 58 },
   { x: [0.0, 0.1], y: [0.0, 0.2], n: 14 },
   { x: [0.1, 0.3], y: [0.0, 0.1], n: 10 },
   { x: [0.52, 0.72], y: [0.4, 0.5], n: 8 },
-  { x: [0.36, 0.44], y: [0.6, 0.72], n: 6 },
-  { x: [0.62, 0.8], y: [0.5, 0.72], n: 12 },
+  { x: [0.36, 0.44], y: [0.6, 0.88], n: 10 },
+  { x: [0.62, 0.8], y: [0.5, 0.88], n: 20 },
 ];
 function seeded(seed) {
   let value = seed >>> 0;

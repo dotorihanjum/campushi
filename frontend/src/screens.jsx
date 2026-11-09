@@ -912,23 +912,23 @@ export function Home({ nav, state, setState, catalog }) {
         </svg>
       </button>
       <CreditPill credits={state.credits || 0} className="absolute right-[20px] top-[55px]" />
-      <T y={112} size={26} lh={34} left={20} className="a-up font-bold text-navy">
+      <T y={100} size={26} lh={34} left={20} className="a-up font-bold text-navy">
         어느 건물로 가볼까요?
       </T>
-      <T y={154} size={13} left={20.5} clip={360} className="a-up text-gray" style={delay(0.06)}>
+      <T y={140} size={13} left={20.5} clip={360} className="a-up text-gray" style={delay(0.06)}>
         지도를 밀어 캠퍼스를 둘러봐요.
       </T>
       {/* 지도와 그 아래 캐릭터·말풍선. 탭바 위까지의 높이에 맞춰, 화면이 낮으면 지도 보이는 영역이 줄어든다
           (줄어든 만큼은 지도를 위아래로 밀어 본다). 캐릭터·말풍선은 늘 탭바 위에 보인다. */}
-      <div className="absolute inset-x-0 isolate flex flex-col" style={{ top: 182, bottom: "calc((135 - var(--bt)) * 1px)" }}>
+      <div className="absolute inset-x-0 isolate flex flex-col" style={{ top: 164, bottom: "calc((135 - var(--bt)) * 1px)" }}>
         <div ref={map} className="no-scrollbar min-h-[120px] flex-1 overflow-auto overscroll-contain" style={{ maxHeight: MAP_SHOWN + 14 }} aria-label={`${CAMPUS.name} 지도`}>
           <div className="pt-[14px]">
             <CampusMap departments={list} onOpen={setBuilding} onLocked={locked} />
           </div>
         </div>
-        <div className="flex shrink-0 items-start gap-[10px] pb-[10px] pl-[16px] pr-[18px] pt-[22px]">
-          <div className="relative h-[84px] w-[84px] shrink-0">
-            <span className="a-fade absolute bottom-[-2px] left-[10px] h-[12px] w-[64px] rounded-[50%] bg-[rgba(20,60,40,0.14)]" style={delay(landing ? 1 : 0)} aria-hidden />
+        <div className="flex shrink-0 items-start gap-[10px] pb-[8px] pl-[16px] pr-[18px] pt-[12px]">
+          <div className="relative h-[72px] w-[72px] shrink-0">
+            <span className="a-fade absolute bottom-[-2px] left-[8px] h-[10px] w-[56px] rounded-[50%] bg-[rgba(20,60,40,0.14)]" style={delay(landing ? 1 : 0)} aria-hidden />
             <img
               key={character.src}
               src={character.src}
