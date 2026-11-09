@@ -80,6 +80,7 @@ export function T({ y, size, lh, left, right, center, clip, className = "", styl
 /**
  * 화면 하나. 아트보드 높이는 기기마다 달라서(App.jsx) 내용을 세 군데에 나눠 붙인다.
  * - children: 위쪽 기준. 시안의 좌표 그대로 놓는다. h(내용이 끝나는 y)를 주면 화면이 모자랄 때 세로로 스크롤된다.
+ *   h는 숫자(px)나 CSS 길이 식("725px - 10px")이다.
  * - footer: 아래쪽 기준. 시안의 좌표 그대로 주면 화면 아래 끝에 붙는다. foot은 그 영역이 시작하는 y다.
  * - 가운데 기준으로 둘 것은 Center로 감싼다.
  */
@@ -93,7 +94,7 @@ export function Screen({ children, footer, foot = 740, veil = true, h, resetOn, 
       <div ref={scroller} className="no-scrollbar absolute inset-0 overflow-y-auto overflow-x-hidden">
         <div
           className="relative min-h-full"
-          style={h ? { height: `calc(${h + (footer ? ARTBOARD_H - foot : 0)}px - (var(--tt) + var(--bt)) * 1px)` } : undefined}
+          style={h ? { height: `calc(${typeof h === "number" ? `${h}px` : h} + ${footer ? ARTBOARD_H - foot : 0}px - (var(--tt) + var(--bt)) * 1px)` } : undefined}
         >
           <div className="absolute inset-x-0 bottom-0" style={{ top: "calc(var(--tt) * -1px)" }}>
             {children}

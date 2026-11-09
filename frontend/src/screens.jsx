@@ -40,7 +40,7 @@ import { Rub } from "./Templates.jsx";
 import { templates } from "./experiences.js";
 import { groupName } from "./groups.js";
 import { CAMPUS, CAMPUSES, PLACES, departmentsIn } from "./campus.js";
-import CampusMap, { MAP_SHOWN, MAP_W } from "./CampusMap.jsx";
+import CampusMap, { MAP_H, MAP_SHOWN, MAP_W } from "./CampusMap.jsx";
 
 /* ------------------------------------------------------------------ */
 /* 공통                                                                */
@@ -637,9 +637,11 @@ export function Welcome({ active, nav, state }) {
   useGuard(!!v?.journey, nav, active);
   if (!v?.journey) return null;
   const { d } = v;
+  // 화면이 낮으면 캐릭터를 줄여서(최대 150) 그 아래 인사와 1학년 안내가 버튼에 가려지지 않게 올린다.
+  const shrink = "min(150px, var(--cut) * 1px)";
   return (
     <Screen
-      h={725}
+      h={`725px - ${shrink}`}
       foot={725}
       footer={
         <>
@@ -671,7 +673,7 @@ export function Welcome({ active, nav, state }) {
           <path d="M1.2 4.6 4 7.3 9.8 1.5" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
-      <div className="a-drop absolute left-[70px] top-[171px] h-[252px] w-[244px]" style={delay(0.3)}>
+      <div className="a-drop absolute left-1/2 top-[171px] aspect-[244/252] -translate-x-1/2" style={{ height: `calc(252px - ${shrink})`, ...delay(0.3) }}>
         <img
           src={img.mascotWelcome}
           alt=""
@@ -679,19 +681,21 @@ export function Welcome({ active, nav, state }) {
           style={{ animation: "hop 2.4s ease-in-out 1.3s infinite", transformOrigin: "50% 100%" }}
         />
       </div>
-      <T y={458} size={d.name.length > 9 ? 21 : 28.5} lh={42} center clip={380} className="a-up font-bold text-ink" style={delay(0.6)}>
-        {`반가워요,\n${d.name} 새내기!`}
-      </T>
-      <T y={549.5} size={14.5} center className="a-up text-ink-3" style={delay(0.7)}>
-        나에게 맞는 전공인지, 직접 경험하며 알아봐요.
-      </T>
-      <div className="a-up absolute left-0 top-[603px] h-[115px] w-[402px] rounded-[28px] bg-cream-2" style={delay(0.8)}>
-        <T y={27} size={16.5} center clip={360} className="font-bold text-ink-2">
-          {`1학년 과목 ${d.years[1].length}개 · 필수 ${d.years[1].filter((subject) => isRequired(d, subject)).length}개`}
+      <div className="absolute inset-x-0 top-0" style={{ top: `calc(-1 * ${shrink})` }}>
+        <T y={458} size={d.name.length > 9 ? 21 : 28.5} lh={42} center clip={380} className="a-up font-bold text-ink" style={delay(0.6)}>
+          {`반가워요,\n${d.name} 새내기!`}
         </T>
-        <T y={62.5} size={13.5} lh={20} center className="text-ink-3">
-          {"필수과목을 B- 이상으로 이수하면 다음 학년이 열려요.\n4학년에는 졸업 과제에 도전해요."}
+        <T y={549.5} size={14.5} center className="a-up text-ink-3" style={delay(0.7)}>
+          나에게 맞는 전공인지, 직접 경험하며 알아봐요.
         </T>
+        <div className="a-up absolute left-0 top-[603px] h-[115px] w-[402px] rounded-[28px] bg-cream-2" style={delay(0.8)}>
+          <T y={27} size={16.5} center clip={360} className="font-bold text-ink-2">
+            {`1학년 과목 ${d.years[1].length}개 · 필수 ${d.years[1].filter((subject) => isRequired(d, subject)).length}개`}
+          </T>
+          <T y={62.5} size={13.5} lh={20} center className="text-ink-3">
+            {"필수과목을 B- 이상으로 이수하면 다음 학년이 열려요.\n4학년에는 졸업 과제에 도전해요."}
+          </T>
+        </div>
       </div>
     </Screen>
   );
@@ -849,9 +853,14 @@ export function Home({ nav, state, setState, catalog }) {
   // 처음에는 열린 건물들이 화면 가운데 오게 지도를 민다.
   const opened = PLACES.filter((place) => place.kind === "college" && departmentsIn(list, place.name).length);
   const center = opened.length ? (Math.min(...opened.map((p) => p.x)) + Math.max(...opened.map((p) => p.x))) / 2 : 0.5;
+  const middle = opened.length ? (Math.min(...opened.map((p) => p.y)) + Math.max(...opened.map((p) => p.y))) / 2 : 0.5;
   useLayoutEffect(() => {
-    if (map.current) map.current.scrollLeft = Math.max(0, 20 + center * MAP_W - map.current.clientWidth / 2);
-  }, [center]);
+    const el = map.current;
+    if (!el) return;
+    el.scrollLeft = Math.max(0, 20 + center * MAP_W - el.clientWidth / 2);
+    // 화면이 낮아 지도가 다 보이지 않으면 열린 건물(이름표까지)이 가운데 오게 위아래도 민다.
+    el.scrollTop = Math.max(0, 14 + middle * MAP_H + 30 - el.clientHeight / 2);
+  }, [center, middle]);
   const locked = (name) => {
     setHint(`${josa(name, "은", "는")} 아직 준비 중이에요. 핀이 꽂힌 민트색 건물을 눌러 봐요!`);
     window.clearTimeout(hintTimer.current);
@@ -889,9 +898,8 @@ export function Home({ nav, state, setState, catalog }) {
       </ul>
     </Dialog>
   );
-  const ground = 196 + MAP_SHOWN;
   return (
-    <Screen h={874} foot={739} veil={false} overlay={sheet} footer={<TabBar active="home" nav={nav} state={state} />}>
+    <Screen foot={739} veil={false} overlay={sheet} footer={<TabBar active="home" nav={nav} state={state} />}>
       <Mask src={icon.cap} w={24} h={18} color="#087f77" className="absolute left-[23px] top-[59px]" />
       <button
         onClick={() => nav.push("school", { change: true })}
@@ -908,42 +916,47 @@ export function Home({ nav, state, setState, catalog }) {
         어느 건물로 가볼까요?
       </T>
       <T y={154} size={13} left={20.5} clip={360} className="a-up text-gray" style={delay(0.06)}>
-        지도를 좌우로 밀어 캠퍼스를 둘러봐요.
+        지도를 밀어 캠퍼스를 둘러봐요.
       </T>
-      <div ref={map} className="no-scrollbar absolute left-0 top-[182px] w-full overflow-x-auto px-[0px]" style={{ height: MAP_SHOWN + 14 }} aria-label={`${CAMPUS.name} 지도`}>
-        <div className="pt-[14px]">
-          <CampusMap departments={list} onOpen={setBuilding} onLocked={locked} />
+      {/* 지도와 그 아래 캐릭터·말풍선. 탭바 위까지의 높이에 맞춰, 화면이 낮으면 지도 보이는 영역이 줄어든다
+          (줄어든 만큼은 지도를 위아래로 밀어 본다). 캐릭터·말풍선은 늘 탭바 위에 보인다. */}
+      <div className="absolute inset-x-0 isolate flex flex-col" style={{ top: 182, bottom: "calc((135 - var(--bt)) * 1px)" }}>
+        <div ref={map} className="no-scrollbar min-h-[120px] flex-1 overflow-auto overscroll-contain" style={{ maxHeight: MAP_SHOWN + 14 }} aria-label={`${CAMPUS.name} 지도`}>
+          <div className="pt-[14px]">
+            <CampusMap departments={list} onOpen={setBuilding} onLocked={locked} />
+          </div>
         </div>
-      </div>
-      {/* 지도 아래: 캐릭터와 말풍선 */}
-      <div className="absolute left-[16px] h-[84px] w-[84px]" style={{ top: ground + 24, zIndex: 30 }}>
-        <span className="a-fade absolute bottom-[-2px] left-[10px] h-[12px] w-[64px] rounded-[50%] bg-[rgba(20,60,40,0.14)]" style={delay(landing ? 1 : 0)} aria-hidden />
-        <img
-          key={character.src}
-          src={character.src}
-          alt={character.alt}
-          className={`relative h-full w-full object-contain ${landing ? "a-fall" : "loop"}`}
-          style={landing ? undefined : { animation: "hop 2.6s ease-in-out 0.6s infinite", transformOrigin: "50% 100%" }}
-        />
-      </div>
-      <div
-        key={line}
-        role="status"
-        className="a-pop absolute left-[110px] right-[18px] rounded-[16px] border border-mint bg-white px-[14px] py-[10px] shadow-[0_6px_16px_rgba(8,127,119,0.12)]"
-        style={{ top: ground + 26, ...delay(landing && !hint ? 1.1 : 0) }}
-      >
-        <span className="absolute left-[-8px] top-[22px] h-[14px] w-[14px] rotate-45 border-b border-l border-mint bg-white" aria-hidden />
-        <p className="relative text-[13px] leading-[19px] text-ink-2">{line}</p>
-        {!list.length && catalog.status === "error" && (
-          <button className="text-button relative mt-[2px]" onClick={catalog.retry}>
-            다시 시도 →
-          </button>
-        )}
-        {list.length > 0 && !hint && !landing && studying && (
-          <button className="text-button relative mt-[2px]" onClick={continueStudy}>
-            {`${studying.name} 이어서 하기 →`}
-          </button>
-        )}
+        <div className="flex shrink-0 items-start gap-[10px] pb-[10px] pl-[16px] pr-[18px] pt-[22px]">
+          <div className="relative h-[84px] w-[84px] shrink-0">
+            <span className="a-fade absolute bottom-[-2px] left-[10px] h-[12px] w-[64px] rounded-[50%] bg-[rgba(20,60,40,0.14)]" style={delay(landing ? 1 : 0)} aria-hidden />
+            <img
+              key={character.src}
+              src={character.src}
+              alt={character.alt}
+              className={`relative h-full w-full object-contain ${landing ? "a-fall" : "loop"}`}
+              style={landing ? undefined : { animation: "hop 2.6s ease-in-out 0.6s infinite", transformOrigin: "50% 100%" }}
+            />
+          </div>
+          <div
+            key={line}
+            role="status"
+            className="a-pop relative mt-[2px] min-w-0 flex-1 rounded-[16px] border border-mint bg-white px-[14px] py-[10px] shadow-[0_6px_16px_rgba(8,127,119,0.12)]"
+            style={delay(landing && !hint ? 1.1 : 0)}
+          >
+            <span className="absolute left-[-8px] top-[22px] h-[14px] w-[14px] rotate-45 border-b border-l border-mint bg-white" aria-hidden />
+            <p className="relative text-[13px] leading-[19px] text-ink-2">{line}</p>
+            {!list.length && catalog.status === "error" && (
+              <button className="text-button relative mt-[2px]" onClick={catalog.retry}>
+                다시 시도 →
+              </button>
+            )}
+            {list.length > 0 && !hint && !landing && studying && (
+              <button className="text-button relative mt-[2px] max-w-full truncate" onClick={continueStudy}>
+                {`${studying.name} 이어서 하기 →`}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </Screen>
   );
@@ -1099,6 +1112,8 @@ export function Major({ active, nav, state, setState }) {
 /* ------------------------------------------------------------------ */
 
 const STEPS = ["배우기", "직접 해보기", "기록"];
+// 스크롤 영역의 아래 끝을 흐리게 한다(아래 여백 20px 안이라 끝까지 내리면 내용이 가려지지 않는다).
+const FADE_END = "linear-gradient(to bottom, #000 calc(100% - 20px), transparent)";
 
 /** 수업 단계 칩. 지나온 단계는 ✓를 붙이고 눌러서 다시 볼 수 있다. */
 function StepChips({ step, reached, onGo }) {
@@ -1442,19 +1457,9 @@ export function Lesson({ active, nav, route, state, setState }) {
 
   return (
     <Screen
-      foot={700}
+      foot={740}
       footer={
         <>
-          {/* 이전 단계(첫 단계에서는 없음). 주 버튼과 구분되게 글씨 버튼으로 둔다. */}
-          <div className="absolute inset-x-[20px] top-[708px] flex h-[36px] items-center justify-between">
-            {step > 0 ? (
-              <button onClick={() => go(step - 1)} className="pressable h-[36px] rounded-full border border-line bg-white px-[14px] text-[13px] font-semibold text-slate">
-                ← 이전 단계
-              </button>
-            ) : (
-              <span />
-            )}
-          </div>
           {action}
           <p
             key={shake}
@@ -1471,7 +1476,8 @@ export function Lesson({ active, nav, route, state, setState }) {
       <div
         ref={scroller}
         className="flow no-scrollbar absolute left-0 top-[146px] w-full overflow-y-auto px-[20px] pb-[20px] pt-[18px]"
-        style={{ bottom: "calc(174px - var(--bt) * 1px)" }}
+        // 아래 버튼 바로 위까지 쓴다. 내용이 이어지면 끝이 흐려져 스크롤할 수 있다는 것을 알린다.
+        style={{ bottom: "calc(130px - var(--bt) * 1px)", maskImage: FADE_END, WebkitMaskImage: FADE_END }}
       >
         <div key={step}>
           <h1 ref={heading} tabIndex={-1} className="a-up text-[26px] font-bold leading-[36px] text-navy outline-none">
@@ -1485,6 +1491,12 @@ export function Lesson({ active, nav, route, state, setState }) {
                 : `${year}학년 · ${kind} · ${subject}`}
           </p>
           {body}
+          {/* 이전 단계(첫 단계에서는 없음). 위의 단계 칩으로도 돌아갈 수 있어서, 화면이 낮아도 체험 영역을 넓게 쓰도록 내용 끝에 둔다. */}
+          {step > 0 && (
+            <button onClick={() => go(step - 1)} className="pressable mt-[16px] h-[36px] rounded-full border border-line bg-white px-[14px] text-[13px] font-semibold text-slate">
+              ← 이전 단계
+            </button>
+          )}
         </div>
       </div>
     </Screen>
