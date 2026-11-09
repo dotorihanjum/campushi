@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { icon, img } from "./assets.js";
+import { icon, img, yearCharacter } from "./assets.js";
 import {
   BackButton,
   Center,
@@ -26,6 +26,7 @@ import {
   gameOf,
   isRequired,
   kindOf,
+  nextStepOf,
   progressOf,
   recordOf,
   savePlay,
@@ -796,6 +797,8 @@ export function Home({ nav, state, setState, catalog }) {
   const studying = list.find((d) => d.id === studyingId) || null;
   const progress = studying ? progressOf(state, studying) : null;
   const line = guideLine({ landing, hint, list, catalog, studying, progress });
+  // 캐릭터는 체험 중인 학과의 학년에 따라 자란다(입학 전이면 새내기).
+  const character = yearCharacter(progress?.openYear || 1);
   const continueStudy = () => {
     setState((s) => ({ ...s, current: studying.id }));
     nav.push(progress.graduated ? "graduation" : "major");
@@ -848,9 +851,10 @@ export function Home({ nav, state, setState, catalog }) {
       <div className="absolute left-[16px] h-[84px] w-[84px]" style={{ top: ground + 24, zIndex: 30 }}>
         <span className="a-fade absolute bottom-[-2px] left-[10px] h-[12px] w-[64px] rounded-[50%] bg-[rgba(20,60,40,0.14)]" style={delay(landing ? 1 : 0)} aria-hidden />
         <img
-          src={img.mascotWelcome}
-          alt="캠퍼스하이 캐릭터"
-          className={`relative h-full w-full ${landing ? "a-fall" : "loop"}`}
+          key={character.src}
+          src={character.src}
+          alt={character.alt}
+          className={`relative h-full w-full object-contain ${landing ? "a-fall" : "loop"}`}
           style={landing ? undefined : { animation: "hop 2.6s ease-in-out 0.6s infinite", transformOrigin: "50% 100%" }}
         />
       </div>
@@ -895,7 +899,9 @@ export function Major({ active, nav, state, setState }) {
     if (fallback) setState((s) => ({ ...s, current: fallback }));
     else if (shown && state.studying !== shown) setState((s) => ({ ...s, studying: shown }));
   }, [active, fallback, shown, state.studying, setState]);
-  const percent = v?.journey ? v.progress.percent : 0;
+  // 다음 학년 해금(4학년이면 졸업)까지: 지금 학년 필수과목 중 이수한 비율.
+  const step = v?.journey ? nextStepOf(v.progress) : null;
+  const percent = step ? step.percent : 0;
   const pct = useCountUp(percent);
   // 입학한 학과가 하나도 없으면 지도로 돌려보낸다.
   useGuard(!!v?.journey || !!fallback, nav, active);
@@ -930,19 +936,28 @@ export function Major({ active, nav, state, setState }) {
       <T y={294.5} size={12.5} lh={16} left={20.5} clip={170} className="a-up text-mint-deep" style={delay(0.18)}>
         {`${graduated ? "졸업" : `${openYear}학년 진행 중`}\n이수 ${passedCount}과목${graduated ? "" : ` · 남은 과제 ${todo.length}개`}`}
       </T>
-      <div className="a-pop absolute left-[174px] top-[261px] h-[154px] w-[208px]" style={delay(0.2)}>
-        <img src={img.mascotHome} alt="" className="loop h-full w-full" style={{ animation: "float 2.6s ease-in-out 0.9s infinite" }} />
+      {/* 학년 캐릭터: 학년이 열릴 때마다 바뀐다(노션 디자인 시스템의 학년별 캐릭터). */}
+      <div key={openYear} className="a-pop absolute left-[174px] top-[261px] h-[154px] w-[208px]" style={delay(0.2)}>
+        <img
+          src={yearCharacter(openYear).src}
+          alt={yearCharacter(openYear).alt}
+          className="loop h-full w-full object-contain"
+          style={{ animation: "float 2.6s ease-in-out 0.9s infinite" }}
+        />
       </div>
       <T y={400.5} size={12.5} left={20} className="text-gray">
-        졸업까지
+        {graduated ? "졸업 완료" : step.target ? `${step.target}학년 해금까지` : "졸업까지"}
       </T>
-      <T y={401.5} size={14} left={70.5} className="font-bold text-mint-deep">
-        {pct}%
+      <T y={401.5} size={14} left={graduated ? 76 : step.target ? 108 : 70.5} className="font-bold text-mint-deep">
+        {`${pct}%`}
+        {!graduated && step.total > 0 && (
+          <span className="ml-[6px] text-[11.5px] font-normal text-gray">{`필수 ${step.done}/${step.total}${step.target ? "" : " · 졸업 과제 포함"}`}</span>
+        )}
       </T>
       <div
         className="absolute left-[20px] top-[423px] h-[8.5px] w-[362px] overflow-hidden rounded-full bg-track"
         role="progressbar"
-        aria-label="졸업까지 진행도(필수과목과 졸업 과제 중 이수한 비율)"
+        aria-label={step.target ? `${step.target}학년 해금까지 진행도(${openYear}학년 필수과목 중 이수한 비율)` : "졸업까지 진행도(4학년 필수과목과 졸업 과제 중 이수한 비율)"}
         aria-valuenow={percent}
         aria-valuemin={0}
         aria-valuemax={100}
@@ -1184,6 +1199,12 @@ export function Lesson({ active, nav, route, state, setState }) {
                     : `${PASS_GRADE} 이상이어야 이수로 인정돼요.${isRequired(d, subject) ? " 필수과목이라 다음 학년이 열리려면 다시 들어야 해요." : ""} 다시 들으면 문제가 바뀌어요.`}
             </p>
           </MintCard>
+          {result.opened && (
+            <div className="a-pop mt-[16px] flex items-center gap-[12px] rounded-[16px] border border-cream-line bg-cream px-[14px] py-[10px]" style={delay(0.3)}>
+              <img src={yearCharacter(result.opened.at(-1)).src} alt={yearCharacter(result.opened.at(-1)).alt} className="h-[64px] w-[72px] object-contain" />
+              <p className="whitespace-pre-line text-[13px] font-semibold leading-[19px] text-ink-2">{`${result.opened.at(-1)}학년이 되어\n캐릭터도 자랐어요!`}</p>
+            </div>
+          )}
           {!passed && passes(result.best?.grade) && (
             <p className="a-up mt-[12px] text-[12.5px] leading-[19px] text-ink-3" style={delay(0.24)}>
               이번 성적은 낮지만 이전에 받은 더 좋은 성적이 남아 있어요.
