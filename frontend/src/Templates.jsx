@@ -210,13 +210,21 @@ export function Rub({ data, year, onDone, onQuit }) {
 
 /* ---- B 순서 맞추기 ---- */
 // 이웃 교환(adjacent): 버블 정렬을 규칙 그대로 따라 한다. 강조된 두 카드를 비교해 바꿀지 고르고,
-// 규칙과 다르게 고르면 반영하지 않고 이유를 알려준다. 바퀴가 끝날 때마다 오른쪽 끝 카드가 자리를 잡는다.
+// 규칙과 다르게 고르면 반영하지 않는다. 3라운드를 하고, 라운드마다 카드를 새로 섞는다(2026-11-09 사용자 결정).
+// 1라운드만 규칙 설명과 이유("3 < 9라서…")를 보여 주고, 2·3라운드는 설명 없이 스스로 정렬한다.
+export const BUBBLE_ROUNDS = 3;
+const emptyCount = () => ({ compares: 0, swaps: 0, mistakes: 0 });
 function AdjacentOrder({ data, onComplete }) {
   const size = data.items.length;
+  const [round, setRound] = useState(0);
   const [state, setState] = useState(() => bubbleStart(startOrder(size, "adjacent")));
   const [minimum, setMinimum] = useState(() => inversions(state.order));
-  const [count, setCount] = useState({ compares: 0, swaps: 0, mistakes: 0 });
+  // 이번 라운드와 지금까지(앞 라운드들) 센 수.
+  const [count, setCount] = useState(emptyCount);
+  const [total, setTotal] = useState(emptyCount);
   const [feedback, setFeedback] = useState("");
+  const explain = round === 0;
+  const last = round === BUBBLE_ROUNDS - 1;
   const card = (i) => data.items[state.order[i]];
 
   function choose(swap) {
@@ -226,41 +234,70 @@ function AdjacentOrder({ data, onComplete }) {
     const { state: next, ok } = bubbleStep(state, swap);
     if (!ok) {
       setCount({ ...count, mistakes: count.mistakes + 1 });
-      setFeedback(should ? `${left} > ${because(right)} 바꿔야 해요.` : `${left} < ${because(right)} 그대로 둬야 해요.`);
+      setFeedback(
+        explain ? (should ? `${left} > ${because(right)} 바꿔야 해요.` : `${left} < ${because(right)} 그대로 둬야 해요.`) : "아니에요, 다시 골라 봐요.",
+      );
       return;
     }
-    const total = { ...count, compares: count.compares + 1, swaps: count.swaps + (swap ? 1 : 0) };
-    setCount(total);
+    const counted = { ...count, compares: count.compares + 1, swaps: count.swaps + (swap ? 1 : 0) };
+    setCount(counted);
     setState(next);
     const passed = next.pass > state.pass;
     setFeedback(
-      `${swap ? `${left} > ${because(right)} 바꿨어요.` : `${left} < ${because(right)} 그대로 뒀어요.`}` +
-        (next.done ? " 정렬이 끝났어요." : passed ? ` ${next.pass}바퀴 끝, 오른쪽 끝 ${next.pass}칸이 자리를 잡았어요.` : ""),
+      explain
+        ? `${swap ? `${left} > ${because(right)} 바꿨어요.` : `${left} < ${because(right)} 그대로 뒀어요.`}` +
+            (next.done ? " 정렬이 끝났어요." : passed ? ` ${next.pass}바퀴 끝, 오른쪽 끝 ${next.pass}칸이 자리를 잡았어요.` : "")
+        : next.done
+          ? "정렬이 끝났어요."
+          : "",
     );
-    // 점수: 비교한 횟수 중 처음부터 규칙대로 고른 비율(실수할 때마다 한 번씩 더 고른 셈이다).
-    if (next.done)
-      onComplete(`버블 정렬 ${next.pass}바퀴 · 비교 ${total.compares}번 · 교환 ${total.swaps}번 · 실수 ${total.mistakes}번`, {
-        correct: total.compares,
-        total: total.compares + total.mistakes,
+    if (next.done && last) {
+      const all = {
+        compares: total.compares + counted.compares,
+        swaps: total.swaps + counted.swaps,
+        mistakes: total.mistakes + counted.mistakes,
+      };
+      // 점수: 세 라운드 동안 비교한 횟수 중 처음부터 규칙대로 고른 비율.
+      onComplete(`버블 정렬 ${BUBBLE_ROUNDS}라운드 · 비교 ${all.compares}번 · 교환 ${all.swaps}번 · 실수 ${all.mistakes}번`, {
+        correct: all.compares,
+        total: all.compares + all.mistakes,
       });
+    }
   }
-  function restart() {
+  function startRound(next) {
     const order = startOrder(size, "adjacent");
+    setRound(next);
     setState(bubbleStart(order));
     setMinimum(inversions(order));
-    setCount({ compares: 0, swaps: 0, mistakes: 0 });
+    setCount(emptyCount());
     setFeedback("");
+  }
+  function nextRound() {
+    setTotal({ compares: total.compares + count.compares, swaps: total.swaps + count.swaps, mistakes: total.mistakes + count.mistakes });
+    startRound(round + 1);
+  }
+  function restart() {
+    setTotal(emptyCount());
+    startRound(0);
   }
   const fixed = (i) => state.done || i >= size - state.pass;
   const comparing = (i) => !state.done && (i === state.at || i === state.at + 1);
+  const sum = { compares: total.compares + count.compares, swaps: total.swaps + count.swaps, mistakes: total.mistakes + count.mistakes };
   return (
     <>
-      <p className="body-copy">{data.prompt}</p>
+      <ol className="round-steps" aria-label="라운드">
+        {Array.from({ length: BUBBLE_ROUNDS }, (_, i) => (
+          <li key={i} aria-current={i === round ? "step" : undefined} className={i < round || (i === round && state.done) ? "is-done" : i === round ? "is-now" : ""}>
+            {i === 0 ? "1. 규칙 익히기" : `${i + 1}. 스스로`}
+          </li>
+        ))}
+      </ol>
+      <p className="body-copy">{explain ? data.prompt : "이번엔 설명 없이 해 봐요. 작은 수부터 차례로 놓아요."}</p>
       <div className="sort-row" aria-label="카드">
         {state.order.map((step, i) => (
           <span
             key={step}
-            className={`sort-card ${comparing(i) ? "is-compare" : ""} ${fixed(i) ? "is-fixed" : ""}`}
+            className={`sort-card ${comparing(i) ? "is-compare" : ""} ${explain && fixed(i) ? "is-fixed" : ""}`}
             aria-current={comparing(i) ? "true" : undefined}
           >
             {data.items[step]}
@@ -268,24 +305,34 @@ function AdjacentOrder({ data, onComplete }) {
         ))}
       </div>
       <p className="game-progress">
-        {state.done ? "정렬 완료!" : `${state.pass + 1}바퀴째 · ${card(state.at)}, ${card(state.at + 1)} 비교`}
+        {state.done ? `${round + 1}라운드 정렬 완료!` : explain ? `${state.pass + 1}바퀴째 · ${card(state.at)}, ${card(state.at + 1)} 비교` : `${round + 1}라운드`}
       </p>
       <p className="game-feedback" role="status">
         {feedback}
       </p>
-      {state.done ? (
-        <>
-          <p className="body-copy">
-            {`${state.pass}바퀴 동안 ${count.compares}번 비교하고 ${count.swaps}번 바꿨어요. 바꾼 횟수는 처음 배치에서 순서가 뒤집힌 쌍의 수(${minimum}개)와 같아요.`}{" "}
-            {data.explanation}
-          </p>
-          <Restart onClick={restart}>새로 섞어서 다시 하기 →</Restart>
-        </>
-      ) : (
+      {!state.done ? (
         <div className="game-choices" role="group" aria-label="고르기">
           <button onClick={() => choose(true)}>바꾸기</button>
           <button onClick={() => choose(false)}>그대로 두기</button>
         </div>
+      ) : !last ? (
+        <>
+          <p className="body-copy">
+            {explain
+              ? `${state.pass}바퀴 동안 ${count.compares}번 비교하고 ${count.swaps}번 바꿨어요. 바꾼 횟수는 처음 배치에서 순서가 뒤집힌 쌍의 수(${minimum}개)와 같아요. 이제 설명 없이 해 볼까요?`
+              : `실수 ${count.mistakes}번으로 정렬했어요.`}
+          </p>
+          <button className="button" onClick={nextRound}>
+            {`${round + 2}라운드 시작`}
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="body-copy">
+            {`${BUBBLE_ROUNDS}라운드 동안 ${sum.compares}번 비교하고 ${sum.swaps}번 바꿨어요. 실수는 ${sum.mistakes}번이에요.`} {data.explanation}
+          </p>
+          <Restart onClick={restart}>새로 섞어서 처음부터 다시 하기 →</Restart>
+        </>
       )}
     </>
   );
