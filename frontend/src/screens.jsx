@@ -307,7 +307,6 @@ export function Detail({ active, nav, state, setState }) {
   const { d, journey, progress } = v;
   const finished = progress.graduated;
   const enroll = () => {
-    if (finished) return nav.push("graduation");
     setState((s) => ({ ...s, studying: d.id }));
     if (journey) return nav.reset(["home", "major"]);
     setState((s) => ({ ...s, journeys: { ...s.journeys, [d.id]: {} } }));
@@ -319,7 +318,7 @@ export function Detail({ active, nav, state, setState }) {
       h={Math.max(600, 528 + listH + 32)}
       footer={
         <OutlineButton onClick={enroll} className="a-up" style={delay(0.5)}>
-          {finished ? "졸업 리포트 보기" : journey ? "이어서 체험하기" : `${d.name} 입학하기`}
+          {finished ? "졸업한 학과 · 이어서 체험하기" : journey ? "이어서 체험하기" : `${d.name} 입학하기`}
         </OutlineButton>
       }
     >
@@ -704,7 +703,7 @@ function CourseCard({ top, d, course, wait, onClick }) {
     ? `${course.record.grade} · ${PASS_GRADE} 이상이어야 이수돼요 · 재수강`
     : course.final
       ? `졸업 과제 · ${d.final.name}`
-      : `${course.kind} · ${experienceName(d, gameOf(d, course.subject))}`;
+      : `${course.year}학년 · ${course.kind} · ${experienceName(d, gameOf(d, course.subject))}`;
   return (
     <button
       onClick={onClick}
@@ -756,7 +755,7 @@ function guideLine({ landing, hint, list, catalog, studying, progress }) {
   if (!list.length) return catalog.status === "error" ? catalog.message : "학과 정보를 불러오는 중이에요…";
   if (landing) return `${CAMPUS.school} ${CAMPUS.name}에 도착했어요! 핀이 꽂힌 건물을 눌러 학과를 골라 봐요.`;
   if (!studying) return "핀이 꽂힌 민트색 건물에 학과가 있어요. 눌러서 구경해 봐요!";
-  if (progress.graduated) return `${studying.name} 졸업을 축하해요! 다른 건물도 둘러볼까요?`;
+  if (progress.graduated) return `${studying.name} 졸업을 축하해요! 남은 과목도 계속 들을 수 있고, 다른 건물도 둘러볼 수 있어요.`;
   const now = progress.years[progress.openYear - 1];
   return progress.openYear < 4
     ? `${studying.name} ${progress.openYear}학년이에요. ${progress.openYear + 1}학년까지 남은 필수과목 ${now.left.length}개!`
@@ -801,7 +800,7 @@ export function Home({ nav, state, setState, catalog }) {
   const character = yearCharacter(progress?.openYear || 1);
   const continueStudy = () => {
     setState((s) => ({ ...s, current: studying.id }));
-    nav.push(progress.graduated ? "graduation" : "major");
+    nav.push("major");
   };
   const inside = building ? departmentsIn(list, building) : [];
   const sheet = building && (
@@ -873,7 +872,7 @@ export function Home({ nav, state, setState, catalog }) {
         )}
         {list.length > 0 && !hint && !landing && studying && (
           <button className="text-button relative mt-[2px]" onClick={continueStudy}>
-            {progress.graduated ? "졸업 리포트 보기 →" : `${studying.name} 이어서 하기 →`}
+            {`${studying.name} 이어서 하기 →`}
           </button>
         )}
       </div>
@@ -911,11 +910,13 @@ export function Major({ active, nav, state, setState }) {
   const now = years[openYear - 1];
   // 다음 학년(4학년이면 졸업)까지 남은 것: 체험이 있는 필수과목, 4학년이면 졸업 과제까지.
   const finalCourse = years[3].courses.find((course) => course.final);
+  // 졸업한 뒤에는 아직 안 들은 체험 과목(모든 학년)을 보여 주고 계속 들을 수 있게 한다.
+  const untaken = years.flatMap((item) => item.courses).filter((course) => !course.planned && !course.record);
   const todo = graduated
-    ? []
+    ? untaken
     : [...now.left, ...(openYear === 4 && !finalCourse.passed && !now.left.includes(finalCourse) ? [finalCourse] : [])];
   const shownTodo = todo.slice(0, SHOWN_TODO);
-  const open = () => (graduated ? nav.push("graduation") : nav.push("courses", { year: openYear }));
+  const open = () => nav.push("courses", { year: graduated ? (untaken[0]?.year ?? 4) : openYear });
   const listEnd = shownTodo.length ? 565 + shownTodo.length * 84 + (todo.length > SHOWN_TODO ? 30 : 0) : 615;
   return (
     <Screen h={Math.max(874, listEnd + 150)} foot={739} veil={false} footer={<TabBar active="major" nav={nav} state={state} />}>
@@ -928,13 +929,13 @@ export function Major({ active, nav, state, setState }) {
         {"한 걸음씩,\n나의 전공을 알아가는 중"}
       </T>
       <T y={201.5} size={14.5} left={20.5} className="a-up text-gray" style={delay(0.08)}>
-        {graduated ? "모든 과정을 마쳤어요. 졸업을 축하해요!" : `지금은 ${openYear}학년 과목까지 들을 수 있어요.`}
+        {graduated ? "졸업했어요! 남은 과목도 계속 들을 수 있어요." : `지금은 ${openYear}학년 과목까지 들을 수 있어요.`}
       </T>
       <T y={263.5} size={d.name.length > 8 ? 15 : 19.5} left={20} clip={190} className="a-up font-bold text-ink-2" style={delay(0.14)}>
         {d.name}
       </T>
       <T y={294.5} size={12.5} lh={16} left={20.5} clip={170} className="a-up text-mint-deep" style={delay(0.18)}>
-        {`${graduated ? "졸업" : `${openYear}학년 진행 중`}\n이수 ${passedCount}과목${graduated ? "" : ` · 남은 과제 ${todo.length}개`}`}
+        {`${graduated ? "졸업" : `${openYear}학년 진행 중`}\n이수 ${passedCount}과목${graduated ? ` · 안 들은 과목 ${todo.length}개` : ` · 남은 과제 ${todo.length}개`}`}
       </T>
       {/* 학년 캐릭터: 학년이 열릴 때마다 바뀐다(노션 디자인 시스템의 학년별 캐릭터). */}
       <div key={openYear} className="a-pop absolute left-[174px] top-[261px] h-[154px] w-[208px]" style={delay(0.2)}>
@@ -970,10 +971,15 @@ export function Major({ active, nav, state, setState }) {
         style={{ animationDelay: "0.3s" }}
       >
         <span className="loop pointer-events-none absolute inset-0 rounded-[14px]" style={{ animation: "glow 2.4s ease-in-out 1.6s infinite" }} />
-        <span className="overflow-hidden text-ellipsis whitespace-nowrap">{graduated ? "졸업 리포트 보기" : `${openYear}학년 과목 듣기`}</span>
+        <span className="overflow-hidden text-ellipsis whitespace-nowrap">{graduated ? "과목 계속 듣기" : `${openYear}학년 과목 듣기`}</span>
       </button>
+      {graduated && (
+        <button className="text-button a-up absolute right-[20px] top-[503px]" onClick={() => nav.push("graduation")} style={delay(0.34)}>
+          졸업 리포트 보기 →
+        </button>
+      )}
       <T y={535.5} size={15} left={21} className="a-up font-bold text-ink-2" style={delay(0.36)}>
-        {graduated ? "졸업까지 남은 과제" : openYear < 4 ? `${openYear + 1}학년이 열리려면` : "졸업하려면"}
+        {graduated ? "아직 안 들은 과목" : openYear < 4 ? `${openYear + 1}학년이 열리려면` : "졸업하려면"}
       </T>
       {shownTodo.map((course, n) => (
         <CourseCard
@@ -992,7 +998,7 @@ export function Major({ active, nav, state, setState }) {
       )}
       {shownTodo.length === 0 && (
         <T y={585} size={13} left={21} className="a-up text-ink-3" style={delay(0.42)}>
-          모든 과제를 마쳤어요.
+          {graduated ? "체험할 수 있는 과목을 모두 들었어요. 재수강해서 성적을 올릴 수도 있어요." : "모든 과제를 마쳤어요."}
         </T>
       )}
     </Screen>
@@ -1523,8 +1529,8 @@ export function Graduation({ active, nav, state }) {
       veil="#feeaa0"
       footer={
         <>
-          <OutlineButton onClick={() => nav.reset(["home"], "fade")} className="a-up" style={delay(0.95)}>
-            홈으로 가기
+          <OutlineButton onClick={() => nav.reset(["home", "major"], "fade")} className="a-up" style={delay(0.95)}>
+            남은 과목 계속 듣기
           </OutlineButton>
           <button
             onClick={() => nav.reset(["home", "departments"], "fade")}
@@ -1663,10 +1669,15 @@ export function My({ nav, state, setState }) {
               <p className="mt-[4px] text-[12px] leading-[18px] text-gray">
                 {`${finished ? "졸업" : `${progress.openYear}학년 진행 중`} · 이수 ${progress.passedCount}과목${average === null ? "" : ` · 평점 ${average.toFixed(2)}`}`}
               </p>
-              <div className="mt-[12px] flex gap-[8px]">
-                <button className="button" onClick={() => choose(d, finished ? "graduation" : "major")}>
-                  {finished ? "졸업 리포트 보기" : "이어서 체험하기"}
+              <div className="mt-[12px] flex flex-wrap gap-[8px]">
+                <button className="button" onClick={() => choose(d, "major")}>
+                  이어서 체험하기
                 </button>
+                {finished && (
+                  <button className="button ghost" onClick={() => choose(d, "graduation")}>
+                    졸업 리포트 보기
+                  </button>
+                )}
                 {progress.taken.length > 0 && (
                   <button className="button ghost" onClick={() => download(`${d.school}-${d.name}-체험-리포트.txt`, reportText(state, d))}>
                     리포트 내려받기
