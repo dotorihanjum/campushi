@@ -2,6 +2,7 @@ import { cleanLessonGames } from "./lessonGames.js";
 import { gameFor, isGame } from "./games.js";
 import { groupExperience, GROUPS } from "./groups.js";
 import { better, cleanScore, gradeOf, isGrade, passes, PASS } from "./grades.js";
+import { isOpenCampus } from "./campus.js";
 
 // 학기 없이 학년 단위로 진행한다(2026-11-09 사용자 결정). 열린 학년의 과목은 아무 순서로나 듣고,
 // 그 학년 필수과목(전공기초·전공필수) 중 체험이 있는 것을 모두 B- 이상으로 이수하면 다음 학년이 열린다.
@@ -40,6 +41,8 @@ export const initialState = {
   onboarded: false,
   // 캠퍼스에 도착하는 인트로를 봤는지.
   introSeen: false,
+  // 시작하기 다음에 고른 캠퍼스(campus.js의 CAMPUSES id). 열린 캠퍼스만 고를 수 있다.
+  campus: null,
 };
 
 const text = (value, limit = 200) => (typeof value === "string" && value.trim() && value.length <= limit ? value : null);
@@ -259,6 +262,7 @@ export function normalize(value) {
     drafts: pick(value.drafts, (item) => (typeof item === "string" ? item.slice(0, 3000) : null)),
     credits: Number.isInteger(value.credits) && value.credits > 0 ? value.credits : 0,
     introSeen: !!value.introSeen,
+    campus: isOpenCampus(value.campus) ? value.campus : null,
     current: built.has(value.current) ? value.current : null,
     studying: Object.hasOwn(journeys, value.studying) ? value.studying : null,
     onboarded: !!value.onboarded,

@@ -39,7 +39,7 @@ import LessonGame, { useLessonGame } from "./Games.jsx";
 import { Rub } from "./Templates.jsx";
 import { templates } from "./experiences.js";
 import { groupName } from "./groups.js";
-import { CAMPUS, PLACES, departmentsIn } from "./campus.js";
+import { CAMPUS, CAMPUSES, PLACES, departmentsIn } from "./campus.js";
 import CampusMap, { MAP_SHOWN, MAP_W } from "./CampusMap.jsx";
 
 /* ------------------------------------------------------------------ */
@@ -138,10 +138,11 @@ const stamp = (date) =>
 /* 01 · 스플래시                                                       */
 /* ------------------------------------------------------------------ */
 
-export function Splash({ nav, setState }) {
+export function Splash({ nav, state, setState }) {
+  // 시작하기 → 학교(캠퍼스) 고르기 → 지도. 이미 캠퍼스를 골랐으면 바로 지도로 간다.
   const start = () => {
     setState((s) => ({ ...s, onboarded: true }));
-    nav.reset(["home"]);
+    nav.reset([state.campus ? "home" : "school"]);
   };
   return (
     <Screen
@@ -168,6 +169,69 @@ export function Splash({ nav, setState }) {
           style={delay(0.55)}
         />
       </Center>
+    </Screen>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 02 · 학교(캠퍼스) 고르기                                            */
+/* ------------------------------------------------------------------ */
+
+export function School({ nav, setState }) {
+  // 준비 중인 캠퍼스를 눌렀을 때의 안내.
+  const [hint, setHint] = useState("");
+  const timer = useRef(0);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const pick = (campus) => {
+    if (!campus.open) {
+      setHint(`${campus.school} ${josa(campus.name, "은", "는")} 아직 준비 중이에요.`);
+      window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => setHint(""), 2600);
+      return;
+    }
+    setState((s) => ({ ...s, onboarded: true, campus: campus.id }));
+    nav.reset(["home"], "fade");
+  };
+  return (
+    <Screen>
+      <T y={104} size={28} lh={38} left={20} className="a-up font-bold text-navy">
+        {"어느 학교로\n가볼까요?"}
+      </T>
+      <T y={194} size={14.5} left={20.5} clip={360} className="a-up text-gray" style={delay(0.06)}>
+        캠퍼스를 고르면 그 캠퍼스 지도로 이동해요.
+      </T>
+      {CAMPUSES.map((campus, i) => (
+        <button
+          key={campus.id}
+          onClick={() => pick(campus)}
+          aria-label={`${campus.school} ${campus.name}${campus.open ? "" : ", 준비 중"}`}
+          className={`pressable a-up absolute left-[20px] flex h-[96px] w-[362px] items-center gap-[14px] rounded-[18px] border-2 px-[16px] text-left ${
+            campus.open ? "border-mint bg-white shadow-[0_8px_20px_rgba(39,216,205,0.18)]" : "border-line bg-chalk"
+          }`}
+          style={{ top: 250 + i * 112, ...delay(0.12 + i * 0.06) }}
+        >
+          <span className={`h-[60px] w-[60px] shrink-0 ${campus.open ? "" : "opacity-40 grayscale"}`}>
+            <SchoolLogo school={campus.school} size={56} />
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className={`truncate text-[17px] font-bold leading-[24px] ${campus.open ? "text-ink-2" : "text-gray"}`}>{`${campus.school} ${campus.name}`}</span>
+            <span className="truncate text-[12.5px] leading-[19px] text-gray">{campus.region}</span>
+          </span>
+          {campus.open ? (
+            <span className="flex h-[28px] shrink-0 items-center rounded-full bg-mint px-[12px] text-[13px] font-bold text-white">입장 →</span>
+          ) : (
+            <span className="flex h-[28px] shrink-0 items-center rounded-full border border-line bg-white px-[10px] text-[12px] font-semibold text-gray">🔒 준비 중</span>
+          )}
+        </button>
+      ))}
+      <p
+        key={hint || "none"}
+        role="status"
+        className={`absolute left-[20px] right-[20px] text-center text-[13px] leading-[20px] text-mint-deep ${hint ? "a-shake" : ""}`}
+        style={{ top: 250 + CAMPUSES.length * 112 + 6 }}
+      >
+        {hint}
+      </p>
     </Screen>
   );
 }
@@ -1744,6 +1808,7 @@ export function My({ nav, state, setState }) {
 
 export const SCREENS = {
   splash: Splash,
+  school: School,
   departments: Departments,
   detail: Detail,
   enrolled: Enrolled,

@@ -3,7 +3,16 @@
 // 그 건물 번호 표시가 있는 자리(왼쪽 위 0, 오른쪽 아래 1)다. 지도 그림 자체는 쓰지 않고 위치만 옮겨 단순한 도형으로 그린다.
 // 디자인 시안이 나오면 그림만 바꾼다.
 
+// 시작하기 다음에 고르는 학교·캠퍼스. 지금은 경희대 국제캠퍼스만 열려 있고 서울캠퍼스는 준비 중(2026-11-09 사용자 결정).
+// 주소(지역)는 경희대 공식 사이트 표기를 따른다.
+export const CAMPUSES = [
+  { id: "khu-global", school: "경희대학교", name: "국제캠퍼스", region: "경기도 용인시 기흥구", open: true },
+  { id: "khu-seoul", school: "경희대학교", name: "서울캠퍼스", region: "서울특별시 동대문구", open: false },
+];
+export const isOpenCampus = (id) => CAMPUSES.some((campus) => campus.id === id && campus.open);
+
 export const CAMPUS = {
+  id: "khu-global",
   school: "경희대학교",
   name: "국제캠퍼스",
   source: "https://www.khu.ac.kr/kor/user/contents/view.do?menuNo=200086",
