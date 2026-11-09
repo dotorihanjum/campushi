@@ -15,10 +15,12 @@ export const ELECTIVE = "전공선택";
 // 졸업 과제. 틀 A(칠해서 완성하는 작품)는 artwork, 그 밖의 틀(G AI 가르치기 등)은 수업 안에서 끝까지 해보는 프로젝트다.
 const asFinal = (data) => ({ kind: data.template === "A" ? "artwork" : "project", name: data.title, ...data });
 
+// 과목을 이수하면(B- 이상 또는 P) 받는 크레딧. 재수강해서 이수해도 받는다(2026-11-09 사용자 결정, 임시값).
+// 지급량·반복 제한·구매는 값이 정해지면 바꾼다. 모은 크레딧은 멘토링이 생기면 쓴다.
+export const CREDIT_PER_PASS = 5;
+
 export const initialState = {
   version: 2,
-  // 학과 추천 질문의 답: { 질문 번호: 고른 보기 }.
-  answers: {},
   // 입학한 학과: { 학과id: {} }.
   journeys: {},
   // 지금 보고 있는 학과와, 홈에 보여 주던(지금 체험 중인) 학과.
@@ -33,7 +35,11 @@ export const initialState = {
   drafts: {},
   // 서버에서 받은 학과 데이터. 저장해 두었다가 서버에 닿지 않아도 진행 중인 체험을 이어간다.
   catalog: [],
+  // 모은 크레딧(모든 학과 공용).
+  credits: 0,
   onboarded: false,
+  // 캠퍼스에 도착하는 인트로를 봤는지.
+  introSeen: false,
 };
 
 const text = (value, limit = 200) => (typeof value === "string" && value.trim() && value.length <= limit ? value : null);
@@ -65,6 +71,8 @@ export function createDepartment(raw) {
     name,
     officialName: text(raw.official_name) || name,
     category: text(raw.category, 20) || "",
+    // 학과가 있는 국제캠퍼스 건물(campus.js의 건물 이름).
+    building: text(raw.building, 60) || "",
     studyGroup: group,
     duration: text(raw.duration, 20) || "4년",
     intro: text(raw.intro, 300) || "",
@@ -174,6 +182,7 @@ export function completeCourse(state, id, subject, note = "") {
     ...state,
     plays,
     drafts,
+    credits: (state.credits || 0) + (passes(result.grade) ? CREDIT_PER_PASS : 0),
     notes: note.trim() ? { ...state.notes, [key]: note.trim() } : state.notes,
     records: { ...state.records, [key]: { grade, percent, attempts: (old?.attempts || 0) + 1, last: result.grade } },
   };
@@ -198,55 +207,6 @@ export function yearSubjects(d) {
 export const PARTNER_LABEL = "제휴 학교";
 export const PARTNER_EXAMPLE_NOTE = "* 제휴 학교 표시는 서비스 예시입니다";
 export const showsExampleNote = (items) => items.some((item) => item?.partner === true && item.partnerExample === true);
-
-/* 학과 추천 ------------------------------------------------------------ */
-
-// 질문마다 보기 하나를 고른다. 보기마다 더 가까운 학과(id)를 하나씩 연결해 둔다.
-const question = (title, sub, options) => ({ title, sub, options: options.map(([label, id]) => ({ label, id })) });
-export const QUESTIONS = [
-  question("쉬는 시간엔 주로 무엇을 하나요?", "가장 자주 하는 일을 골라요", [
-    ["게임이나 앱을 이리저리 만져 보기", "khu-cse"],
-    ["노트에 낙서하거나 그림 그리기", "khu-id"],
-    ["퍼즐이나 수수께끼 풀기", "khu-cse"],
-    ["물건이 어떻게 생겼는지 살펴보기", "khu-id"],
-  ]),
-  question("어떤 순간에 시간 가는 줄 모르나요?", "좋아하거나 자신 있는 활동을 골라요", [
-    ["규칙을 찾아 문제를 풀 때", "khu-cse"],
-    ["손으로 무언가 만들 때", "khu-id"],
-    ["귀찮은 일을 자동으로 하게 만들 때", "khu-cse"],
-    ["예쁜 물건과 공간을 구경할 때", "khu-id"],
-  ]),
-  question("어떤 과목이 가장 재미있나요?", "성적과 상관없이 즐거운 과목을 골라요", [
-    ["수학", "khu-cse"],
-    ["정보", "khu-cse"],
-    ["미술", "khu-id"],
-    ["기술 · 가정", "khu-id"],
-  ]),
-  question("앞으로 만들어 보고 싶은 것은?", "막연해도 괜찮아요, 끌리는 대로 골라요", [
-    ["많은 사람이 쓰는 앱이나 게임", "khu-cse"],
-    ["스스로 배우는 AI", "khu-cse"],
-    ["매일 손에 쥐는 물건", "khu-id"],
-    ["사람이 머무는 공간이나 탈것", "khu-id"],
-  ]),
-];
-
-// 모든 질문에 답했는지.
-export const answeredAll = (answers = {}) => QUESTIONS.every((q, i) => q.options.some((o) => o.label === answers[i + 1]));
-
-/**
- * 답으로 학과를 추천한다: 보기가 가리키는 학과를 세어 많은 순서. 같으면 목록 순서를 따르고 tie로 알린다.
- * 모든 질문에 답하지 않았거나 학과가 없으면 null.
- */
-export function recommend(answers, departments) {
-  if (!answeredAll(answers) || !departments.length) return null;
-  const counts = Object.fromEntries(departments.map((d) => [d.id, 0]));
-  QUESTIONS.forEach((q, i) => {
-    const id = q.options.find((o) => o.label === answers[i + 1]).id;
-    if (Object.hasOwn(counts, id)) counts[id] += 1;
-  });
-  const ranked = [...departments].sort((a, b) => counts[b.id] - counts[a.id]);
-  return { best: ranked[0], others: ranked.slice(1), count: counts[ranked[0].id], total: QUESTIONS.length, tie: ranked.length > 1 && counts[ranked[0].id] === counts[ranked[1].id] };
-}
 
 /* 저장 ----------------------------------------------------------------- */
 
@@ -289,9 +249,8 @@ export function normalize(value) {
     ),
     notes: pick(value.notes, (item) => (typeof item === "string" && item.trim() ? item.slice(0, 3000) : null)),
     drafts: pick(value.drafts, (item) => (typeof item === "string" ? item.slice(0, 3000) : null)),
-    answers: Object.fromEntries(
-      QUESTIONS.map((q, i) => [i + 1, value.answers?.[i + 1]]).filter(([n, label]) => QUESTIONS[n - 1].options.some((o) => o.label === label)),
-    ),
+    credits: Number.isInteger(value.credits) && value.credits > 0 ? value.credits : 0,
+    introSeen: !!value.introSeen,
     current: built.has(value.current) ? value.current : null,
     studying: Object.hasOwn(journeys, value.studying) ? value.studying : null,
     onboarded: !!value.onboarded,
