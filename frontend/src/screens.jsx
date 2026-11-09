@@ -913,15 +913,6 @@ export function Home({ nav, state, setState, catalog }) {
           <CampusMap departments={list} onOpen={setBuilding} onLocked={locked} />
         </div>
       </div>
-      <a
-        href={CAMPUS.source}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="absolute right-[20px] text-[10px] text-gray underline underline-offset-[2px]"
-        style={{ top: ground + 4 }}
-      >
-        건물 위치 출처: 경희대학교 공식 캠퍼스맵
-      </a>
       {/* 지도 아래: 캐릭터와 말풍선 */}
       <div className="absolute left-[16px] h-[84px] w-[84px]" style={{ top: ground + 24, zIndex: 30 }}>
         <span className="a-fade absolute bottom-[-2px] left-[10px] h-[12px] w-[64px] rounded-[50%] bg-[rgba(20,60,40,0.14)]" style={delay(landing ? 1 : 0)} aria-hidden />
