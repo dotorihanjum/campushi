@@ -1,7 +1,6 @@
 // 디자인 시안(@2x, 402×874 아트보드)에서 그대로 뽑아낸 이미지.
 import mascotSplash from "./assets/mascot-splash.png";
 import wordmark from "./assets/wordmark.png";
-import mascotResult from "./assets/mascot-result.png";
 import mascotWelcome from "./assets/mascot-welcome.png";
 import mascotHome from "./assets/mascot-home.png";
 import mascotGrad from "./assets/mascot-grad.png";
@@ -31,7 +30,6 @@ import c8 from "./assets/conf6-8.png";
 export const img = {
   mascotSplash,
   wordmark,
-  mascotResult,
   mascotWelcome,
   mascotHome,
   mascotGrad,

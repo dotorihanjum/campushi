@@ -77,9 +77,6 @@ export function createDepartment(raw) {
     duration: text(raw.duration, 20) || "4년",
     intro: text(raw.intro, 300) || "",
     tags: subjectList(raw.tags).slice(0, 3),
-    // 제휴 학교 표시. 예시 제휴도 실제 제휴와 똑같이 동작하고, 예시라는 것은 안내 문구로 알린다.
-    partner: raw.partner === true,
-    partnerExample: raw.partner === true && raw.partner_example === true,
     source: {
       title: text(raw.source?.title) || "",
       url: url && /^https:\/\//.test(url) ? url : "",
@@ -202,11 +199,6 @@ export function yearSubjects(d) {
     return { year, open, others: subjects.filter((subject) => !open.includes(subject)) };
   });
 }
-
-// 제휴 학교 표시. 예시 제휴도 실제 제휴와 같은 배지를 쓰고, 예시라는 것은 화면의 안내 문구로 알린다.
-export const PARTNER_LABEL = "제휴 학교";
-export const PARTNER_EXAMPLE_NOTE = "* 제휴 학교 표시는 서비스 예시입니다";
-export const showsExampleNote = (items) => items.some((item) => item?.partner === true && item.partnerExample === true);
 
 /* 저장 ----------------------------------------------------------------- */
 

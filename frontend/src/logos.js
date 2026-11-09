@@ -1,13 +1,14 @@
 // 학교 로고 규칙. 화면 부품은 ui.jsx의 SchoolLogo다.
-// 공식 로고 이미지는 출처를 확인해 저장소에 넣은 제휴 학교 것만 쓴다(외부에서 받아 오거나 새로 지어 넣지 않는다).
+// 공식 로고 이미지는 출처를 확인해 저장소에 넣은 학교 것만 쓴다(외부에서 받아 오거나 새로 지어 넣지 않는다).
+// 2026-11-09 B2C로 바꾸며 제휴 표시는 없앴고, 로고·도장은 사용자 결정으로 계속 쓴다.
 // 값은 assets.js의 img 이름이다: logo는 학교 카드의 로고, seal은 증명서 도장.
 export const SCHOOL_LOGOS = {
   경희대학교: { logo: "khuLogo", seal: "seal" },
 };
 
-// 로고 이미지를 쓸 수 있는 학교면 그 이미지 이름, 아니면 null(텍스트 아바타). 제휴 학교이고 이미지가 있어야 한다.
-export function logoImage(school, partner, kind = "logo") {
-  if (partner !== true || typeof school !== "string" || !Object.hasOwn(SCHOOL_LOGOS, school)) return null;
+// 로고 이미지를 쓸 수 있는 학교면 그 이미지 이름, 아니면 null(텍스트 아바타).
+export function logoImage(school, kind = "logo") {
+  if (typeof school !== "string" || !Object.hasOwn(SCHOOL_LOGOS, school)) return null;
   return SCHOOL_LOGOS[school][kind] || null;
 }
 
