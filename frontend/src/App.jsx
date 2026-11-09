@@ -153,10 +153,11 @@ export default function App() {
         const prev = cur[cur.length - 1];
         run([...cur.slice(0, -1), make(name, params)], ENTER[tr], null, EXIT[tr], prev);
       },
+      // names: 화면 이름, 또는 [화면 이름, params].
       reset: (names, tr = "fade") => {
         const cur = stackRef.current;
         const prev = cur[cur.length - 1];
-        run(names.map((n) => make(n)), ENTER[tr], null, EXIT[tr], prev);
+        run(names.map((n) => (Array.isArray(n) ? make(n[0], n[1]) : make(n))), ENTER[tr], null, EXIT[tr], prev);
       },
       back: () => {
         const cur = stackRef.current;

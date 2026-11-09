@@ -44,8 +44,9 @@ export function Mask({ src, w, h, color = "currentColor", className = "", style 
         width: w,
         height: h,
         background: color,
-        WebkitMaskImage: `url(${src})`,
-        maskImage: `url(${src})`,
+        // 작은 SVG는 빌드할 때 data: 주소로 들어가 공백·괄호가 있을 수 있어 따옴표로 감싼다.
+        WebkitMaskImage: `url("${src}")`,
+        maskImage: `url("${src}")`,
         WebkitMaskSize: "100% 100%",
         maskSize: "100% 100%",
         ...style,

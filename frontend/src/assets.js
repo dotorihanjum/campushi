@@ -19,7 +19,7 @@ import gradeSign from "./assets/grade-sign.png";
 import icBack from "./assets/ic-back.png";
 import icCap from "./assets/ic-cap.png";
 import icHome from "./assets/ic-home.png";
-import icExplore from "./assets/ic-explore.png";
+import icCommunity from "./assets/ic-community.svg";
 import icMajor from "./assets/ic-major.png";
 import icMy from "./assets/ic-my.png";
 import c0 from "./assets/conf6-0.png";
@@ -51,7 +51,7 @@ export const icon = {
   back: icBack,
   cap: icCap,
   home: icHome,
-  explore: icExplore,
+  community: icCommunity,
   major: icMajor,
   my: icMy,
 };

@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { icon, img, yearCharacter } from "./assets.js";
 import {
   BackButton,
@@ -15,6 +15,7 @@ import {
   T,
   Dialog,
   SchoolLogo,
+  Toast,
 } from "./ui.jsx";
 import {
   CREDIT_PER_PASS,
@@ -38,7 +39,23 @@ import { isLessonType, lessonTypes } from "./lessonGames.js";
 import LessonGame, { useLessonGame } from "./Games.jsx";
 import { Rub } from "./Templates.jsx";
 import { templates } from "./experiences.js";
-import { groupName } from "./groups.js";
+import { GROUPS, groupName } from "./groups.js";
+import {
+  ALL,
+  BODY_MAX,
+  COMMENT_MAX,
+  MINE,
+  TITLE_MAX,
+  addComment,
+  addQuestion,
+  checkComment,
+  checkPost,
+  communityStore,
+  filterQuestions,
+  fromMock,
+  timeAgo,
+} from "./community.js";
+import { MOCK_MENTORS, MOCK_REPORTS } from "./communityMock.js";
 import { CAMPUS, CAMPUSES, PLACES, departmentsIn, findCampuses } from "./campus.js";
 import CampusMap, { MAP_H, MAP_SHOWN, MAP_W } from "./CampusMap.jsx";
 
@@ -377,14 +394,12 @@ function DepartmentPicker({ top, nav, state, setState, catalog }) {
   );
 }
 
-// 탐색 탭: 학과 고르기.
-export function Departments({ nav, state, setState, catalog }) {
-  return (
-    <Screen h={150 + pickerHeight(all(state).length)} foot={739} veil={false} footer={<TabBar active="explore" nav={nav} state={state} />}>
-      <Header title="학과 둘러보기" onBack={nav.back} />
-      <DepartmentPicker top={128} nav={nav} state={state} setState={setState} catalog={catalog} />
-    </Screen>
-  );
+// 예전 탐색 탭(학과 둘러보기). 탐색은 홈으로 합쳤으므로, 저장된 화면 기록 등으로 여기에 오면 홈의 학과 목록으로 보낸다.
+export function Departments({ nav, active }) {
+  useEffect(() => {
+    if (active) nav.reset([["home", { focus: "departments" }]]);
+  }, [active, nav]);
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -505,6 +520,9 @@ export function Detail({ active, nav, state, setState }) {
           )}
           {". 필수는 편성표의 전공기초·전공필수예요. 4학년에는 졸업 과제를 해요."}
         </p>
+        <button className="text-button mt-[14px] block" onClick={() => nav.push("community", { tab: "questions", dept: d.id })}>
+          이 학과 질문 보러가기 →
+        </button>
       </div>
     </Screen>
   );
@@ -781,8 +799,8 @@ function useCountUp(target, ms = 1100, startDelay = 400) {
 
 const TABS = [
   { id: "home", label: "홈", icon: icon.home, w: 38, h: 38, x: 33, y: 762, cx: 52 },
-  { id: "explore", label: "탐색", icon: icon.explore, w: 40, h: 39, x: 125, y: 761, cx: 145 },
-  { id: "major", label: "전공", icon: icon.major, w: 37, h: 39, x: 224, y: 761, cx: 242.5 },
+  { id: "major", label: "전공", icon: icon.major, w: 37, h: 39, x: 126.5, y: 761, cx: 145 },
+  { id: "community", label: "커뮤니티", icon: icon.community, w: 39, h: 39, x: 223, y: 761, cx: 242.5 },
   { id: "my", label: "마이페이지", icon: icon.my, w: 40, h: 39, x: 316, y: 761, cx: 336 },
 ];
 
@@ -790,10 +808,9 @@ function TabBar({ active, nav, state }) {
   const go = (id) => {
     if (id === active) return;
     if (id === "home") nav.reset(["home"]);
-    if (id === "explore") nav.push("departments");
-    // 전공: 지금 보고 있는(또는 체험 중인) 학과의 상세. 아직 고른 학과가 없으면 학과 둘러보기로 간다.
     // 전공: 지금 체험 중인 학과의 홈. 입학한 학과가 없으면 그 화면이 안내를 보여준다.
     if (id === "major") nav.push("major");
+    if (id === "community") nav.push("community");
     if (id === "my") nav.push("my");
   };
   return (
@@ -895,8 +912,21 @@ function guideLine({ landing, hint, list, catalog, studying, progress }) {
     : `${studying.name} 4학년이에요. 졸업까지 조금만 더 힘내요!`;
 }
 
-export function Home({ nav, state, setState, catalog }) {
+// 홈 지도 영역(지도 + 캐릭터 줄)의 높이: 탭바 위까지에서 PEEK만큼 덜어 아래 '학과 둘러보기' 제목이 살짝 보이게 한다.
+const HOME_TOP = 164;
+// 학과 둘러보기 제목 높이.
+const DEPT_HEAD = 44;
+const PEEK = 34;
+const HOME_FOLD = `calc((var(--vh) + var(--tt) + var(--bt) - 135 - ${PEEK}) * 1px)`;
+
+export function Home({ nav, route, state, setState, catalog }) {
   const list = all(state);
+  // 예전 탐색 탭으로 오던 링크는 홈의 학과 목록으로 내려 보여준다.
+  const listTop = useRef(null);
+  const focusList = route?.params?.focus === "departments";
+  useEffect(() => {
+    if (focusList) listTop.current?.scrollIntoView({ block: "start" });
+  }, [focusList]);
   // 처음 도착했으면 캐릭터가 지도 아래로 떨어진다(한 번만).
   const [landing] = useState(() => !state.introSeen);
   useEffect(() => {
@@ -957,7 +987,13 @@ export function Home({ nav, state, setState, catalog }) {
     </Dialog>
   );
   return (
-    <Screen foot={739} veil={false} overlay={sheet} footer={<TabBar active="home" nav={nav} state={state} />}>
+    <Screen
+      h={`calc((var(--vh) + var(--tt) + var(--bt) - 135 - ${PEEK} + ${DEPT_HEAD + Math.max(pickerHeight(list.length), 60) + 16}) * 1px)`}
+      foot={739}
+      veil={false}
+      overlay={sheet}
+      footer={<TabBar active="home" nav={nav} state={state} />}
+    >
       <Mask src={icon.cap} w={24} h={18} color="#087f77" className="absolute left-[23px] top-[59px]" />
       <button
         onClick={() => nav.push("school", { change: true })}
@@ -980,7 +1016,7 @@ export function Home({ nav, state, setState, catalog }) {
           (줄어든 만큼은 지도를 위아래로 밀어 본다). 캐릭터·말풍선 줄은 높이가 정해져 있어서 말이 바뀌어도 지도 크기가
           변하지 않고, 지도 위로는 그려지지 않는다(처음 도착할 때 떨어지는 캐릭터도 이 줄 안에서만 보인다).
           캐릭터와 말풍선은 세로 가운데로 맞추고, 캐릭터는 지도와 약 20px 떨어진다(줄 위 여백 8 + 가운데 맞춤 12). */}
-      <div className="absolute inset-x-0 isolate flex flex-col" style={{ top: 164, bottom: "calc((135 - var(--bt)) * 1px)" }}>
+      <div className="absolute inset-x-0 isolate flex flex-col" style={{ top: HOME_TOP, height: `calc(${HOME_FOLD} - ${HOME_TOP}px)` }}>
         <div ref={map} className="no-scrollbar min-h-[120px] flex-1 overflow-auto overscroll-contain" style={{ maxHeight: MAP_SHOWN + 14 }} aria-label={`${CAMPUS.name} 지도`}>
           <div className="pt-[14px]">
             <CampusMap departments={list} onOpen={setBuilding} onLocked={locked} />
@@ -1018,6 +1054,18 @@ export function Home({ nav, state, setState, catalog }) {
           </div>
         </div>
       </div>
+      {/* 지도 아래: 학과 둘러보기(예전 탐색 탭). 위로 밀면 이어서 보인다. */}
+      <section
+        ref={listTop}
+        aria-labelledby="home-departments"
+        className="absolute inset-x-0 scroll-mt-[60px]"
+        style={{ top: HOME_FOLD, height: DEPT_HEAD + Math.max(pickerHeight(list.length), 60) }}
+      >
+        <h2 id="home-departments" className="absolute left-[20px] top-[8px] text-[17px] font-bold leading-[24px] text-navy">
+          학과 둘러보기
+        </h2>
+        <DepartmentPicker top={DEPT_HEAD} nav={nav} state={state} setState={setState} catalog={catalog} />
+      </section>
     </Screen>
   );
 }
@@ -1061,7 +1109,7 @@ export function Major({ active, nav, state, setState }) {
         <FilledButton top={500} onClick={() => nav.reset(["home"])}>
           캠퍼스 지도에서 학과 고르기
         </FilledButton>
-        <button className="text-button a-up absolute left-0 right-0 top-[578px] text-center" onClick={() => nav.push("departments")} style={delay(0.3)}>
+        <button className="text-button a-up absolute left-0 right-0 top-[578px] text-center" onClick={() => nav.reset([["home", { focus: "departments" }]])} style={delay(0.3)}>
           학과 목록으로 보기 →
         </button>
       </Screen>
@@ -1694,7 +1742,7 @@ export function Graduation({ active, nav, state }) {
             남은 과목 계속 듣기
           </OutlineButton>
           <button
-            onClick={() => nav.reset(["home", "departments"], "fade")}
+            onClick={() => nav.reset([["home", { focus: "departments" }]], "fade")}
             className="pressable a-fade absolute left-[100px] top-[830px] h-[32px] w-[202px] text-[13px] text-mint-deep underline"
             style={delay(1.05)}
           >
@@ -1889,6 +1937,374 @@ export function My({ nav, state, setState }) {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* 15 · 커뮤니티(미리보기): 질문, 체험 리포트, 재학생 커피챗              */
+/* ------------------------------------------------------------------ */
+
+const COMMUNITY_TABS = [
+  { id: "questions", label: "질문" },
+  { id: "reports", label: "체험 리포트" },
+  { id: "mentors", label: "재학생 커피챗" },
+];
+
+/** 학과 이름표(민트 글씨 알약). */
+function DeptPill({ name }) {
+  return <span className="inline-flex h-[22px] max-w-full items-center truncate rounded-full bg-mint-soft px-[9px] text-[11.5px] font-bold text-mint-deep">{name}</span>;
+}
+
+/** 위쪽에 붙는 화면 이름과 미리보기 안내. */
+function CommunityHead() {
+  return (
+    <>
+      <T y={60} size={24} lh={32} left={20} className="font-bold text-navy">
+        커뮤니티
+      </T>
+      <p className="absolute left-[132px] right-[20px] top-[58px] truncate rounded-full border border-cream-line bg-cream px-[10px] text-center text-[11px] font-semibold leading-[24px] text-ink-3" role="note">
+        미리보기 버전이에요 · 글과 프로필은 예시예요
+      </p>
+    </>
+  );
+}
+
+/** 덮는 화면(질문 상세·쓰기)의 위쪽 줄. */
+function SheetTop({ label, title, onClose, close = "back" }) {
+  return (
+    <div className="relative flex shrink-0 items-center px-[17px] pb-[8px]" style={{ paddingTop: "calc((48 - var(--tt)) * 1px)" }}>
+      <button type="button" aria-label={label} onClick={onClose} className="pressable flex h-[40px] w-[40px] items-center justify-center text-[24px] leading-none text-gray">
+        {close === "back" ? <Mask src={icon.back} w={16} h={24} color="#949494" /> : "×"}
+      </button>
+      <span className="flex-1 pr-[40px] text-center text-[14px] text-mint">{title}</span>
+    </div>
+  );
+}
+
+const INPUT = "rounded-[12px] border border-line bg-chalk px-[14px] text-[16px] text-ink-2 outline-none placeholder:text-mute focus:border-mint focus:bg-white";
+
+/** 질문 상세: 본문, 댓글 목록, 댓글 입력. 화면 전체를 덮는다. */
+function QuestionDetail({ question, deptName, onBack, onComment }) {
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
+  const heading = useRef(null);
+  useEffect(() => heading.current?.focus({ preventScroll: true }), []);
+  const send = (e) => {
+    e.preventDefault();
+    const problem = checkComment(draft);
+    setError(problem || "");
+    if (problem) return;
+    onComment(draft);
+    setDraft("");
+  };
+  return (
+    <div className="a-fade absolute inset-0 z-30 flex flex-col bg-white" onKeyDown={(e) => e.key === "Escape" && onBack()}>
+      <SheetTop label="질문 목록으로" title="질문" onClose={onBack} />
+      <div className="flow no-scrollbar min-h-0 flex-1 overflow-y-auto px-[20px] pb-[20px]">
+        <DeptPill name={deptName} />
+        <h1 ref={heading} tabIndex={-1} className="mt-[10px] text-[21px] font-bold leading-[30px] text-navy outline-none">
+          {question.title}
+        </h1>
+        <p className="mt-[4px] text-[12px] text-gray">{`${question.author} · ${timeAgo(question.at)}`}</p>
+        <p className="mt-[14px] whitespace-pre-wrap text-[14.5px] leading-[24px] text-ink-2">{question.body}</p>
+        <h2 className="mt-[24px] border-t border-line pt-[16px] text-[14px] font-bold text-ink-2">{`댓글 ${question.comments.length}`}</h2>
+        {question.comments.length === 0 && <p className="mt-[10px] text-[13px] text-gray">아직 댓글이 없어요. 첫 댓글을 남겨 보세요.</p>}
+        <ul className="mt-[6px]">
+          {question.comments.map((c) => (
+            <li key={c.id} className="border-b border-line py-[12px] last:border-b-0">
+              <p className="text-[12px] font-semibold text-ink-3">{`${c.author} · ${timeAgo(c.at)}`}</p>
+              <p className="mt-[4px] whitespace-pre-wrap text-[14px] leading-[22px] text-ink-2">{c.body}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <form onSubmit={send} className="shrink-0 border-t border-line bg-white px-[16px] pt-[10px]" style={{ paddingBottom: "calc((36 - var(--bt)) * 1px)" }}>
+        <div className="flex items-center gap-[8px]">
+          <label htmlFor="comment-input" className="sr-only">
+            댓글
+          </label>
+          <input
+            id="comment-input"
+            value={draft}
+            maxLength={COMMENT_MAX}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              if (error) setError("");
+            }}
+            placeholder="댓글을 남겨 보세요"
+            autoComplete="off"
+            enterKeyHint="send"
+            className={`h-[44px] min-w-0 flex-1 ${INPUT}`}
+          />
+          <button type="submit" disabled={!draft.trim()} className="button h-[44px] shrink-0">
+            등록
+          </button>
+        </div>
+        <p role="alert" className="min-h-[18px] pt-[2px] text-[12px] text-[#c4373b]">
+          {error}
+        </p>
+      </form>
+    </div>
+  );
+}
+
+/** 질문 쓰기: 학과 고르기, 제목, 내용. 화면 전체를 덮는다. */
+function QuestionWrite({ departments, initialDept, onCancel, onSubmit }) {
+  const [form, setForm] = useState({ dept: initialDept || "", title: "", body: "" });
+  const [error, setError] = useState("");
+  const set = (key) => (e) => {
+    setForm((f) => ({ ...f, [key]: e.target.value }));
+    if (error) setError("");
+  };
+  const submit = (e) => {
+    e.preventDefault();
+    const problem = checkPost(form, departments);
+    setError(problem || "");
+    if (!problem) onSubmit(form);
+  };
+  return (
+    <form onSubmit={submit} className="a-up absolute inset-0 z-30 flex flex-col bg-white" onKeyDown={(e) => e.key === "Escape" && onCancel()}>
+      <SheetTop label="쓰기 그만두기" title="질문 쓰기" onClose={onCancel} close="x" />
+      <div className="flow no-scrollbar min-h-0 flex-1 overflow-y-auto px-[20px] pb-[16px]">
+        <fieldset>
+          <legend className="text-[14px] font-bold text-ink-2">어느 학과 질문인가요?</legend>
+          <div className="mt-[8px] flex flex-wrap gap-[8px]">
+            {departments.map((d) => (
+              <label
+                key={d.id}
+                className={`pressable relative flex h-[38px] cursor-pointer items-center rounded-full border px-[14px] text-[13.5px] font-semibold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-mint ${
+                  form.dept === d.id ? "border-mint bg-mint-soft text-mint-deep" : "border-line bg-white text-ink-3"
+                }`}
+              >
+                <input type="radio" name="dept" value={d.id} checked={form.dept === d.id} onChange={set("dept")} className="sr-only" />
+                {d.name}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <label htmlFor="post-title" className="mt-[20px] block text-[14px] font-bold text-ink-2">
+          제목
+        </label>
+        <input id="post-title" value={form.title} maxLength={TITLE_MAX} onChange={set("title")} placeholder="예: 이 학과 실제로 어때요?" autoComplete="off" className={`mt-[8px] h-[46px] w-full ${INPUT}`} />
+        <p className="mt-[4px] text-right text-[11.5px] text-gray tabular-nums">{`${form.title.length} / ${TITLE_MAX}`}</p>
+        <label htmlFor="post-body" className="mt-[8px] block text-[14px] font-bold text-ink-2">
+          내용
+        </label>
+        <textarea
+          id="post-body"
+          value={form.body}
+          maxLength={BODY_MAX}
+          onChange={set("body")}
+          rows={7}
+          placeholder="궁금한 점을 자세히 적어 주세요."
+          className={`mt-[8px] w-full resize-none py-[12px] leading-[24px] ${INPUT}`}
+        />
+        <p className="mt-[4px] text-right text-[11.5px] text-gray tabular-nums">{`${form.body.length.toLocaleString()} / ${BODY_MAX.toLocaleString()}`}</p>
+      </div>
+      <div className="shrink-0 px-[20px] pt-[6px]" style={{ paddingBottom: "calc((36 - var(--bt)) * 1px)" }}>
+        <p role="alert" className="min-h-[20px] pb-[4px] text-center text-[12.5px] text-[#c4373b]">
+          {error}
+        </p>
+        <button type="submit" className="pressable flex h-[52px] w-full items-center justify-center rounded-[14px] bg-mint text-[17px] font-semibold text-white active:brightness-95">
+          올리기
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** 커뮤니티 탭(미리보기). 데이터는 communityMock.js의 예시이고, 새 글·댓글은 메모리에만 남는다. */
+export function Community({ nav, route, state, active }) {
+  const departments = all(state);
+  const deptName = (id) => departments.find((d) => d.id === id)?.name || "학과";
+  const fullName = (id) => {
+    const d = departments.find((x) => x.id === id);
+    return d ? `${d.school} ${d.name}` : "학과";
+  };
+  const startDept = typeof route?.params?.dept === "string" ? route.params.dept : null;
+  const [tab, setTab] = useState(() => (COMMUNITY_TABS.some((t) => t.id === route?.params?.tab) ? route.params.tab : "questions"));
+  const [filter, setFilter] = useState(startDept || ALL);
+  // 고른 필터 칩이 가로 목록 밖에 있으면 보이게 민다(학과 상세에서 그 학과 칩을 골라 들어올 때 등).
+  const chipRow = useRef(null);
+  useEffect(() => {
+    chipRow.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [filter, tab]);
+  const [openId, setOpenId] = useState(null);
+  const [writing, setWriting] = useState(false);
+  const [toast, setToast] = useState("");
+  const toastTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(toastTimer.current), []);
+  const questions = useSyncExternalStore(communityStore.subscribe, communityStore.get);
+  const [reports] = useState(() => fromMock(MOCK_REPORTS));
+  const shown = filterQuestions(questions, filter, departments, state.journeys);
+  const opened = questions.find((q) => q.id === openId) || null;
+  const say = (text) => {
+    setToast(text);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(""), 2200);
+  };
+  const chips = [
+    { id: ALL, label: "전체" },
+    { id: MINE, label: "내가 체험한 학과" },
+    ...GROUPS.filter((g) => departments.some((d) => d.studyGroup === g.id)).map((g) => ({ id: g.id, label: g.name })),
+    ...(startDept && departments.some((d) => d.id === startDept) ? [{ id: startDept, label: deptName(startDept) }] : []),
+  ];
+  const emptyText =
+    filter === MINE && !Object.keys(state.journeys).length
+      ? "아직 체험 중인 학과가 없어요. 홈 지도에서 학과에 입학해 보세요."
+      : "이 학과의 질문이 아직 없어요. 첫 질문을 남겨 보세요.";
+  // 새 글을 올리면 그 글이 보이게, 지금 필터가 그 글을 가리면 전체로 돌린다.
+  const keepsVisible = (dept) => filterQuestions([{ dept }], filter, departments, state.journeys).length > 0;
+  const overlay = (
+    <>
+      {opened && (
+        <QuestionDetail
+          question={opened}
+          deptName={fullName(opened.dept)}
+          onBack={() => setOpenId(null)}
+          onComment={(body) => communityStore.set(addComment(communityStore.get(), opened.id, body))}
+        />
+      )}
+      {writing && (
+        <QuestionWrite
+          departments={departments}
+          initialDept={departments.some((d) => d.id === filter) ? filter : ""}
+          onCancel={() => setWriting(false)}
+          onSubmit={(form) => {
+            communityStore.set(addQuestion(communityStore.get(), form));
+            setWriting(false);
+            if (!keepsVisible(form.dept)) setFilter(ALL);
+            say("질문을 올렸어요.");
+          }}
+        />
+      )}
+      <Toast>{toast}</Toast>
+    </>
+  );
+  return (
+    <Screen
+      foot={739}
+      veil={false}
+      overlay={overlay}
+      footer={
+        <>
+          <TabBar active="community" nav={nav} state={state} />
+          {tab === "questions" && active && (
+            <button
+              onClick={() => setWriting(true)}
+              disabled={!departments.length}
+              className="pressable absolute right-[20px] top-[672px] z-10 flex h-[52px] items-center gap-[6px] rounded-full bg-mint px-[20px] text-[15.5px] font-bold text-white shadow-[0_8px_20px_rgba(39,216,205,0.35)] active:brightness-95 disabled:opacity-40"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                <path d="M10.6 2.4 13.6 5.4 5.4 13.6H2.4V10.6L10.6 2.4Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+              </svg>
+              글쓰기
+            </button>
+          )}
+        </>
+      }
+    >
+      <CommunityHead />
+      <div role="tablist" aria-label="커뮤니티 메뉴" className="absolute left-[20px] top-[100px] flex h-[42px] w-[362px] rounded-full bg-track p-[4px]">
+        {COMMUNITY_TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={`pressable flex-1 rounded-full text-[13.5px] font-semibold ${tab === t.id ? "bg-white text-mint-deep shadow-[0_2px_6px_rgba(0,0,0,0.08)]" : "text-ink-3"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="flow no-scrollbar absolute left-0 right-0 top-[152px] overflow-y-auto" style={{ bottom: "calc((135 - var(--bt) - var(--tt)) * 1px)" }} role="tabpanel">
+        {tab === "questions" && (
+          <>
+            <div ref={chipRow} className="no-scrollbar flex gap-[8px] overflow-x-auto scroll-px-[20px] px-[20px] pb-[12px]" role="group" aria-label="학과 필터">
+              {chips.map((c) => (
+                <button
+                  key={c.id}
+                  aria-pressed={filter === c.id}
+                  onClick={() => setFilter(c.id)}
+                  className={`pressable h-[34px] shrink-0 whitespace-nowrap rounded-full border px-[13px] text-[13px] font-semibold ${filter === c.id ? "border-mint bg-mint text-white" : "border-line bg-white text-ink-3"}`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+            {shown.length === 0 ? (
+              <p className="mx-[20px] mt-[8px] rounded-[16px] border border-line bg-chalk px-[16px] py-[18px] text-center text-[13.5px] leading-[21px] text-ink-3" role="status">
+                {emptyText}
+              </p>
+            ) : (
+              <ul className="grid gap-[10px] px-[20px] pb-[84px]">
+                {shown.map((q) => (
+                  <li key={q.id}>
+                    <button onClick={() => setOpenId(q.id)} className="pressable block w-full rounded-[16px] border border-cream-line bg-cream px-[15px] py-[13px] text-left active:bg-cream-2">
+                      <DeptPill name={deptName(q.dept)} />
+                      <span className="mt-[7px] block truncate text-[15.5px] font-bold leading-[22px] text-slate">{q.title}</span>
+                      <span className="report-text mt-[3px] text-[12.5px] leading-[19px] text-gray" style={{ WebkitLineClamp: 2 }}>
+                        {q.body}
+                      </span>
+                      <span className="mt-[8px] flex items-center gap-[6px] text-[11.5px] text-ink-3">
+                        <svg width="13" height="12" viewBox="0 0 13 12" fill="none" aria-hidden>
+                          <path d="M2.2 1h8.6A1.2 1.2 0 0 1 12 2.2v5.6A1.2 1.2 0 0 1 10.8 9H5.5L2.6 11V9h-.4A1.2 1.2 0 0 1 1 7.8V2.2A1.2 1.2 0 0 1 2.2 1Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                        </svg>
+                        <span>{`댓글 ${q.comments.length}`}</span>
+                        <span aria-hidden>·</span>
+                        <span>{timeAgo(q.at)}</span>
+                        <span aria-hidden>·</span>
+                        <span className="truncate">{q.author}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+        {tab === "reports" && (
+          <ul className="grid gap-[12px] px-[20px] pb-[24px]">
+            {reports.map((r) => (
+              <li key={r.id} className="rounded-[20px] bg-butter px-[18px] py-[16px]">
+                <p className="truncate text-[15px] font-bold text-ink-2">{`${fullName(r.dept)} 체험 리포트`}</p>
+                <p className="mt-[10px] text-[12.5px] font-bold text-mint-deep">배운 것</p>
+                <p className="mt-[2px] text-[13px] leading-[20px] text-ink-2">{r.learned}</p>
+                <p className="mt-[8px] text-[12.5px] font-bold text-mint-deep">느낀 점</p>
+                <p className="mt-[2px] text-[13px] leading-[20px] text-ink-2">{r.felt}</p>
+                <p className="mt-[10px] text-[11.5px] text-ink-3">{`${r.author} · ${timeAgo(r.at)}`}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+        {tab === "mentors" && (
+          <ul className="grid gap-[12px] px-[20px] pb-[24px]">
+            {MOCK_MENTORS.map((m) => (
+              <li key={m.id} className="flex gap-[12px] rounded-[18px] border border-line bg-white px-[14px] py-[14px] shadow-[0_4px_14px_rgba(0,0,0,0.04)]">
+                <img src={yearCharacter(m.year).src} alt="" className="h-[56px] w-[56px] shrink-0 object-contain" />
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-[6px]">
+                    <span className="truncate text-[15px] font-bold text-ink-2">{m.nickname}</span>
+                    <span className="inline-flex shrink-0 items-center gap-[3px] rounded-full bg-mint-soft px-[7px] text-[10.5px] font-bold leading-[20px] text-mint-deep">
+                      <svg width="9" height="8" viewBox="0 0 11 9" fill="none" aria-hidden>
+                        <path d="M1.2 4.6 4 7.3 9.8 1.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      인증된 재학생
+                    </span>
+                  </p>
+                  <p className="mt-[2px] truncate text-[12px] text-gray">{`${fullName(m.dept)} · ${m.year}학년`}</p>
+                  <p className="mt-[6px] text-[13px] leading-[20px] text-ink-2">{m.intro}</p>
+                  <button className="button ghost mt-[10px] min-h-[36px] text-[13px]" onClick={() => say("준비 중인 기능이에요.")}>
+                    커피챗 신청
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Screen>
+  );
+}
+
 export const SCREENS = {
   splash: Splash,
   school: School,
@@ -1904,4 +2320,5 @@ export const SCREENS = {
   diploma: Diploma,
   graduation: Graduation,
   my: My,
+  community: Community,
 };
