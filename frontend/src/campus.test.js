@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CAMPUS, PLACES, departmentsIn, placeOf } from "./campus.js";
-import { BUILDINGS, CAMPUS_AREA, MAP_H, MAP_W } from "./campusMapData.js";
+import { BUILDINGS, MAP_H, MAP_W, ROADS, TREES } from "./campusMapData.js";
 import { createDepartment } from "./model.js";
 
 test("캠퍼스 지도의 건물은 공식 캠퍼스맵의 번호와 오픈스트리트맵의 실제 위치(0~1)를 가진다", () => {
@@ -22,13 +22,11 @@ test("캠퍼스 지도의 건물은 공식 캠퍼스맵의 번호와 오픈스�
       if (a !== b) assert.ok(Math.abs(a.x - b.x) >= (a.w + b.w) / 2 || Math.abs(a.y - b.y) >= 15, `${a.p.name} · ${b.p.name}`);
 });
 
-test("지도 데이터: 공식 캠퍼스맵처럼 가로로 긴 그림이고, 이름표를 단 건물은 실제 윤곽이 있다", () => {
+test("지도 데이터: 공식 캠퍼스맵처럼 가로로 긴 그림이고, 건물·길·나무가 그림 안에 있다", () => {
   assert.ok(MAP_W > MAP_H);
-  assert.ok(CAMPUS_AREA.startsWith("M"));
-  for (const place of PLACES.filter((p) => p.kind === "college")) {
-    const building = BUILDINGS.find((b) => b.id === place.osm);
-    assert.ok(building && /^M[\d.]+ [\d.]+(L[\d.]+ [\d.]+){2,}Z/.test(building.d), place.name);
-  }
+  for (const b of BUILDINGS) assert.ok(b.cx > 0 && b.cx < MAP_W && b.cy > 0 && b.cy < MAP_H && b.w > 0 && b.h > 0, String(b.id));
+  for (const d of ROADS) assert.match(d, /^M[\d.]+ [\d.]+(L-?[\d.]+ -?[\d.]+)+$/);
+  for (const [x, y, r] of TREES) assert.ok(x >= 0 && x <= MAP_W && y >= 0 && y <= MAP_H && r > 0);
 });
 
 test("서비스의 학과는 모두 지도의 단과대 건물에 있고, 그 건물만 열린다", () => {

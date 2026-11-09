@@ -37,7 +37,6 @@ const K = Math.cos((LAT0 * Math.PI) / 180);
 const turn = (p) => [p.lat * 110574, p.lon * K * 111320];
 
 const ways = features.elements.filter((e) => e.type === "way" && e.geometry && e.tags);
-const campus = relations.elements.find((e) => e.id === CAMPUS_RELATION);
 const buildingRelations = relations.elements.filter((e) => e.id !== CAMPUS_RELATION && e.tags?.building);
 
 // 보여줄 범위: 건물·운동장·주차장을 모두 담는 상자 + 여백.
@@ -71,8 +70,8 @@ function simplify(points, tolerance = 0.6) {
   return [...simplify(points.slice(0, at + 1), tolerance).slice(0, -1), ...simplify(points.slice(at), tolerance)];
 }
 const r1 = (n) => Math.round(n * 10) / 10;
-const line = (geometry, closed) => {
-  const pts = simplify(geometry.map(toMap));
+const line = (geometry, closed, tolerance) => {
+  const pts = simplify(geometry.map(toMap), tolerance);
   return pts.map(([x, y], i) => `${i ? "L" : "M"}${r1(x)} ${r1(y)}`).join("") + (closed ? "Z" : "");
 };
 const centroid = (geometry) => {
@@ -119,48 +118,100 @@ function joinRings(members) {
   }
   return rings;
 }
-const campusPath = joinRings(campus.members.filter((m) => m.role === "outer")).map((g) => line(g, true)).join("");
 
-const shapes = { grass: [], wood: [], water: [], pitch: [], stadium: [], parking: [] };
-const roads = { major: [], minor: [] };
+// 그림 스타일(일러스트)에 맞게 고른다: 차가 다니는 길·보행로만 굵게 그리고(주차장 칸·오솔길·계단은 뺀다),
+// 숲은 그 안에 동그란 나무를 심어 그린다. 건물은 위치(중심)만 쓰고 모양은 아이콘으로 그린다.
+const shapes = { wood: [], water: [], pitch: [] };
+const roads = [];
+const stadiums = [];
 const buildings = [];
+const bbox = (geometry) => {
+  const pts = geometry.map(toMap);
+  const xs = pts.map((q) => q[0]);
+  const ys = pts.map((q) => q[1]);
+  return { w: r1(Math.max(...xs) - Math.min(...xs)), h: r1(Math.max(...ys) - Math.min(...ys)) };
+};
+const woodRings = [];
+const roadPoints = [];
+const avoid = [];
 for (const w of ways) {
   const t = w.tags;
   if (t.building) {
     const [cx, cy] = centroid(w.geometry);
-    buildings.push({ id: w.id, name: t.name || "", d: line(w.geometry, true), cx, cy });
+    buildings.push({ id: w.id, name: t.name || "", cx, cy, ...bbox(w.geometry) });
   } else if (t.highway) {
-    if (["service", "pedestrian", "residential", "tertiary", "unclassified"].includes(t.highway)) roads.major.push(line(w.geometry, false));
-    else if (["footway", "path", "steps", "track"].includes(t.highway)) roads.minor.push(line(w.geometry, false));
+    if ((t.highway === "service" && !t.service) || t.highway === "pedestrian") {
+      roads.push(line(w.geometry, false, 2));
+      roadPoints.push(...w.geometry.map(toMap));
+    }
   } else if (!closed(w)) continue;
-  else if (t.natural === "wood" || t.landuse === "forest") shapes.wood.push(line(w.geometry, true));
-  else if (t.natural === "water" || t.water) shapes.water.push(line(w.geometry, true));
-  else if (t.leisure === "stadium") shapes.stadium.push({ id: w.id, d: line(w.geometry, true), c: centroid(w.geometry) });
-  else if (t.leisure === "pitch") shapes.pitch.push(line(w.geometry, true));
-  else if (t.amenity === "parking") shapes.parking.push(line(w.geometry, true));
-  else if (["grass", "flowerbed", "meadow"].includes(t.landuse) || t.leisure === "park" || t.natural === "grassland") shapes.grass.push(line(w.geometry, true));
+  else if (t.natural === "wood" || t.landuse === "forest") {
+    shapes.wood.push(line(w.geometry, true, 2));
+    woodRings.push(w.geometry.map(toMap));
+  } else if (t.natural === "water" || t.water) shapes.water.push(line(w.geometry, true, 1));
+  else if (t.leisure === "stadium") {
+    const [cx, cy] = centroid(w.geometry);
+    stadiums.push({ id: w.id, cx, cy, ...bbox(w.geometry) });
+    avoid.push(w.geometry.map(toMap));
+  } else if (t.leisure === "pitch") {
+    shapes.pitch.push(line(w.geometry, true, 1));
+    avoid.push(w.geometry.map(toMap));
+  }
 }
 for (const r of buildingRelations) {
   const outer = joinRings(r.members.filter((m) => m.role === "outer"));
-  const inner = joinRings(r.members.filter((m) => m.role === "inner"));
   const [cx, cy] = centroid(outer[0]);
-  buildings.push({ id: r.id, name: r.tags.name || "", d: [...outer, ...inner].map((g) => line(g, true)).join(""), cx, cy });
+  buildings.push({ id: r.id, name: r.tags.name || "", cx, cy, ...bbox(outer[0]) });
 }
 buildings.sort((a, b) => a.cy - b.cy || a.id - b.id);
 
+// 나무: 고른 간격(+고정 난수로 조금 흔듦)의 자리 중 숲 안은 절반쯤, 숲 밖 잔디는 드문드문 심는다.
+// 길·건물·운동장 위에는 심지 않는다.
+const inside = (pt, ring) => {
+  let hit = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > pt[1] !== yj > pt[1] && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi) hit = !hit;
+  }
+  return hit;
+};
+let seed = 2026;
+const random = () => {
+  seed = (seed + 0x6d2b79f5) >>> 0;
+  let t = Math.imul(seed ^ (seed >>> 15), seed | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+const STEP = 22;
+const trees = [];
+for (let gy = STEP / 2; gy < MAP_H; gy += STEP)
+  for (let gx = STEP / 2; gx < MAP_W; gx += STEP) {
+    const pt = [gx + (random() - 0.5) * STEP * 0.8, gy + (random() - 0.5) * STEP * 0.8];
+    const r = 6 + random() * 3.5;
+    const chance = random();
+    if (chance > (woodRings.some((ring) => inside(pt, ring)) ? 0.55 : 0.07)) continue;
+    if (roadPoints.some((q) => Math.hypot(q[0] - pt[0], q[1] - pt[1]) < 12)) continue;
+    if (buildings.some((b) => Math.abs(b.cx - pt[0]) < b.w / 2 + 12 && Math.abs(b.cy - pt[1]) < b.h / 2 + 12)) continue;
+    if (avoid.some((ring) => inside(pt, ring))) continue;
+    trees.push([r1(pt[0]), r1(pt[1]), r1(r)]);
+  }
+trees.sort((a, b) => a[1] - b[1]);
+
 const header = `// 자동 생성 파일: node scripts/campus-map.mjs 로 다시 만든다. 손으로 고치지 않는다.
-// 경희대 국제캠퍼스의 실제 건물 윤곽·길·숲·운동장. 데이터 © OpenStreetMap contributors, ODbL 1.0
+// 경희대 국제캠퍼스의 실제 건물 위치·길·숲·운동장. 데이터 © OpenStreetMap contributors, ODbL 1.0
 // (https://www.openstreetmap.org/copyright), ${new Date().toISOString().slice(0, 10)} 받음.
 // 좌표는 지도 그림의 px(폭 MAP_W, 높이 MAP_H)이고, 공식 캠퍼스맵처럼 실제 지도를 시계 방향으로 90도 돌렸다(북쪽이 오른쪽).
+// BUILDINGS의 cx·cy는 건물 윤곽의 중심, w·h는 윤곽을 담는 상자의 크기다. TREES는 [x, y, 반지름]이다.
 `;
 const body = [
   `export const MAP_W = ${MAP_W};`,
   `export const MAP_H = ${MAP_H};`,
-  `export const CAMPUS_AREA = ${JSON.stringify(campusPath)};`,
-  `export const SHAPES = ${JSON.stringify({ ...shapes, stadium: shapes.stadium.map((s) => s.d) })};`,
-  `export const STADIUMS = ${JSON.stringify(shapes.stadium.map((s) => ({ id: s.id, cx: s.c[0], cy: s.c[1] })))};`,
+  `export const SHAPES = ${JSON.stringify(shapes)};`,
+  `export const STADIUMS = ${JSON.stringify(stadiums)};`,
   `export const ROADS = ${JSON.stringify(roads)};`,
+  `export const TREES = ${JSON.stringify(trees)};`,
   `export const BUILDINGS = [\n${buildings.map((b) => "  " + JSON.stringify(b)).join(",\n")},\n];`,
 ].join("\n");
 writeFileSync(OUT, header + body + "\n");
-console.log(`지도 ${MAP_W}×${MAP_H}px, 건물 ${buildings.length}, 길 ${roads.major.length}+${roads.minor.length}, 숲 ${shapes.wood.length}, 물 ${shapes.water.length}, 경기장 ${shapes.pitch.length}`);
+console.log(`지도 ${MAP_W}×${MAP_H}px, 건물 ${buildings.length}, 길 ${roads.length}, 나무 ${trees.length}, 물 ${shapes.water.length}, 경기장 ${shapes.pitch.length}`);
