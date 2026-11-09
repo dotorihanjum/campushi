@@ -95,15 +95,6 @@ export const MOCK_QUESTIONS = [
   },
 ];
 
-export const MOCK_REPORTS = [
-  { id: "r1", dept: "khu-cse", author: "코딩하는수달", minutesAgo: 90, learned: "AI에게 예시를 보여 주며 가르치는 졸업 과제를 해 봤어요.", felt: "예시를 잘 골라야 AI가 제대로 배운다는 게 신기했어요." },
-  { id: "r2", dept: "khu-id", author: "스케치북곰", minutesAgo: 240, learned: "졸업작품을 끝까지 칠해서 완성했어요.", felt: "한 작품을 끝까지 만드는 데 생각보다 집중력이 필요했어요." },
-  { id: "r3", dept: "khu-cse", author: "밤샘개발자", minutesAgo: 720, learned: "버블 정렬을 직접 비교·교환하며 정렬해 봤어요.", felt: "규칙대로만 하면 결국 정렬된다는 게 재밌었어요." },
-  { id: "r4", dept: "khu-cse", author: "새내기다람쥐", minutesAgo: 1500, learned: "미분적분학·선형대수 개념 퀴즈를 풀어 봤어요.", felt: "수학이 생각보다 많아서 미리 공부해 둬야겠다고 느꼈어요." },
-  { id: "r5", dept: "khu-id", author: "만들기좋아", minutesAgo: 3000, learned: "산업디자인학과 4년 과정을 끝까지 체험했어요.", felt: "제품 하나를 만들 때 생각할 게 많다는 걸 알았어요." },
-  { id: "r6", dept: "khu-cse", author: "로봇덕후", minutesAgo: 6000, learned: "이산구조 퀴즈에서 논리와 집합을 배웠어요.", felt: "AI 공부에도 수학이 기초라는 걸 알게 됐어요." },
-];
-
 export const MOCK_MENTORS = [
   { id: "m1", nickname: "공대생도토리", dept: "khu-cse", year: 3, intro: "알고리즘이랑 웹 개발을 좋아해요. 1학년 수학 버티는 법 알려 드릴게요." },
   { id: "m2", nickname: "스케치하는부엉이", dept: "khu-id", year: 2, intro: "제품 디자인 과제와 포트폴리오 얘기 편하게 물어보세요." },

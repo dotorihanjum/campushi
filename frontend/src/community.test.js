@@ -17,22 +17,21 @@ import {
   fromMock,
   timeAgo,
 } from "./community.js";
-import { MOCK_MENTORS, MOCK_QUESTIONS, MOCK_REPORTS } from "./communityMock.js";
+import { MOCK_MENTORS, MOCK_QUESTIONS } from "./communityMock.js";
 import { createDepartment } from "./model.js";
 
 const { departments: raw } = JSON.parse(readFileSync(new URL("../../backend/data/departments.json", import.meta.url), "utf8"));
 const departments = raw.map(createDepartment);
 const NOW = Date.UTC(2026, 10, 9, 12, 0);
 
-test("예시 데이터: 앱에 있는 학과만 쓰고, 질문 8~10개·리포트 6개·재학생 5명, 실명·연락처처럼 보이는 내용은 없다", () => {
+test("예시 데이터: 앱에 있는 학과만 쓰고, 질문 8~10개·재학생 5명, 실명·연락처처럼 보이는 내용은 없다", () => {
   const ids = new Set(departments.map((d) => d.id));
   assert.ok(MOCK_QUESTIONS.length >= 8 && MOCK_QUESTIONS.length <= 10);
-  assert.equal(MOCK_REPORTS.length, 6);
   assert.equal(MOCK_MENTORS.length, 5);
-  for (const item of [...MOCK_QUESTIONS, ...MOCK_REPORTS, ...MOCK_MENTORS]) assert.ok(ids.has(item.dept), item.id);
-  const text = JSON.stringify([MOCK_QUESTIONS, MOCK_REPORTS, MOCK_MENTORS]);
+  for (const item of [...MOCK_QUESTIONS, ...MOCK_MENTORS]) assert.ok(ids.has(item.dept), item.id);
+  const text = JSON.stringify([MOCK_QUESTIONS, MOCK_MENTORS]);
   assert.doesNotMatch(text, /\d{2,3}-\d{3,4}-\d{4}|@[\w-]+\.|https?:\/\//);
-  assert.equal(new Set([...MOCK_QUESTIONS, ...MOCK_REPORTS, ...MOCK_MENTORS].map((x) => x.id)).size, MOCK_QUESTIONS.length + MOCK_REPORTS.length + MOCK_MENTORS.length);
+  assert.equal(new Set([...MOCK_QUESTIONS, ...MOCK_MENTORS].map((x) => x.id)).size, MOCK_QUESTIONS.length + MOCK_MENTORS.length);
 });
 
 test("학과 필터: 전체, 내가 체험한 학과(입학한 학과), 학과군, 학과 하나", () => {

@@ -52,10 +52,9 @@ import {
   checkPost,
   communityStore,
   filterQuestions,
-  fromMock,
   timeAgo,
 } from "./community.js";
-import { MOCK_MENTORS, MOCK_REPORTS } from "./communityMock.js";
+import { MOCK_MENTORS } from "./communityMock.js";
 import { CAMPUS, CAMPUSES, PLACES, departmentsIn, findCampuses } from "./campus.js";
 import CampusMap, { MAP_H, MAP_SHOWN, MAP_W } from "./CampusMap.jsx";
 
@@ -1938,12 +1937,11 @@ export function My({ nav, state, setState }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 15 · 커뮤니티(미리보기): 질문, 체험 리포트, 재학생 커피챗              */
+/* 15 · 커뮤니티(미리보기): 질문, 재학생 커피챗                          */
 /* ------------------------------------------------------------------ */
 
 const COMMUNITY_TABS = [
   { id: "questions", label: "질문" },
-  { id: "reports", label: "체험 리포트" },
   { id: "mentors", label: "재학생 커피챗" },
 ];
 
@@ -2132,7 +2130,6 @@ export function Community({ nav, route, state, active }) {
   const toastTimer = useRef(0);
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
   const questions = useSyncExternalStore(communityStore.subscribe, communityStore.get);
-  const [reports] = useState(() => fromMock(MOCK_REPORTS));
   const shown = filterQuestions(questions, filter, departments, state.journeys);
   const opened = questions.find((q) => q.id === openId) || null;
   const say = (text) => {
@@ -2261,20 +2258,6 @@ export function Community({ nav, route, state, active }) {
               </ul>
             )}
           </>
-        )}
-        {tab === "reports" && (
-          <ul className="grid gap-[12px] px-[20px] pb-[24px]">
-            {reports.map((r) => (
-              <li key={r.id} className="rounded-[20px] bg-butter px-[18px] py-[16px]">
-                <p className="truncate text-[15px] font-bold text-ink-2">{`${fullName(r.dept)} 체험 리포트`}</p>
-                <p className="mt-[10px] text-[12.5px] font-bold text-mint-deep">배운 것</p>
-                <p className="mt-[2px] text-[13px] leading-[20px] text-ink-2">{r.learned}</p>
-                <p className="mt-[8px] text-[12.5px] font-bold text-mint-deep">느낀 점</p>
-                <p className="mt-[2px] text-[13px] leading-[20px] text-ink-2">{r.felt}</p>
-                <p className="mt-[10px] text-[11.5px] text-ink-3">{`${r.author} · ${timeAgo(r.at)}`}</p>
-              </li>
-            ))}
-          </ul>
         )}
         {tab === "mentors" && (
           <ul className="grid gap-[12px] px-[20px] pb-[24px]">
