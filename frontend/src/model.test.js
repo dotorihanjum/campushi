@@ -15,6 +15,7 @@ import {
   isRequired,
   kindOf,
   loadState,
+  nextStepOf,
   normalize,
   progressOf,
   recordOf,
@@ -98,6 +99,21 @@ test("1학년은 처음부터 열리고, 체험이 있는 필수과목을 모두
   assert.deepEqual(p.years[1].left, []);
   assert.deepEqual(p.years[2].left.map((c) => c.subject), ["알고리즘", "운영체제"]);
   assert.equal(p.passedCount, 2);
+});
+
+test("다음 학년 해금까지의 진행은 지금 학년 필수과목(체험이 있는 것) 중 이수한 비율이고, 4학년은 졸업 과제를 넣어 졸업까지다", () => {
+  let state = enrolled();
+  assert.deepEqual(nextStepOf(progress(state)), { target: 2, done: 0, total: 2, percent: 0 });
+  state = take(state, RAW_CSE.id, "미분적분학", 8);
+  assert.deepEqual(nextStepOf(progress(state)), { target: 2, done: 1, total: 2, percent: 50 });
+  // 1학년을 마치면 2학년(필수 체험 없음)과 함께 3학년이 열려 4학년 해금까지를 센다.
+  state = take(state, RAW_CSE.id, "객체지향프로그래밍", 8);
+  assert.deepEqual(nextStepOf(progress(state)), { target: 4, done: 0, total: 2, percent: 0 });
+  for (const subject of ["알고리즘", "운영체제"]) state = take(state, RAW_CSE.id, subject, 9);
+  // 4학년: 체험이 있는 필수(졸업프로젝트)이자 졸업 과제 하나.
+  assert.deepEqual(nextStepOf(progress(state)), { target: null, done: 0, total: 1, percent: 0 });
+  state = take(state, RAW_CSE.id, "졸업프로젝트", 9);
+  assert.equal(nextStepOf(progress(state)).percent, 100);
 });
 
 test("C+ 이하는 재수강해야 하고, 재수강하면 가장 좋은 성적이 남는다", () => {

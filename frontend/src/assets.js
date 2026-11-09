@@ -4,6 +4,11 @@ import wordmark from "./assets/wordmark.png";
 import mascotWelcome from "./assets/mascot-welcome.png";
 import mascotHome from "./assets/mascot-home.png";
 import mascotGrad from "./assets/mascot-grad.png";
+// 학년별 캐릭터: 피그마 디자인 파일(릿톤, export 페이지 Design System 슬라이드)의 벡터를 SVG로 내보낸 것(배경만 지움).
+import characterGrade1 from "./assets/character-grade1.svg";
+import characterGrade2 from "./assets/character-grade2.svg";
+import characterGrade3 from "./assets/character-grade3.svg";
+import characterGrade4 from "./assets/character-grade4.svg";
 import khuLogo from "./assets/khu-logo.png";
 import seal from "./assets/seal.png";
 import paperFold from "./assets/paper-fold.png";
@@ -63,3 +68,12 @@ export const confetti = [
   { src: c7, x: 338, y: 192, w: 11.5, h: 19 },
   { src: c8, x: 53.5, y: 215, w: 19.5, h: 31.5 },
 ];
+
+// 학년별 캐릭터(디자인 시스템 "학년이 올라갈수록 캐릭터도 함께 자라요"). 학년이 열릴 때마다 바뀐다.
+export const YEAR_CHARACTERS = [
+  { src: characterGrade1, alt: "1학년 새내기 캐릭터" },
+  { src: characterGrade2, alt: "2학년 공부하는 캐릭터" },
+  { src: characterGrade3, alt: "3학년 커피 마시는 캐릭터" },
+  { src: characterGrade4, alt: "4학년 학사모 쓴 캐릭터" },
+];
+export const yearCharacter = (year) => YEAR_CHARACTERS[Math.min(Math.max(year, 1), 4) - 1];

@@ -185,6 +185,22 @@ export function completeCourse(state, id, subject, note = "") {
   };
 }
 
+/**
+ * 다음 학년(4학년이면 졸업)까지의 진행: 지금 열린 마지막 학년의 필수과목(체험이 있는 것, 4학년은 졸업 과제 포함) 중 이수한 수.
+ * target은 열릴 학년(4학년이면 null = 졸업).
+ */
+export function nextStepOf(progress) {
+  const year = progress.openYear;
+  const goals = progress.years[year - 1].courses.filter((course) => (course.required && !course.planned) || (year === 4 && course.final));
+  const done = goals.filter((course) => course.passed).length;
+  return {
+    target: year < 4 ? year + 1 : null,
+    done,
+    total: goals.length,
+    percent: progress.graduated || !goals.length ? 100 : Math.round((done / goals.length) * 100),
+  };
+}
+
 // 수업 중 체험을 끝냈을 때 결과를 남긴다(완료 전까지는 마지막 결과만 둔다).
 export function savePlay(state, id, subject, game, summary, score) {
   const clean = cleanScore(score);
