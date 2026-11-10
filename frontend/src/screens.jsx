@@ -1151,6 +1151,8 @@ export function Major({ active, nav, state, setState }) {
   const step = v?.journey ? nextStepOf(v.progress) : null;
   const percent = step ? step.percent : 0;
   const pct = useCountUp(percent);
+  // 아래 "다른 과목 더 듣기"에서 고른 학년(처음에는 바로 앞 학년).
+  const [pickYear, setPickYear] = useState(null);
   // 입학한 학과가 하나도 없으면 안내와 함께 학과를 고르러 갈 수 있게 한다.
   if (!v?.journey && !fallback)
     return (
@@ -1187,8 +1189,21 @@ export function Major({ active, nav, state, setState }) {
   const shownTodo = todo.slice(0, SHOWN_TODO);
   const open = () => nav.push("courses", { year: graduated ? (untaken[0]?.year ?? 4) : openYear });
   const listEnd = shownTodo.length ? 565 + shownTodo.length * 84 + (todo.length > SHOWN_TODO ? 30 : 0) : 615;
+  // 다른 과목 더 듣기: 열린 학년 가운데 고른 학년의, 체험이 있는 과목(위 목록에 있는 것은 빼고). 들은 과목을 먼저 둔다.
+  const openYears = years.filter((item) => item.open).map((item) => item.year);
+  // 처음에는 지금 학년 바로 앞에서부터 거슬러 올라가 들을 수 있는 과목이 있는 학년을 고른다(없으면 바로 앞 학년).
+  const playable = (item) => years[item - 1].courses.some((course) => !course.planned && !shownTodo.includes(course));
+  const fallbackYear = [...openYears].filter((item) => item < openYear).reverse().find(playable) ?? (playable(openYear) ? openYear : Math.max(1, openYear - 1));
+  const year = openYears.includes(pickYear) ? pickYear : fallbackYear;
+  const yearInfo = years[year - 1];
+  const more = yearInfo.courses
+    .filter((course) => !course.planned && !shownTodo.includes(course))
+    .sort((a, b) => !!b.record - !!a.record);
+  const plannedCount = yearInfo.courses.filter((course) => course.planned).length;
+  const moreTop = listEnd + 22;
+  const moreEnd = moreTop + 96 + (more.length ? more.length * 78 : 52) + 34;
   return (
-    <Screen h={listEnd + 24} foot={TAB_TOP} veil={false} footer={<TabBar active="major" nav={nav} state={state} />}>
+    <Screen h={moreEnd + 24} foot={TAB_TOP} veil={false} footer={<TabBar active="major" nav={nav} state={state} />}>
       <BackButton onClick={() => nav.reset(["home"])} />
       <T y={61} size={16} center clip={220} className="font-semibold text-mint">
         {`${d.school} · ${d.building}`}
@@ -1270,6 +1285,64 @@ export function Major({ active, nav, state, setState }) {
           {graduated ? "체험할 수 있는 과목을 모두 들었어요. 들었던 과목을 다시 해 볼 수도 있어요." : "모든 과제를 마쳤어요."}
         </T>
       )}
+      <section aria-labelledby="major-more" className="a-up absolute inset-x-[20px]" style={{ top: moreTop, ...delay(0.5) }}>
+        <h2 id="major-more" className="text-[15px] font-bold leading-[22px] text-ink-2">
+          다른 과목 더 듣기
+        </h2>
+        <p className="mt-[2px] text-[12.5px] leading-[19px] text-ink-3">들었던 과목을 다시 해 보거나, 열린 학년의 다른 과목을 들어 봐요.</p>
+        <div className="no-scrollbar mt-[10px] flex gap-[6px] overflow-x-auto" role="tablist" aria-label="학년 고르기">
+          {openYears.map((item) => (
+            <button
+              key={item}
+              role="tab"
+              aria-selected={item === year}
+              onClick={() => setPickYear(item)}
+              className={`pressable h-[36px] shrink-0 rounded-full border px-[14px] text-[13px] font-semibold ${
+                item === year ? "border-mint bg-mint text-white" : "border-mint bg-white text-mint-deep"
+              }`}
+            >
+              {`${item}학년`}
+            </button>
+          ))}
+        </div>
+        <ul className="mt-[12px] grid gap-[8px]" role="tabpanel" aria-label={`${year}학년 과목`}>
+          {more.map((course) => (
+            <li key={course.subject}>
+              <button
+                onClick={() => nav.push("lesson", { subject: course.subject })}
+                className="pressable flex h-[70px] w-full items-center gap-[10px] rounded-[12px] border border-cream-line bg-cream px-[16px] text-left active:bg-cream-2"
+              >
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="flex items-center gap-[6px]">
+                    <span className="truncate text-[14px] font-semibold leading-[20px] text-ink-2">{course.subject}</span>
+                    {course.required && <span className="shrink-0 text-[11px] font-bold text-mint">필수</span>}
+                  </span>
+                  <span className="truncate text-[11.5px] leading-[17px] text-ink-3">
+                    {course.final ? `졸업 과제 · ${d.final.name}` : `${course.kind} · ${experienceName(d, gameOf(d, course.subject))}`}
+                  </span>
+                </span>
+                <span
+                  className={`flex h-[24px] shrink-0 items-center rounded-full px-[10px] text-[12px] font-semibold ${
+                    course.passed ? "border border-mint bg-white text-mint-deep" : "bg-mint-soft text-mint-deep"
+                  }`}
+                >
+                  {course.passed ? `${course.record.grade} · 다시 듣기` : course.record ? "기록 남기기" : "듣기"}
+                </span>
+              </button>
+            </li>
+          ))}
+          {more.length === 0 && (
+            <li className="rounded-[12px] border border-line bg-white px-[16px] py-[14px] text-[13px] leading-[20px] text-ink-3">
+              {yearInfo.courses.some((course) => !course.planned)
+                ? `${year}학년의 체험 과목은 위 목록에 있어요.`
+                : `${year}학년은 아직 체험할 수 있는 과목이 없어요. 체험을 만들고 있어요.`}
+            </li>
+          )}
+        </ul>
+        <button className="text-button mt-[10px]" onClick={() => nav.push("courses", { year })}>
+          {`${year}학년 과목 전체 보기${plannedCount ? ` (구현 예정 ${plannedCount}과목 포함)` : ""} →`}
+        </button>
+      </section>
     </Screen>
   );
 }
