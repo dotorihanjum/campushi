@@ -1249,7 +1249,6 @@ export function Major({ active, nav, state, setState }) {
   const more = order(years[year - 1].courses);
   return (
     <Screen h={LIST_TOP + listH + 24} foot={TAB_TOP} veil={false} footer={<TabBar active="major" nav={nav} state={state} />}>
-      <BackButton onClick={() => nav.reset(["home"])} />
       <T y={61} size={16} center clip={220} className="font-semibold text-mint">
         {`${d.school} · ${d.building}`}
       </T>
@@ -2056,7 +2055,7 @@ export function My({ nav, state, setState }) {
   };
   return (
     <Screen foot={TAB_TOP} veil={false} footer={<TabBar active="my" nav={nav} state={state} />}>
-      <Header title="마이페이지" onBack={nav.back} />
+      <Header title="마이페이지" />
       <div
         className="flow no-scrollbar absolute left-0 top-[104px] w-full overflow-y-auto px-[20px] pb-[24px] pt-[20px]"
         style={{ bottom: `calc(${TAB_H}px - var(--bt) * 1px)` }}
