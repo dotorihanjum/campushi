@@ -59,7 +59,7 @@ import {
   timeAgo,
 } from "./community.js";
 import { MOCK_MENTORS } from "./communityMock.js";
-import { CAMPUS, CAMPUSES, PLACES, departmentsIn, findCampuses } from "./campus.js";
+import { CAMPUS, CAMPUSES, departmentsIn, findCampuses } from "./campus.js";
 import CampusMap, { MAP_H, MAP_W } from "./CampusMap.jsx";
 
 /* ------------------------------------------------------------------ */
@@ -979,6 +979,8 @@ const HOME_TOP = 164;
 // 학과 둘러보기 제목 높이.
 const DEPT_HEAD = 44;
 const PEEK = 34;
+// 처음에는 지도 그림의 한가운데(가로·세로)가 지도 틀 가운데 오게 둔다(2026-11-10 사용자 요청).
+const MAP_CENTER = [MAP_W / 2, MAP_H / 2];
 const HOME_FOLD = `calc((var(--vh) + var(--tt) + var(--bt) - ${TAB_H} - ${PEEK}) * 1px)`;
 
 export function Home({ nav, route, state, setState, catalog }) {
@@ -1013,11 +1015,6 @@ export function Home({ nav, route, state, setState, catalog }) {
   const studyingId = state.journeys[state.studying] ? state.studying : latestJourney(state);
   const studying = list.find((d) => d.id === studyingId) || null;
   const progress = studying ? progressOf(state, studying) : null;
-  // 처음에는 체험 중인 학과의 건물(없으면 열린 건물들 한가운데)이 지도 틀 가운데 오게 둔다. 핀부터 이름표까지가 가운데 오게 조금 내린다.
-  const home = studying && PLACES.find((place) => place.kind === "college" && place.name === studying.building);
-  const opened = home ? [home] : PLACES.filter((place) => place.kind === "college" && departmentsIn(list, place.name).length);
-  const center = opened.length ? (Math.min(...opened.map((p) => p.x)) + Math.max(...opened.map((p) => p.x))) / 2 : 0.5;
-  const middle = opened.length ? (Math.min(...opened.map((p) => p.y)) + Math.max(...opened.map((p) => p.y))) / 2 : 0.5;
   const line = guideLine({ landing, hint, list, catalog, studying, progress });
   // 캐릭터는 체험 중인 학과의 학년에 따라 자란다(입학 전이면 새내기).
   const character = yearCharacter(progress?.openYear || 1);
@@ -1077,7 +1074,7 @@ export function Home({ nav, route, state, setState, catalog }) {
           <PanView
             width={MAP_W}
             height={MAP_H}
-            focus={[center * MAP_W, middle * MAP_H + 10]}
+            focus={MAP_CENTER}
             label={`${CAMPUS.name} 지도. 끌거나 화살표 키로 둘러봐요.`}
             className="h-full rounded-[24px] border border-[#cfe5c6] bg-[#cdeac2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint-deep"
           >
