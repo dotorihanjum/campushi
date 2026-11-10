@@ -42,22 +42,24 @@ class ApiTest(unittest.TestCase):
         self.assertIn("데이터베이스", cse["years"]["3"])
         # 2023-1 ~ 2026-2 개설 기록이 없는 과목은 뺐다(SOURCE.md).
         self.assertNotIn("웹보안", cse["years"]["4"])
-        # 지금 공개한 연습 문제는 1·2학년 이론 수업 15과목의 문제 은행뿐이다(2026-11-09 사용자 결정, 나머지는 구현 예정).
-        self.assertEqual(
-            set(cse["games"]),
-            {"이산구조", "미분적분학", "미분방정식", "선형대수", "실감미디어컴퓨팅기초",
-             "신호와시스템", "회로와신호", "확률및랜덤변수", "컴퓨터구조", "논리회로", "기계학습",
-             "게임프로그래밍입문", "풀스택서비스네트워킹", "마이크로서비스프로그래밍", "오픈소스SW개발방법및도구"},
-        )
+        # 이론 퀴즈 15과목은 체험 설계 원칙에 맞지 않아 다시 쓸 때까지 내렸다(2026-11-10 사용자 결정). 지금 공개한 연습 문제는 없다.
+        self.assertEqual(cse["games"], {})
         self.assertEqual(design["games"], {})
         self.assertEqual(len(design["years"]["2"]), 10)
 
     def test_lesson_game(self):
-        response = self.client.post("/api/lesson_game", json={"subject": "이산구조"})
-        self.assertEqual(response.status_code, 200)
-        game = response.json()["game"]
-        self.assertEqual(game["course_name"], "이산구조")
-        self.assertNotIn("check", game)
+        bank = next(bank for bank in theory_banks.load() if bank["course_name"] == "이산구조")
+        main.lesson_games.cache_clear()
+        with tempfile.TemporaryDirectory() as folder:
+            path = main.Path(folder) / "theory.jsonl"
+            path.write_text(json.dumps({**bank, "status": "verified"}, ensure_ascii=False), encoding="utf-8")
+            with mock.patch.object(main, "THEORY_PATH", path):
+                response = self.client.post("/api/lesson_game", json={"subject": "이산구조"})
+                self.assertEqual(response.status_code, 200)
+                game = response.json()["game"]
+                self.assertEqual(game["course_name"], "이산구조")
+                self.assertNotIn("check", game)
+        main.lesson_games.cache_clear()
         # 문제가 없는 과목(구현 예정), 이 서비스의 과목이 아닌 과목은 404다.
         for subject in ["객체지향프로그래밍", "드로잉", "회계원리"]:
             response = self.client.post("/api/lesson_game", json={"subject": subject})
@@ -122,13 +124,28 @@ class ApiTest(unittest.TestCase):
 
     def test_theory_bank_replaces_fixed_game(self):
         # 이론 수업 문제 은행이 있는 과목은 고정된 문제 대신 은행(유형 theory)을 준다. 검증 기록은 내보내지 않는다.
-        games = self.client.get("/api/departments").json()["departments"][0]["games"]
-        self.assertEqual(games["미분적분학"], "theory")
-        self.assertEqual(games["이산구조"], "theory")
-        game = self.client.post("/api/lesson_game", json={"subject": "선형대수"}).json()["game"]
-        self.assertEqual(game["type"], "theory")
-        self.assertNotIn("check", game)
-        self.assertTrue(game["terms"] and game["facts"] and game["units"])
+        bank = theory_banks.load()[0]
+        main.lesson_games.cache_clear()
+        with tempfile.TemporaryDirectory() as folder:
+            path = main.Path(folder) / "theory.jsonl"
+            path.write_text(json.dumps({**bank, "status": "verified"}, ensure_ascii=False), encoding="utf-8")
+            with mock.patch.object(main, "THEORY_PATH", path):
+                games = self.client.get("/api/departments").json()["departments"][0]["games"]
+                self.assertEqual(games[bank["course_name"]], "theory")
+                game = self.client.post("/api/lesson_game", json={"subject": bank["course_name"]}).json()["game"]
+                self.assertEqual(game["type"], "theory")
+                self.assertNotIn("check", game)
+                self.assertTrue(game["terms"] and game["facts"] and game["units"])
+        main.lesson_games.cache_clear()
+
+    def test_withdrawn_theory_banks_are_not_served(self):
+        # 2026-11-10 사용자 결정: 고등학생이 용어를 외워야만 풀 수 있는 이론 퀴즈는 다시 쓸 때까지 내린다.
+        main.lesson_games.cache_clear()
+        banks = theory_banks.load()
+        self.assertTrue(all(bank["status"] != "verified" and bank["check"].get("withdrawn") for bank in banks))
+        for department in self.client.get("/api/departments").json()["departments"]:
+            self.assertNotIn("theory", department["games"].values())
+        self.assertEqual(self.client.post("/api/lesson_game", json={"subject": "미분방정식"}).status_code, 404)
 
     def test_unverified_theory_banks_are_hidden(self):
         bank = theory_banks.load()[0]
