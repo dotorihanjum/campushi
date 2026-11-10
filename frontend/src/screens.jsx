@@ -1340,17 +1340,6 @@ function quizTask(game) {
   if (game.type === "match") return `서로 관련된 ${n}쌍의 짝을 맞춰요.`;
   return `${n}개를 알맞은 칸으로 나눠요.`;
 }
-/** 체험 화면을 불러오는 동안. */
-function LabLoading() {
-  return (
-    <Screen>
-      <p className="absolute inset-x-[20px] top-[200px] text-center text-[14px] text-ink-3" role="status">
-        실습 화면을 불러오는 중이에요…
-      </p>
-    </Screen>
-  );
-}
-
 /** 체험 화면을 불러오지 못하거나(네트워크) 화면에 오류가 나면, 앱 전체가 멈추지 않게 이 자리에서 알린다. */
 class LabBoundary extends Component {
   state = { failed: false };
@@ -1358,17 +1347,14 @@ class LabBoundary extends Component {
     return { failed: true };
   }
   componentDidCatch(error) {
-    console.error("실습 화면 오류", error);
+    console.error("체험 화면 오류", error);
   }
   render() {
     if (!this.state.failed) return this.props.children;
     return (
-      <Screen footer={<FilledButton onClick={this.props.onQuit}>수업으로 돌아가기</FilledButton>}>
-        <div className="absolute inset-x-[20px] top-[160px]" role="alert">
-          <h1 className="text-[22px] font-bold leading-[32px] text-navy">실습 화면을 열지 못했어요</h1>
-          <p className="mt-[8px] text-[14px] leading-[22px] text-gray">인터넷 연결을 확인하고 다시 들어와 주세요.</p>
-        </div>
-      </Screen>
+      <div role="alert">
+        <p className="body-copy">체험을 열지 못했어요. 인터넷 연결을 확인하고 다시 들어와 주세요.</p>
+      </div>
     );
   }
 }
@@ -1560,27 +1546,6 @@ export function Lesson({ active, nav, route, state, setState }) {
     if (!finishWith(state, draft)) warn("이수를 남기지 못했어요. 과목 목록에서 다시 들어와 주세요.");
   };
 
-  // 진짜 수업 체험은 화면 전체를 그 수업의 공간으로 바꿔서 한다. 나가면 배우기로(이미 제출했으면 기록으로), 제출하면 기록 단계로 간다.
-  if (mode === "lab" && step === 1) {
-    const LabScreen = LAB_SCREENS[lab.id];
-    const leave = () => go(play ? 2 : 0);
-    return (
-      <LabBoundary onQuit={leave}>
-        <Suspense fallback={<LabLoading />}>
-          <LabScreen
-            lab={lab}
-            subject={subject}
-            onQuit={leave}
-            onDone={(summary, score) => {
-              setState((s) => savePlay(s, d.id, subject, game, summary, score));
-              go(2);
-            }}
-          />
-        </Suspense>
-      </LabBoundary>
-    );
-  }
-
   let body;
   let action;
   if (step === 0) {
@@ -1652,6 +1617,32 @@ export function Lesson({ active, nav, route, state, setState }) {
         직접 해보기
       </FilledButton>
     );
+  } else if (step === 1 && mode === "lab") {
+    // 진짜 수업 체험도 다른 체험처럼 이 단계 안에 들어간다. 화면 코드는 그 과목에 들어갈 때만 불러온다.
+    const LabScreen = LAB_SCREENS[lab.id];
+    body = (
+      <div className="a-up mt-[22px]">
+        <LabBoundary>
+          <Suspense
+            fallback={
+              <p className="text-[13.5px] text-ink-3" role="status">
+                체험을 불러오는 중이에요…
+              </p>
+            }
+          >
+            <LabScreen
+              lab={lab}
+              subject={subject}
+              onComplete={(summary, score) => {
+                setNotice("");
+                setState((s) => savePlay(s, d.id, subject, game, summary, score));
+              }}
+            />
+          </Suspense>
+        </LabBoundary>
+      </div>
+    );
+    action = <FilledButton onClick={() => (play ? go(2) : warn("먼저 끝까지 해보세요."))}>기록하러 가기</FilledButton>;
   } else if (step === 1) {
     body = (
       <div className="a-up mt-[22px]">
