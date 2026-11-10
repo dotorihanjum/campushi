@@ -1495,7 +1495,7 @@ export function Lesson({ active, nav, route, state, setState }) {
             {result.grade}
           </p>
           <p className="a-up mt-[4px] text-[14px] leading-[22px] text-gray" style={delay(0.16)}>
-            {result.grade === PASS ? "끝까지 해서 통과(P)했어요." : `정답률 ${result.percent}%`}
+            {result.grade === PASS ? "끝까지 해서 통과(P)했어요." : lab ? `채점 항목 통과 ${result.percent}%` : `정답률 ${result.percent}%`}
             {result.best && result.best.grade !== result.grade ? ` · 남는 성적은 가장 좋은 ${gradeText(result.best)}이에요` : ""}
           </p>
           {result.credits > 0 && <CreditPill credits={result.credits} className="a-pop mt-[12px] inline-flex" style={delay(0.2)} />}
@@ -1511,8 +1511,8 @@ export function Lesson({ active, nav, route, state, setState }) {
                   ? `${result.opened[0] - 1}학년 필수과목을 모두 ${PASS_GRADE} 이상으로 이수했어요. 이제 ${result.opened.at(-1)}학년 과목까지 들을 수 있어요.` +
                     (result.opened.length > 1 ? ` ${result.opened.slice(0, -1).join("·")}학년은 체험이 있는 필수과목이 아직 없어 함께 열렸어요.` : "")
                   : passes(result.best?.grade)
-                    ? `${isRequired(d, subject) ? "필수과목으로 인정됐어요." : "선택과목으로 성적표에 남아요."} 다시 들으면 문제가 바뀌고, 가장 좋은 성적이 남아요.`
-                    : `${PASS_GRADE} 이상이어야 이수로 인정돼요.${isRequired(d, subject) ? " 필수과목이라 다음 학년이 열리려면 다시 들어야 해요." : ""} 다시 들으면 문제가 바뀌어요.`}
+                    ? `${isRequired(d, subject) ? "필수과목으로 인정됐어요." : "선택과목으로 성적표에 남아요."} ${lab ? "다시 하면 쓰던 코드를 이어서 고칠 수 있고" : "다시 들으면 문제가 바뀌고"}, 가장 좋은 성적이 남아요.`
+                    : `${PASS_GRADE} 이상이어야 이수로 인정돼요.${isRequired(d, subject) ? " 필수과목이라 다음 학년이 열리려면 다시 들어야 해요." : ""} ${lab ? "다시 하면 쓰던 코드를 이어서 고칠 수 있어요." : "다시 들으면 문제가 바뀌어요."}`}
             </p>
           </MintCard>
           {result.opened && (
