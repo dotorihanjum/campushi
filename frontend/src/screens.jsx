@@ -14,6 +14,7 @@ import {
   Screen,
   T,
   Dialog,
+  PanView,
   SchoolLogo,
   Toast,
 } from "./ui.jsx";
@@ -56,7 +57,7 @@ import {
 } from "./community.js";
 import { MOCK_MENTORS } from "./communityMock.js";
 import { CAMPUS, CAMPUSES, PLACES, departmentsIn, findCampuses } from "./campus.js";
-import CampusMap, { MAP_H, MAP_SHOWN, MAP_W } from "./CampusMap.jsx";
+import CampusMap, { MAP_H, MAP_W } from "./CampusMap.jsx";
 
 /* ------------------------------------------------------------------ */
 /* 공통                                                                */
@@ -935,19 +936,7 @@ export function Home({ nav, route, state, setState, catalog }) {
   const [building, setBuilding] = useState(null);
   const [hint, setHint] = useState("");
   const hintTimer = useRef(0);
-  const map = useRef(null);
   useEffect(() => () => window.clearTimeout(hintTimer.current), []);
-  // 처음에는 열린 건물들이 화면 가운데 오게 지도를 민다.
-  const opened = PLACES.filter((place) => place.kind === "college" && departmentsIn(list, place.name).length);
-  const center = opened.length ? (Math.min(...opened.map((p) => p.x)) + Math.max(...opened.map((p) => p.x))) / 2 : 0.5;
-  const middle = opened.length ? (Math.min(...opened.map((p) => p.y)) + Math.max(...opened.map((p) => p.y))) / 2 : 0.5;
-  useLayoutEffect(() => {
-    const el = map.current;
-    if (!el) return;
-    el.scrollLeft = Math.max(0, center * MAP_W - el.clientWidth / 2);
-    // 화면이 낮아 지도가 다 보이지 않으면 열린 건물(이름표까지)이 가운데 오게 위아래도 민다.
-    el.scrollTop = Math.max(0, 14 + middle * MAP_H + 30 - el.clientHeight / 2);
-  }, [center, middle]);
   const locked = (name) => {
     setHint(`${josa(name, "은", "는")} 아직 준비 중이에요. 핀이 꽂힌 민트색 건물을 눌러 봐요!`);
     window.clearTimeout(hintTimer.current);
@@ -962,6 +951,11 @@ export function Home({ nav, route, state, setState, catalog }) {
   const studyingId = state.journeys[state.studying] ? state.studying : latestJourney(state);
   const studying = list.find((d) => d.id === studyingId) || null;
   const progress = studying ? progressOf(state, studying) : null;
+  // 처음에는 체험 중인 학과의 건물(없으면 열린 건물들 한가운데)이 지도 틀 가운데 오게 둔다. 핀부터 이름표까지가 가운데 오게 조금 내린다.
+  const home = studying && PLACES.find((place) => place.kind === "college" && place.name === studying.building);
+  const opened = home ? [home] : PLACES.filter((place) => place.kind === "college" && departmentsIn(list, place.name).length);
+  const center = opened.length ? (Math.min(...opened.map((p) => p.x)) + Math.max(...opened.map((p) => p.x))) / 2 : 0.5;
+  const middle = opened.length ? (Math.min(...opened.map((p) => p.y)) + Math.max(...opened.map((p) => p.y))) / 2 : 0.5;
   const line = guideLine({ landing, hint, list, catalog, studying, progress });
   // 캐릭터는 체험 중인 학과의 학년에 따라 자란다(입학 전이면 새내기).
   const character = yearCharacter(progress?.openYear || 1);
@@ -1016,10 +1010,17 @@ export function Home({ nav, route, state, setState, catalog }) {
           변하지 않고, 지도 위로는 그려지지 않는다(처음 도착할 때 떨어지는 캐릭터도 이 줄 안에서만 보인다).
           캐릭터와 말풍선은 세로 가운데로 맞추고, 캐릭터는 지도와 약 20px 떨어진다(줄 위 여백 8 + 가운데 맞춤 12). */}
       <div className="absolute inset-x-0 isolate flex flex-col" style={{ top: HOME_TOP, height: `calc(${HOME_FOLD} - ${HOME_TOP}px)` }}>
-        <div ref={map} className="no-scrollbar min-h-[120px] flex-1 overflow-auto overscroll-contain" style={{ maxHeight: MAP_SHOWN + 14 }} aria-label={`${CAMPUS.name} 지도`}>
-          <div className="pt-[14px]">
+        <div className="min-h-[120px] flex-1 px-[16px] pt-[14px]" style={{ maxHeight: MAP_H + 2 + 14 }}>
+          {/* 지도 틀은 화면 안에 고정되고(네 모서리가 늘 보인다), 그보다 큰 지도 그림만 틀 안에서 끌어 본다. */}
+          <PanView
+            width={MAP_W}
+            height={MAP_H}
+            focus={[center * MAP_W, middle * MAP_H + 10]}
+            label={`${CAMPUS.name} 지도. 끌거나 화살표 키로 둘러봐요.`}
+            className="h-full rounded-[24px] border border-[#cfe5c6] bg-[#cdeac2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint-deep"
+          >
             <CampusMap departments={list} onOpen={setBuilding} onLocked={locked} />
-          </div>
+          </PanView>
         </div>
         <div className="flex h-[112px] shrink-0 items-center gap-[10px] py-[8px] pl-[16px] pr-[18px]" style={{ clipPath: "inset(0 -24px -24px -24px)" }}>
           <div className="relative h-[72px] w-[72px] shrink-0">

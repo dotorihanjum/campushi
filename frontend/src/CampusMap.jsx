@@ -7,8 +7,6 @@ import { BUILDINGS, MAP_H, MAP_W, ROADS, SHAPES, STADIUMS, TREES } from "./campu
 // 공식 캠퍼스맵처럼 북쪽이 오른쪽이다. 디자인 시안이 나오면 이 파일의 그림(색·모양)만 바꾼다.
 
 export { MAP_H, MAP_W };
-// 지도 그림 전체를 보여준다(화면이 낮으면 Home에서 위아래로 밀어 본다).
-export const MAP_SHOWN = MAP_H;
 
 const px = (x) => x * MAP_W;
 const py = (y) => y * MAP_H;
@@ -61,7 +59,7 @@ const placeOfId = new Map(PLACES.map((p) => [p.osm, p]));
  */
 export default function CampusMap({ departments, onOpen, onLocked }) {
   return (
-    <div className="relative overflow-hidden rounded-[24px]" style={{ width: MAP_W, height: MAP_H }}>
+    <div className="relative overflow-hidden" style={{ width: MAP_W, height: MAP_H }}>
       {/* 바탕: 잔디, 연못, 운동장, 길, 나무, 작은 건물 */}
       <svg className="absolute inset-0" width={MAP_W} height={MAP_H} aria-hidden>
         <defs>

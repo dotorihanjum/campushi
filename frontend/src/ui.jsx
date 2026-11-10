@@ -311,3 +311,150 @@ export function Confetti({ originX = 201, originY = 200, delay: wait = 0.15 }) {
 export function delay(s) {
   return { animationDelay: `${s}s` };
 }
+
+// 이만큼(px) 넘게 움직여야 끌기로 본다. 그보다 적게 움직이고 떼면 누르기(클릭)다.
+const PAN_SLOP = 5;
+// 화살표 키 한 번에 미는 거리(px).
+const PAN_STEP = 48;
+
+const clampPan = (v, frame, content) => Math.min(0, Math.max(frame - content, v));
+
+/**
+ * 화면 안에 고정된 틀 안에서 그보다 큰 내용(width×height)을 끌어 보는 상자. 틀은 움직이지 않고 내용만 transform으로 옮기며,
+ * 내용 끝이 틀 가장자리를 넘어 빈 곳이 보이지 않게 막는다. 마우스·터치는 포인터 이벤트로 함께 받고, 틀 안에서 끄는 동안에는
+ * 페이지가 같이 스크롤되지 않는다(touch-action: none). PAN_SLOP 넘게 끈 뒤에 뗀 것은 안쪽 버튼의 클릭으로 치지 않는다.
+ * focus: 처음(그리고 끌기 전 틀 크기가 바뀔 때) 틀 가운데에 둘 내용 안의 점 [x, y].
+ * 키보드로 안쪽 버튼에 포커스가 가면 그 버튼이 보이게 밀고, 틀에 포커스가 있으면 화살표 키로 민다.
+ */
+export function PanView({ width, height, focus, label, className = "", style, children }) {
+  const frame = useRef(null);
+  const canvas = useRef(null);
+  const pos = useRef({ x: 0, y: 0 });
+  const size = useRef({ w: 0, h: 0 });
+  const drag = useRef(null);
+  const moved = useRef(false);
+  const touched = useRef(false);
+  const raf = useRef(0);
+  const [fx, fy] = focus;
+
+  const paint = () => {
+    raf.current = 0;
+    if (canvas.current) canvas.current.style.transform = `translate3d(${pos.current.x}px, ${pos.current.y}px, 0)`;
+  };
+  const moveTo = (x, y, now = false) => {
+    pos.current = { x: clampPan(x, size.current.w, width), y: clampPan(y, size.current.h, height) };
+    if (now) {
+      window.cancelAnimationFrame(raf.current);
+      paint();
+    } else if (!raf.current) raf.current = window.requestAnimationFrame(paint);
+  };
+  const center = (x, y, now) => moveTo(size.current.w / 2 - x, size.current.h / 2 - y, now);
+
+  // 틀 크기(화면 높이에 따라 바뀐다)를 재고, 아직 끌지 않았으면 focus를 가운데 두고, 끌었으면 범위 안으로만 당긴다.
+  useEffect(() => {
+    const el = frame.current;
+    if (!el) return;
+    const measure = () => {
+      size.current = { w: el.clientWidth, h: el.clientHeight };
+      if (touched.current) moveTo(pos.current.x, pos.current.y, true);
+      else center(fx, fy, true);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      window.cancelAnimationFrame(raf.current);
+      raf.current = 0;
+    };
+    // moveTo·center는 ref만 쓴다.
+  }, [fx, fy, width, height]);
+
+  // 앱 화면 전체가 창 크기에 맞게 확대·축소되어 있으므로, 포인터가 움직인 화면 px를 틀 안의 px로 바꾼다.
+  const scaleOf = (el) => el.getBoundingClientRect().width / el.offsetWidth || 1;
+
+  const down = (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    // 두 번째 손가락은 무시한다(마우스는 앞선 끌기의 떼기를 놓쳤어도 새로 시작한다).
+    if (drag.current && drag.current.type !== "mouse" && e.pointerType !== "mouse") return;
+    moved.current = false;
+    drag.current = { id: e.pointerId, type: e.pointerType, sx: e.clientX, sy: e.clientY, x: pos.current.x, y: pos.current.y, scale: scaleOf(e.currentTarget) };
+  };
+  const move = (e) => {
+    const d = drag.current;
+    if (!d || d.id !== e.pointerId) return;
+    const dx = (e.clientX - d.sx) / d.scale;
+    const dy = (e.clientY - d.sy) / d.scale;
+    if (!moved.current) {
+      if (Math.hypot(dx, dy) <= PAN_SLOP) return;
+      // 끌기가 시작된 뒤에만 포인터를 붙잡는다(누르기만 했을 때는 클릭이 원래 버튼으로 가야 한다).
+      moved.current = true;
+      touched.current = true;
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+    }
+    moveTo(d.x + dx, d.y + dy);
+  };
+  // 터치는 처음 닿은 안쪽 요소가 포인터를 붙잡고 있다가 틀이 가져오면 그 요소에서 lostpointercapture가 올라오므로,
+  // 틀 자신이 놓친 경우만 끌기를 끝낸다.
+  const up = (e) => {
+    if (drag.current?.id !== e.pointerId) return;
+    drag.current = null;
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+  // 끌고 난 뒤 따라오는 클릭은 버리고, 다음 누르기부터 다시 받는다.
+  const clickCapture = (e) => {
+    if (!moved.current) return;
+    moved.current = false;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  // 키보드로 안쪽 버튼에 오면 그 버튼이 틀 안에 보이게 민다(브라우저가 틀을 스크롤해 버린 것도 되돌린다).
+  const focusIn = (e) => {
+    const el = frame.current;
+    el.scrollLeft = 0;
+    el.scrollTop = 0;
+    if (e.target === el || !canvas.current || drag.current) return;
+    const scale = scaleOf(el);
+    const box = e.target.getBoundingClientRect();
+    const view = el.getBoundingClientRect();
+    const left = (box.left - view.left) / scale - el.clientLeft;
+    const top = (box.top - view.top) / scale - el.clientTop;
+    const right = left + box.width / scale;
+    const bottom = top + box.height / scale;
+    if (left >= 0 && top >= 0 && right <= size.current.w && bottom <= size.current.h) return;
+    touched.current = true;
+    center((left + right) / 2 - pos.current.x, (top + bottom) / 2 - pos.current.y, true);
+  };
+  const key = (e) => {
+    if (e.target !== frame.current) return;
+    const step = { ArrowLeft: [PAN_STEP, 0], ArrowRight: [-PAN_STEP, 0], ArrowUp: [0, PAN_STEP], ArrowDown: [0, -PAN_STEP] }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    touched.current = true;
+    moveTo(pos.current.x + step[0], pos.current.y + step[1]);
+  };
+
+  return (
+    <div
+      ref={frame}
+      role="region"
+      aria-label={label}
+      tabIndex={0}
+      onPointerDown={down}
+      onPointerMove={move}
+      onPointerUp={up}
+      onPointerCancel={up}
+      onLostPointerCapture={(e) => e.target === e.currentTarget && up(e)}
+      onClickCapture={clickCapture}
+      onFocus={focusIn}
+      onKeyDown={key}
+      onDragStart={(e) => e.preventDefault()}
+      className={`relative cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing ${className}`}
+      style={style}
+    >
+      <div ref={canvas} className="absolute left-0 top-0 will-change-transform" style={{ width, height }}>
+        {children}
+      </div>
+    </div>
+  );
+}
