@@ -1323,7 +1323,7 @@ export function Major({ active, nav, state, setState }) {
             <li key={course.subject}>
               <button
                 onClick={() => nav.push("lesson", { subject: course.subject })}
-                className="pressable flex h-[70px] w-full items-center gap-[10px] rounded-[12px] border border-cream-line bg-cream px-[16px] text-left active:bg-cream-2"
+                className="pressable flex h-[70px] w-full items-center gap-[10px] rounded-[10px] border border-mint bg-white px-[16px] text-left active:bg-mint-soft"
               >
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="flex items-center gap-[6px]">
