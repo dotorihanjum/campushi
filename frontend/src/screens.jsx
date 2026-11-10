@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import React, { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { icon, img, yearCharacter } from "./assets.js";
 import {
   BackButton,
@@ -76,49 +76,102 @@ function view(state) {
 // 성적 글자: "B+", 정답률이 있으면 "B+ (82%)".
 const gradeText = (record) => (record ? `${record.grade}${Number.isInteger(record.percent) ? ` (${record.percent}%)` : ""}` : "");
 
-const SHOWN_SUBJECTS = 4;
+// 학년마다 처음에 보여 주는 과목 칩 줄 수.
+const SHOWN_ROWS = 2;
+const CHIP = "max-w-full rounded-[16px] border px-[12px] py-[6px] text-[13px] leading-[19px]";
+
+/**
+ * 한 학년의 과목 칩. 칩은 글자 길이만큼의 폭으로 이어 놓고 줄 끝에서 다음 줄로 넘긴다(아주 긴 이름은 칩 안에서 줄바꿈한다).
+ * 실제로 그려진 줄(칩의 offsetTop)을 세어 SHOWN_ROWS줄까지만 보이고, 넘는 칩은 더보기로 펼친다. 폭이 바뀌면 다시 센다.
+ */
+function YearChips({ year, chips }) {
+  const list = useRef(null);
+  const listId = useId();
+  // 칩 목록이 바뀔 때만 다시 잰다(chips 배열은 그릴 때마다 새로 만들어진다).
+  const names = chips.map((c) => `${c.open ? 1 : 0}${c.name}`).join("|");
+  const [opened, setOpened] = useState(false);
+  // 보이는 줄까지의 높이, 전체 높이, 숨는 칩 수.
+  const [fit, setFit] = useState({ shown: 0, full: 0, hidden: 0 });
+  useLayoutEffect(() => {
+    const el = list.current;
+    if (!el) return;
+    const measure = () => {
+      const items = [...el.children];
+      const tops = [...new Set(items.map((item) => item.offsetTop))].sort((x, y) => x - y);
+      const cut = tops[SHOWN_ROWS];
+      const kept = cut === undefined ? items : items.filter((item) => item.offsetTop < cut);
+      const shown = Math.max(0, ...kept.map((item) => item.offsetTop + item.offsetHeight));
+      const full = Math.max(0, ...items.map((item) => item.offsetTop + item.offsetHeight));
+      const hidden = items.length - kept.length;
+      setFit((f) => (f.shown === shown && f.full === full && f.hidden === hidden ? f : { shown, full, hidden }));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [names]);
+  const folded = fit.hidden > 0 && !opened;
+  return (
+    <>
+      <ul
+        ref={list}
+        id={listId}
+        className="relative mt-[8px] flex flex-wrap gap-[8px] overflow-hidden transition-[max-height] duration-300 ease-out motion-reduce:transition-none"
+        style={fit.hidden > 0 ? { maxHeight: folded ? fit.shown : fit.full } : undefined}
+      >
+        {chips.map(({ name, open, required }, i) => {
+          // 접혀서 잘린 칩은 화면 낭독기에도 읽히지 않게 한다(줄을 세려고 자리는 그대로 둔다).
+          const cut = folded && i >= chips.length - fit.hidden;
+          return (
+            <li
+              key={`${open ? "open" : "plan"}-${name}`}
+              aria-hidden={cut || undefined}
+              className={`${CHIP} ${open ? "border-mint bg-mint-soft font-semibold text-mint-deep" : "border-line bg-white text-ink-2"}`}
+              style={{ wordBreak: "keep-all", overflowWrap: "anywhere" }}
+            >
+              <span className="sr-only">{open ? "체험 과목 " : "구현 예정 "}</span>
+              {name}
+              {required && <span className={`ml-[4px] text-[10.5px] font-bold ${open ? "text-mint" : "text-gray"}`}>필수</span>}
+            </li>
+          );
+        })}
+      </ul>
+      {fit.hidden > 0 && (
+        <button
+          className="pressable mt-[6px] flex h-[28px] items-center gap-[4px] rounded-[8px] pr-[4px] text-[12.5px] text-gray"
+          aria-expanded={opened}
+          aria-controls={listId}
+          aria-label={opened ? `${year}학년 과목 접기` : `${year}학년 과목 ${fit.hidden}개 더보기`}
+          onClick={() => setOpened((o) => !o)}
+        >
+          {opened ? "접기" : `더보기 (+${fit.hidden})`}
+          <svg width="10" height="6" viewBox="0 0 10 6" className={`transition-transform duration-300 ${opened ? "rotate-180" : ""}`} aria-hidden>
+            <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      )}
+    </>
+  );
+}
+
 /**
  * 학과 상세의 학년별 과목 칩. 누를 수 없는 글 목록이다. 체험으로 고를 수 있는 과목(open)을 민트 칩으로 먼저 두고,
- * 그 밖의 편성 과목은 흰 칩으로 둔다. 그 밖의 과목이 4개를 넘으면 더 보기로 펼친다.
+ * 그 밖의 편성 과목은 흰 칩으로 둔다. 학년마다 따로 접고 펼친다.
  */
 function YearSubjects({ years, required }) {
-  const [opened, setOpened] = useState({});
-  const chip = "max-w-full rounded-[16px] border px-[12px] py-[6px] text-[13px] leading-[19px]";
   return (
     <div className="grid gap-[16px]">
-      {years.map(({ year, open, others: names }) => {
-        const more = names.length > SHOWN_SUBJECTS && !opened[year];
-        const shown = more ? names.slice(0, SHOWN_SUBJECTS) : names;
-        return (
-          <section key={year} aria-label={`${year}학년 과목`}>
-            <span className="inline-flex h-[28px] w-[47px] items-center justify-center rounded-full border border-mint text-[13px] font-semibold text-mint">
-              {year}학년
-            </span>
-            {/* 과목 칩: 글자 길이만큼의 폭으로 이어 놓고 줄 끝에서 다음 줄로 넘긴다. 아주 긴 이름은 칩 안에서 줄바꿈한다. */}
-            <ul className="mt-[8px] flex flex-wrap gap-[8px]">
-              {open.map((name) => (
-                <li key={`open-${name}`} className={`${chip} border-mint bg-mint-soft font-semibold text-mint-deep`} style={{ wordBreak: "keep-all", overflowWrap: "anywhere" }}>
-                  <span className="sr-only">체험 과목 </span>
-                  {name}
-                  {required(name) && <span className="ml-[4px] text-[10.5px] font-bold text-mint">필수</span>}
-                </li>
-              ))}
-              {shown.map((name) => (
-                <li key={name} className={`${chip} border-line bg-white text-ink-2`} style={{ wordBreak: "keep-all", overflowWrap: "anywhere" }}>
-                  <span className="sr-only">구현 예정 </span>
-                  {name}
-                  {required(name) && <span className="ml-[4px] text-[10.5px] font-bold text-gray">필수</span>}
-                </li>
-              ))}
-            </ul>
-            {more && (
-              <button className="text-button mt-[6px]" onClick={() => setOpened((o) => ({ ...o, [year]: true }))}>
-                {`더 보기 (${names.length - SHOWN_SUBJECTS}개)`}
-              </button>
-            )}
-          </section>
-        );
-      })}
+      {years.map(({ year, open, others }) => (
+        <section key={year} aria-label={`${year}학년 과목`}>
+          <span className="inline-flex h-[28px] w-[47px] items-center justify-center rounded-full border border-mint text-[13px] font-semibold text-mint">
+            {year}학년
+          </span>
+          <YearChips
+            year={year}
+            chips={[...open.map((name) => ({ name, open: true, required: required(name) })), ...others.map((name) => ({ name, open: false, required: required(name) }))]}
+          />
+        </section>
+      ))}
     </div>
   );
 }
