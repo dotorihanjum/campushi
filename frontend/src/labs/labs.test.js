@@ -114,3 +114,35 @@ test("이미 지금 조건으로 저장된 기록은 다시 계산하지 않고,
   assert.deepEqual(state.exempt, {});
   assert.equal(progressOf(state, dept(state)).years[1].open, false);
 });
+
+// 2학년 필수에 자료구조(체험 있음)가 있는 컴퓨터공학과.
+const RAW2 = { ...RAW, years: { ...RAW.years, 2: ["자료구조", "컴퓨터구조", "논리회로"] } };
+test("이수 조건 버전 2(자료구조 체험): 이미 3학년이 열린 사용자는 그대로, 아직이면 자료구조도 이수해야 한다", () => {
+  const lab = LABS[RAW.id]["자료구조"];
+  const was = lab.status;
+  lab.status = "verified";
+  try {
+    assert.equal(lab.since, 2);
+    assert.equal(CONDITIONS >= 2, true);
+    const passed = { grade: "P", percent: null, attempts: 1, last: "P" };
+    const notes = { [courseKey(RAW.id, CALC)]: "기록", [courseKey(RAW.id, WEB)]: "기록" };
+    // 조건 버전 1로 저장된 사용자: 1학년 필수를 이수해 2학년이 열렸고, 2학년 필수(컴퓨터구조·자료구조)는 체험이 없어 3학년도 열려 있었다.
+    const before = normalize({
+      ...savedBefore({ [courseKey(RAW.id, CALC)]: passed, [courseKey(RAW.id, WEB)]: passed }),
+      catalog: [RAW2],
+      conditions: 1,
+      notes,
+    });
+    assert.deepEqual(before.exempt, { [courseKey(RAW.id, "자료구조")]: true });
+    assert.equal(progressOf(before, dept(before)).years[2].open, true);
+    // 새로 시작한 사용자는 자료구조까지 이수해야 3학년이 열린다.
+    let fresh = normalize({ ...structuredClone(initialState), catalog: [RAW2], journeys: { [RAW.id]: {} } });
+    fresh = take(take(fresh, CALC, 1), WEB, 1);
+    assert.equal(progressOf(fresh, dept(fresh)).years[1].open, true);
+    assert.equal(progressOf(fresh, dept(fresh)).years[2].open, false);
+    fresh = take(fresh, "자료구조", 1);
+    assert.equal(progressOf(fresh, dept(fresh)).years[2].open, true);
+  } finally {
+    lab.status = was;
+  }
+});

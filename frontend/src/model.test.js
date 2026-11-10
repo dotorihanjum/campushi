@@ -73,11 +73,11 @@ test("과목마다 이수구분·학년·체험(졸업 과제, 전공 실습, �
   assert.equal(gameOf(d, "알고리즘"), "group:computing");
   assert.equal(gameOf(d, "미분적분학"), "theory");
   assert.equal(gameOf(d, "객체지향프로그래밍"), "match");
-  assert.ok(isPlanned(d, "이산구조") && isPlanned(d, "자료구조"));
+  assert.ok(isPlanned(d, "이산구조") && isPlanned(d, "오픈소스SW개발방법및도구"));
   assert.ok(!isPlanned(d, "졸업프로젝트"));
   assert.equal(yearOf(d, "운영체제"), 3);
   assert.equal(yearOf(d, "없는과목"), null);
-  assert.ok(isRequired(d, "자료구조") && !isRequired(d, "이산구조"));
+  assert.ok(isRequired(d, "오픈소스SW개발방법및도구") && !isRequired(d, "이산구조"));
   assert.deepEqual(yearSubjects(d)[0], { year: 1, open: ["객체지향프로그래밍", "미분적분학"], others: ["이산구조"] });
 });
 
@@ -95,7 +95,7 @@ test("1학년은 처음부터 열리고, 체험이 있는 필수과목을 모두
   assert.equal(progress(state).openYear, 1);
   state = take(state, RAW_CSE.id, "미분적분학", 9);
   p = progress(state);
-  // 2학년 필수(자료구조·컴퓨터구조)는 체험이 없어 조건에서 빠지므로 3학년까지 바로 열린다.
+  // 2학년 필수(오픈소스SW개발방법및도구·컴퓨터구조)는 체험이 없어 조건에서 빠지므로 3학년까지 바로 열린다.
   assert.deepEqual(p.years.map((y) => y.open), [true, true, true, false]);
   assert.deepEqual(p.years[1].left, []);
   assert.deepEqual(p.years[2].left.map((c) => c.subject), ["알고리즘", "운영체제"]);

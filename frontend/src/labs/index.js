@@ -8,15 +8,17 @@
 // 사용자는 다시 잠그지 않는다(2026-11-10 사용자 결정). 저장된 기록의 조건 버전(state.conditions)이 since보다 낮으면
 // 그때 이미 열려 있던 학년의 새 조건 과목을 예외(state.exempt)로 남긴다(model.js의 normalize).
 import { pythonFunctions } from "./python-functions/data.js";
+import { stackQueue } from "./stack-queue/data.js";
 
 export const LABS = {
   "khu-cse": {
     "웹/파이선프로그래밍": pythonFunctions,
+    자료구조: stackQueue,
   },
 };
 
 // 지금 이수 조건 버전. 필수과목에 체험을 새로 공개할 때마다 1씩 올리고, 그 체험의 since를 이 값으로 둔다.
-export const CONDITIONS = 1;
+export const CONDITIONS = 2;
 
 const verified = (lab) => (lab?.status === "verified" ? lab : null);
 
