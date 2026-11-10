@@ -5,8 +5,19 @@ import React from "react";
 //
 // theme: { bg, panel, line, text, sub, accent, accentText }
 export const THEMES = {
-  // 코드 편집기처럼 어두운 화면(웹·프로그래밍 실습).
-  code: { bg: "#1b2030", panel: "#242b3d", line: "#343d55", text: "#e8ebf2", sub: "#a9b1c4", accent: "#27d8cd", accentText: "#06302d" },
+  // 밝은 문제 풀이 화면(블록 끌어다 놓기 등). good·bad·well은 맞은 칸·틀린 칸·보기 칸 바탕.
+  paper: {
+    bg: "#f6faf9",
+    panel: "#ffffff",
+    line: "#d5e2df",
+    text: "#202b3c",
+    sub: "#5d6b7e",
+    accent: "#087f77",
+    accentText: "#ffffff",
+    good: "#e3f8f5",
+    bad: "#fdeceb",
+    well: "#eaf2f0",
+  },
 };
 
 /** 체험 화면 틀. steps: 단계 이름들, step: 지금 단계 번호(-1이면 단계 표시 없음). */

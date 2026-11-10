@@ -7,11 +7,11 @@
 // since: 이 체험이 생긴 "이수 조건 버전". 필수과목에 체험이 생기면 다음 학년이 열리는 조건이 되는데, 이미 다음 학년이 열린
 // 사용자는 다시 잠그지 않는다(2026-11-10 사용자 결정). 저장된 기록의 조건 버전(state.conditions)이 since보다 낮으면
 // 그때 이미 열려 있던 학년의 새 조건 과목을 예외(state.exempt)로 남긴다(model.js의 normalize).
-import { webPython } from "./web-python/data.js";
+import { pythonFunctions } from "./python-functions/data.js";
 
 export const LABS = {
   "khu-cse": {
-    "웹/파이선프로그래밍": webPython,
+    "웹/파이선프로그래밍": pythonFunctions,
   },
 };
 

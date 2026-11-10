@@ -1366,7 +1366,7 @@ class LabBoundary extends Component {
       <Screen footer={<FilledButton onClick={this.props.onQuit}>수업으로 돌아가기</FilledButton>}>
         <div className="absolute inset-x-[20px] top-[160px]" role="alert">
           <h1 className="text-[22px] font-bold leading-[32px] text-navy">실습 화면을 열지 못했어요</h1>
-          <p className="mt-[8px] text-[14px] leading-[22px] text-gray">인터넷 연결을 확인하고 다시 들어와 주세요. 쓰던 코드는 이 브라우저에 남아 있어요.</p>
+          <p className="mt-[8px] text-[14px] leading-[22px] text-gray">인터넷 연결을 확인하고 다시 들어와 주세요.</p>
         </div>
       </Screen>
     );
@@ -1502,7 +1502,7 @@ export function Lesson({ active, nav, route, state, setState }) {
                 : result.opened
                   ? `${result.opened[0] - 1}학년 필수과목을 모두 이수했어요. 이제 ${result.opened.at(-1)}학년 과목까지 들을 수 있어요.` +
                     (result.opened.length > 1 ? ` ${result.opened.slice(0, -1).join("·")}학년은 체험이 있는 필수과목이 아직 없어 함께 열렸어요.` : "")
-                  : `${isRequired(d, subject) ? "필수과목으로 인정됐어요." : "선택과목으로 성적표에 남아요."} ${lab ? "다시 하면 쓰던 코드를 이어서 고칠 수 있어요." : "다시 해 보면 다른 문제가 나와요."}`}
+                  : `${isRequired(d, subject) ? "필수과목으로 인정됐어요." : "선택과목으로 성적표에 남아요."} 다시 해 볼 수도 있어요.`}
             </p>
           </MintCard>
           {result.opened && (
@@ -1570,7 +1570,6 @@ export function Lesson({ active, nav, route, state, setState }) {
           <LabScreen
             lab={lab}
             subject={subject}
-            saveKey={key}
             onQuit={leave}
             onDone={(summary, score) => {
               setState((s) => savePlay(s, d.id, subject, game, summary, score));

@@ -37,18 +37,20 @@ test("등록부: 검증을 통과한 체험만 과목에 붙고, 체험이 있�
   assert.equal(lab.since <= CONDITIONS, true);
   const state = normalize({ ...structuredClone(initialState), catalog: [RAW] });
   const d = dept(state);
-  assert.equal(gameOf(d, WEB), "lab:web-python");
+  assert.equal(gameOf(d, WEB), "lab:python-functions");
   assert.equal(labFor(d, WEB), lab);
   assert.equal(gameOf(d, CALC), "theory");
-  assert.equal(isLabId("lab:web-python"), true);
-  assert.equal(isGame("lab:web-python"), true);
+  assert.equal(isLabId("lab:python-functions"), true);
+  assert.equal(isGame("lab:python-functions"), true);
+  // 내린 체험(자기소개 웹사이트)의 결과는 더는 체험 결과로 보지 않는다.
+  assert.equal(isLabId("lab:web-python"), false);
   assert.equal(isLabId("lab:없는체험"), false);
   // 검토 전(draft)인 체험은 공개되지 않는다.
   lab.status = "draft";
   try {
     assert.equal(labOf(RAW.id, WEB), null);
     assert.equal(gameOf(d, WEB), "theory");
-    assert.equal(isLabId("lab:web-python"), false);
+    assert.equal(isLabId("lab:python-functions"), false);
   } finally {
     lab.status = "verified";
   }
