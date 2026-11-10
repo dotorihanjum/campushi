@@ -1247,10 +1247,14 @@ export function Major({ active, nav, state, setState }) {
   const fallbackYear = [...openYears].reverse().find(playable) ?? openYears.at(-1) ?? 1;
   const year = openYears.includes(pickYear) ? pickYear : fallbackYear;
   const more = order(years[year - 1].courses);
+  // 위쪽에 학교와 소속 단과대학을 쓴다. 한 줄(가운데 220px)이 빠듯한 긴 이름(17자 이상, 예: 소프트웨어융합대학)은 학교 아래로 줄을 바꾼다.
+  const affiliation = d.college || d.building;
+  const place = affiliation ? `${d.school} · ${affiliation}` : d.school;
+  const wrapPlace = Boolean(affiliation) && place.length > 16;
   return (
     <Screen h={LIST_TOP + listH + 24} foot={TAB_TOP} veil={false} footer={<TabBar active="major" nav={nav} state={state} />}>
-      <T y={61} size={16} center clip={220} className="font-semibold text-mint">
-        {`${d.school} · ${d.building}`}
+      <T y={wrapPlace ? 51 : 61} size={16} lh={wrapPlace ? 21 : undefined} center clip={220} className="font-semibold text-mint">
+        {wrapPlace ? `${d.school}\n${affiliation}` : place}
       </T>
       <CreditPill credits={state.credits || 0} className="absolute right-[20px] top-[55px]" />
       <T y={122.5} size={28.5} lh={36} left={20} className="a-up font-bold text-navy">

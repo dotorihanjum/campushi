@@ -80,6 +80,8 @@ export function createDepartment(raw) {
     school,
     name,
     officialName: text(raw.official_name) || name,
+    // 소속 단과대학. 공식 이름("소프트웨어융합대학 컴퓨터공학부 컴퓨터공학과")의 첫 마디가 "…대학"일 때만 쓴다.
+    college: (text(raw.official_name) || "").split(" ").find((word, i) => i === 0 && word.endsWith("대학")) || "",
     category: text(raw.category, 20) || "",
     // 학과가 있는 국제캠퍼스 건물(campus.js의 건물 이름).
     building: text(raw.building, 60) || "",
