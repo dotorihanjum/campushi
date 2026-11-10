@@ -1,4 +1,4 @@
-import React, { Component, Suspense, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import React, { Component, Suspense, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { icon, img, yearCharacter } from "./assets.js";
 import {
   BackButton,
@@ -909,35 +909,68 @@ const experienceName = (d, id) =>
         ? `전공 실습(${templates[d.practice.template].title})`
         : lessonTypes[id]?.title || "";
 
-/** 과목 카드. 이수한 과목은 성적을, 끝까지 해봤지만 기록을 남기지 않은(예전 기준으로 이수하지 못한) 과목은 기록을 남기라고 알린다. */
-function CourseCard({ top, d, course, wait, onClick }) {
+/** 과목 카드. 구현 예정·이수(성적, 다시 듣기)·기록을 남기지 않은 과목·안 들은 과목을 배지로 알린다. */
+function CourseRow({ d, course, onClick }) {
   const sub =
     course.record && !course.passed
       ? "한 줄 기록을 남기면 이수돼요"
       : course.final
-        ? `졸업 과제 · ${d.final.name}`
-        : `${course.year}학년 · ${course.kind} · ${experienceName(d, gameOf(d, course.subject))}`;
-  const badge = course.passed ? `${course.record.grade} · 다시 듣기` : course.record ? "이어서" : "듣기";
+        ? `${course.year}학년 · 졸업 과제 · ${d.final.name}`
+        : `${course.year}학년 · ${course.kind} · ${course.planned ? "체험을 만들고 있어요" : experienceName(d, gameOf(d, course.subject))}`;
+  const badge = course.planned ? "구현 예정" : course.passed ? `${course.record.grade} · 다시 듣기` : course.record ? "기록 남기기" : "듣기";
   return (
     <button
       onClick={onClick}
       aria-label={`${course.subject}${course.required ? ", 필수" : ""}, ${sub}, ${badge}`}
-      className="pressable a-up absolute left-[21px] flex h-[69px] w-[365px] items-center gap-[10px] rounded-[10px] border border-mint bg-white pl-[16px] pr-[14px] text-left"
-      style={{ top, animationDelay: `${wait}s` }}
+      className={`pressable flex h-[70px] w-full items-center gap-[10px] rounded-[10px] border bg-white px-[16px] text-left active:bg-mint-soft ${course.planned ? "border-line" : "border-mint"}`}
     >
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="flex items-center gap-[6px]">
-          <span className="truncate text-[14px] font-semibold leading-[20px] text-ink-2">{course.subject}</span>
+          <span className={`truncate text-[14px] font-semibold leading-[20px] ${course.planned ? "text-slate" : "text-ink-2"}`}>{course.subject}</span>
           {course.required && <span className="shrink-0 text-[11px] font-bold text-mint">필수</span>}
         </span>
-        <span className="truncate text-[10.5px] leading-[16px] text-ink-3">{sub}</span>
+        <span className="truncate text-[11px] leading-[17px] text-ink-3">{sub}</span>
       </span>
       <span
-        className={`flex h-[24px] shrink-0 items-center rounded-full px-[10px] text-[12px] font-semibold text-mint-deep ${course.passed ? "border border-mint bg-white" : "bg-mint-soft"}`}
+        className={`flex h-[24px] shrink-0 items-center rounded-full px-[10px] text-[12px] font-semibold ${
+          course.planned ? "border border-line text-gray" : course.passed ? "border border-mint bg-white text-mint-deep" : "bg-mint-soft text-mint-deep"
+        }`}
       >
         {badge}
       </span>
     </button>
+  );
+}
+
+/** 과목 카드 목록: 처음에는 SHOWN_TODO개만 보이고, 나머지는 더보기로 펼친다. */
+function CourseList({ d, courses, nav, label }) {
+  const [opened, setOpened] = useState(false);
+  const id = useId();
+  const shown = opened ? courses : courses.slice(0, SHOWN_TODO);
+  const hidden = courses.length - SHOWN_TODO;
+  return (
+    <>
+      <ul id={id} className="grid gap-[8px]" aria-label={label}>
+        {shown.map((course) => (
+          <li key={course.subject}>
+            <CourseRow d={d} course={course} onClick={() => nav.push("lesson", { subject: course.subject })} />
+          </li>
+        ))}
+      </ul>
+      {hidden > 0 && (
+        <button
+          className="pressable mt-[6px] flex h-[32px] items-center gap-[4px] rounded-[8px] pr-[4px] text-[12.5px] text-gray"
+          aria-expanded={opened}
+          aria-controls={id}
+          onClick={() => setOpened((o) => !o)}
+        >
+          {opened ? "접기" : `더보기 (+${hidden})`}
+          <svg width="10" height="6" viewBox="0 0 10 6" className={opened ? "rotate-180" : ""} aria-hidden>
+            <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      )}
+    </>
   );
 }
 
@@ -1141,6 +1174,8 @@ export function Home({ nav, route, state, setState, catalog }) {
 /* ------------------------------------------------------------------ */
 
 const SHOWN_TODO = 3;
+// 학과 홈에서 과목 목록이 시작하는 높이(아트보드 기준).
+const LIST_TOP = 528;
 
 export function Major({ active, nav, state, setState }) {
   const v = view(state);
@@ -1160,6 +1195,19 @@ export function Major({ active, nav, state, setState }) {
   const pct = useCountUp(percent);
   // 아래 "다른 과목 더 듣기"에서 고른 학년(처음에는 바로 앞 학년).
   const [pickYear, setPickYear] = useState(null);
+  // 과목 목록(펼치면 길어진다)의 높이를 재서 화면 높이를 정한다.
+  const [listH, setListH] = useState(0);
+  const watcher = useRef(null);
+  const listRef = useCallback((el) => {
+    watcher.current?.disconnect();
+    watcher.current = null;
+    if (!el) return;
+    const update = () => setListH(el.offsetHeight);
+    update();
+    watcher.current = new ResizeObserver(update);
+    watcher.current.observe(el);
+  }, []);
+  useEffect(() => () => watcher.current?.disconnect(), []);
   // 입학한 학과가 하나도 없으면 안내와 함께 학과를 고르러 갈 수 있게 한다.
   if (!v?.journey && !fallback)
     return (
@@ -1186,34 +1234,21 @@ export function Major({ active, nav, state, setState }) {
   const { d, progress } = v;
   const { openYear, graduated, years, passedCount } = progress;
   const now = years[openYear - 1];
-  // 졸업한 뒤에는 아직 안 들은 체험 과목(모든 학년)을 보여 주고 계속 들을 수 있게 한다.
+  // 과목 순서: 체험이 있는 것 먼저, 그 안에서 필수 먼저, 안 들은 것 먼저.
+  const order = (list) => [...list].sort((x, y) => x.planned - y.planned || y.required - x.required || x.passed - y.passed);
+  // 졸업 전에는 "N학년 때는 이런 과목을 들어요"(이번 학년 과목 모두), 졸업한 뒤에는 아직 안 들은 체험 과목(모든 학년).
   const untaken = years.flatMap((item) => item.courses).filter((course) => !course.planned && !course.record);
-  // 졸업 전에는 "N학년 때는 이런 과목을 들어요": 이번 학년의 체험 과목(필수 먼저, 안 들은 것 먼저). 해금까지 남은 것은 위 진행 막대가 보여 준다.
-  const todo = graduated
-    ? untaken
-    : now.courses
-        .filter((course) => !course.planned)
-        .sort((a, b) => b.required - a.required || a.passed - b.passed || b.final - a.final);
-  const nowPlanned = now.courses.filter((course) => course.planned).length;
-  const shownTodo = todo.slice(0, SHOWN_TODO);
+  const todo = graduated ? untaken : order(now.courses);
   const open = () => nav.push("courses", { year: graduated ? (untaken[0]?.year ?? 4) : openYear });
-  const listEnd = shownTodo.length ? 565 + shownTodo.length * 84 + (todo.length > SHOWN_TODO || (!graduated && nowPlanned > 0) ? 30 : 0) : 615;
-  // 다른 과목 더 듣기: 열린 학년 가운데 고른 학년의, 체험이 있는 과목(위 목록에 있는 것은 빼고). 들은 과목을 먼저 둔다.
-  // 이번 학년 과목은 위에 있으니, 여기서는 지난 학년(1학년 ~ N-1학년)만 고른다. 졸업했으면 모든 학년.
+  // 다른 과목 더 듣기: 지난 학년(1학년 ~ N-1학년, 졸업했으면 모든 학년) 가운데 고른 학년의 과목.
   const openYears = years.filter((item) => item.open && (graduated || item.year < openYear)).map((item) => item.year);
   // 처음에는 지금 학년 바로 앞에서부터 거슬러 올라가 들을 수 있는 과목이 있는 학년을 고른다(없으면 바로 앞 학년).
-  const playable = (item) => years[item - 1].courses.some((course) => !course.planned && !shownTodo.includes(course));
+  const playable = (item) => years[item - 1].courses.some((course) => !course.planned);
   const fallbackYear = [...openYears].reverse().find(playable) ?? openYears.at(-1) ?? 1;
   const year = openYears.includes(pickYear) ? pickYear : fallbackYear;
-  const yearInfo = years[year - 1];
-  const more = yearInfo.courses
-    .filter((course) => !course.planned && !shownTodo.includes(course))
-    .sort((a, b) => !!b.record - !!a.record);
-  const plannedCount = yearInfo.courses.filter((course) => course.planned).length;
-  const moreTop = listEnd + 22;
-  const moreEnd = openYears.length ? moreTop + 96 + (more.length ? more.length * 78 : 52) + 34 : listEnd;
+  const more = order(years[year - 1].courses);
   return (
-    <Screen h={moreEnd + 24} foot={TAB_TOP} veil={false} footer={<TabBar active="major" nav={nav} state={state} />}>
+    <Screen h={LIST_TOP + listH + 24} foot={TAB_TOP} veil={false} footer={<TabBar active="major" nav={nav} state={state} />}>
       <BackButton onClick={() => nav.reset(["home"])} />
       <T y={61} size={16} center clip={220} className="font-semibold text-mint">
         {`${d.school} · ${d.building}`}
@@ -1272,91 +1307,46 @@ export function Major({ active, nav, state, setState }) {
           졸업 리포트 보기 →
         </button>
       )}
-      <T y={535.5} size={15} left={21} className="a-up font-bold text-ink-2" style={delay(0.36)}>
-        {graduated ? "아직 안 들은 과목" : `${openYear}학년 때는 이런 과목을 들어요`}
-      </T>
-      {shownTodo.map((course, n) => (
-        <CourseCard
-          key={course.subject}
-          top={565 + n * 84}
-          wait={0.42 + n * 0.06}
-          d={d}
-          course={course}
-          onClick={() => nav.push("lesson", { subject: course.subject })}
-        />
-      ))}
-      {(todo.length > SHOWN_TODO || (!graduated && nowPlanned > 0)) && shownTodo.length > 0 && (
-        <T y={565 + shownTodo.length * 84} size={12.5} left={21} className="a-up text-ink-3" style={delay(0.6)}>
-          {graduated
-            ? `외 ${todo.length - SHOWN_TODO}과목은 과목 목록에서 볼 수 있어요.`
-            : `${todo.length > SHOWN_TODO ? `외 ${todo.length - SHOWN_TODO}과목, ` : ""}구현 예정 ${nowPlanned}과목은 위 "${openYear}학년 과목 듣기"에서 볼 수 있어요.`}
-        </T>
-      )}
-      {shownTodo.length === 0 && (
-        <T y={585} size={13} left={21} className="a-up text-ink-3" style={delay(0.42)}>
-          {graduated ? "체험할 수 있는 과목을 모두 들었어요. 들었던 과목을 다시 해 볼 수도 있어요." : `${openYear}학년은 아직 체험할 수 있는 과목이 없어요. 체험을 만들고 있어요.`}
-        </T>
-      )}
-      {openYears.length > 0 && (
-      <section aria-labelledby="major-more" className="a-up absolute inset-x-[20px]" style={{ top: moreTop, ...delay(0.5) }}>
-        <h2 id="major-more" className="text-[15px] font-bold leading-[22px] text-ink-2">
-          다른 과목 더 듣기
-        </h2>
-        <p className="mt-[2px] text-[12.5px] leading-[19px] text-ink-3">지난 학년에 들었던 과목을 다시 해 보거나, 못 들은 과목을 들어 봐요.</p>
-        <div className="no-scrollbar mt-[10px] flex gap-[6px] overflow-x-auto" role="tablist" aria-label="학년 고르기">
-          {openYears.map((item) => (
-            <button
-              key={item}
-              role="tab"
-              aria-selected={item === year}
-              onClick={() => setPickYear(item)}
-              className={`pressable h-[36px] shrink-0 rounded-full border px-[14px] text-[13px] font-semibold ${
-                item === year ? "border-mint bg-mint text-white" : "border-mint bg-white text-mint-deep"
-              }`}
-            >
-              {`${item}학년`}
-            </button>
-          ))}
-        </div>
-        <ul className="mt-[12px] grid gap-[8px]" role="tabpanel" aria-label={`${year}학년 과목`}>
-          {more.map((course) => (
-            <li key={course.subject}>
-              <button
-                onClick={() => nav.push("lesson", { subject: course.subject })}
-                className="pressable flex h-[70px] w-full items-center gap-[10px] rounded-[10px] border border-mint bg-white px-[16px] text-left active:bg-mint-soft"
-              >
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="flex items-center gap-[6px]">
-                    <span className="truncate text-[14px] font-semibold leading-[20px] text-ink-2">{course.subject}</span>
-                    {course.required && <span className="shrink-0 text-[11px] font-bold text-mint">필수</span>}
-                  </span>
-                  <span className="truncate text-[11.5px] leading-[17px] text-ink-3">
-                    {course.final ? `졸업 과제 · ${d.final.name}` : `${course.kind} · ${experienceName(d, gameOf(d, course.subject))}`}
-                  </span>
-                </span>
-                <span
-                  className={`flex h-[24px] shrink-0 items-center rounded-full px-[10px] text-[12px] font-semibold ${
-                    course.passed ? "border border-mint bg-white text-mint-deep" : "bg-mint-soft text-mint-deep"
+      <div ref={listRef} className="absolute inset-x-[20px] pb-[8px]" style={{ top: LIST_TOP }}>
+        <section aria-labelledby="major-now" className="a-up" style={delay(0.36)}>
+          <h2 id="major-now" className="text-[15px] font-bold leading-[22px] text-ink-2">
+            {graduated ? "아직 안 들은 과목" : `${openYear}학년 때는 이런 과목을 들어요`}
+          </h2>
+          <div className="mt-[10px]">
+            {todo.length ? (
+              <CourseList d={d} courses={todo} nav={nav} label={graduated ? "아직 안 들은 과목" : `${openYear}학년 과목`} />
+            ) : (
+              <p className="text-[13px] leading-[20px] text-ink-3">체험할 수 있는 과목을 모두 들었어요. 들었던 과목을 다시 해 볼 수도 있어요.</p>
+            )}
+          </div>
+        </section>
+        {openYears.length > 0 && (
+          <section aria-labelledby="major-more" className="a-up mt-[26px]" style={delay(0.5)}>
+            <h2 id="major-more" className="text-[15px] font-bold leading-[22px] text-ink-2">
+              다른 과목 더 듣기
+            </h2>
+            <p className="mt-[2px] text-[12.5px] leading-[19px] text-ink-3">지난 학년에 들었던 과목을 다시 해 보거나, 못 들은 과목을 들어 봐요.</p>
+            <div className="no-scrollbar mt-[10px] flex gap-[6px] overflow-x-auto" role="tablist" aria-label="학년 고르기">
+              {openYears.map((item) => (
+                <button
+                  key={item}
+                  role="tab"
+                  aria-selected={item === year}
+                  onClick={() => setPickYear(item)}
+                  className={`pressable h-[36px] shrink-0 rounded-full border px-[14px] text-[13px] font-semibold ${
+                    item === year ? "border-mint bg-mint text-white" : "border-mint bg-white text-mint-deep"
                   }`}
                 >
-                  {course.passed ? `${course.record.grade} · 다시 듣기` : course.record ? "기록 남기기" : "듣기"}
-                </span>
-              </button>
-            </li>
-          ))}
-          {more.length === 0 && (
-            <li className="rounded-[12px] border border-line bg-white px-[16px] py-[14px] text-[13px] leading-[20px] text-ink-3">
-              {yearInfo.courses.some((course) => !course.planned)
-                ? `${year}학년의 체험 과목은 위 목록에 있어요.`
-                : `${year}학년은 아직 체험할 수 있는 과목이 없어요. 체험을 만들고 있어요.`}
-            </li>
-          )}
-        </ul>
-        <button className="text-button mt-[10px]" onClick={() => nav.push("courses", { year })}>
-          {`${year}학년 과목 전체 보기${plannedCount ? ` (구현 예정 ${plannedCount}과목 포함)` : ""} →`}
-        </button>
-      </section>
-      )}
+                  {`${item}학년`}
+                </button>
+              ))}
+            </div>
+            <div className="mt-[12px]" role="tabpanel" aria-label={`${year}학년 과목`}>
+              <CourseList key={year} d={d} courses={more} nav={nav} label={`${year}학년 과목`} />
+            </div>
+          </section>
+        )}
+      </div>
     </Screen>
   );
 }
