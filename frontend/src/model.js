@@ -3,6 +3,7 @@ import { gameFor, isGame } from "./games.js";
 import { groupExperience, GROUPS } from "./groups.js";
 import { better, cleanScore, gradeOf, isGrade, passes, PASS } from "./grades.js";
 import { isOpenCampus } from "./campus.js";
+import { CONDITIONS, LABS, labOf } from "./labs/index.js";
 
 // 학기 없이 학년 단위로 진행한다(2026-11-09 사용자 결정). 열린 학년의 과목은 아무 순서로나 듣고,
 // 그 학년 필수과목(전공기초·전공필수) 중 체험이 있는 것을 모두 B- 이상으로 이수하면 다음 학년이 열린다.
@@ -43,6 +44,10 @@ export const initialState = {
   introSeen: false,
   // 시작하기 다음에 고른 캠퍼스(campus.js의 CAMPUSES id). 열린 캠퍼스만 고를 수 있다.
   campus: null,
+  // 이 기록에 적용된 이수 조건 버전(labs/index.js의 CONDITIONS). 새로 시작하면 지금 버전이다.
+  conditions: CONDITIONS,
+  // 다음 학년이 이미 열린 뒤에 체험이 생긴 필수과목: { "학과id|과목": true }. 다음 학년이 열리는 조건에서 뺀다(다시 잠그지 않는다).
+  exempt: {},
 };
 
 const text = (value, limit = 200) => (typeof value === "string" && value.trim() && value.length <= limit ? value : null);
@@ -101,9 +106,16 @@ export const kindOf = (d, subject) => d.kinds[subject] || ELECTIVE;
 export const isRequired = (d, subject) => !!d.kinds[subject];
 // 과목이 편성된 학년(처음 나오는 학년). 편성표에 없으면 null.
 export const yearOf = (d, subject) => YEARS.find((year) => d.years[year].includes(subject)) ?? null;
-// 과목의 체험: 졸업 과제 과목이면 final, 실습 과목이면 학과군 실습(group:학과군), 연습 문제가 있으면 그 유형, 없으면 null(구현 예정).
-export const gameOf = (d, subject) =>
-  subject === d.finalSubject ? "final" : subject === d.practiceSubject ? `group:${d.studyGroup}` : gameFor(subject, d.lessonGames);
+// 과목의 체험: 졸업 과제 과목이면 final, 실습 과목이면 학과군 실습(group:학과군), 진짜 수업 체험(labs)이 있으면 lab:<id>,
+// 연습 문제가 있으면 그 유형, 없으면 null(구현 예정). 체험이 있는 과목의 연습 문제는 배우기 단계의 연습(성적 없음)으로 쓴다.
+export const gameOf = (d, subject) => {
+  if (subject === d.finalSubject) return "final";
+  if (subject === d.practiceSubject) return `group:${d.studyGroup}`;
+  const lab = labOf(d.id, subject);
+  return lab ? `lab:${lab.id}` : gameFor(subject, d.lessonGames);
+};
+// 과목의 진짜 수업 체험 데이터. 없으면 null.
+export const labFor = (d, subject) => (subject === d.finalSubject || subject === d.practiceSubject ? null : labOf(d.id, subject));
 // 체험이 아직 없는(구현 예정) 과목인지.
 export const isPlanned = (d, subject) => !gameOf(d, subject);
 
@@ -117,24 +129,31 @@ export const recordOf = (state, id, subject) => state.records?.[courseKey(id, su
  * 1학년은 늘 열려 있고, 앞 학년이 열려 있고 그 학년의 남은 필수과목이 없으면 다음 학년이 열린다.
  * 졸업: 4학년이 열렸고 4학년 남은 필수과목이 없으며 졸업 과제를 이수했을 때.
  */
-export function progressOf(state, d) {
+export function progressOf(state, d, { ignore } = {}) {
   const enrolled = !!state.journeys?.[d.id];
   const years = [];
   for (const year of YEARS) {
     const courses = d.years[year].map((subject) => {
       const record = recordOf(state, d.id, subject);
+      // ignore: 계산에서 체험이 없던 것으로 볼 과목(이전 이수 조건으로 계산할 때, normalize).
+      const planned = isPlanned(d, subject) || !!ignore?.has(subject);
+      const passed = !!record && passes(record.grade);
+      const exempt = !planned && !!state.exempt?.[courseKey(d.id, subject)];
       return {
         subject,
         year,
         kind: kindOf(d, subject),
         required: isRequired(d, subject),
-        planned: isPlanned(d, subject),
+        planned,
         final: subject === d.finalSubject,
         record,
-        passed: !!record && passes(record.grade),
+        passed,
+        // 다음 학년이 열린 뒤에 생긴 체험이라 조건에서 빠진 과목. 이수하기 전까지 "새 체험이 추가됐어요"로 알린다.
+        exempt,
+        added: exempt && !passed,
       };
     });
-    const left = courses.filter((course) => course.required && !course.planned && !course.passed);
+    const left = courses.filter((course) => course.required && !course.planned && !course.passed && !course.exempt);
     const open = year === 1 || (years[year - 2].open && years[year - 2].left.length === 0);
     years.push({ year, open, courses, left });
   }
@@ -143,7 +162,7 @@ export function progressOf(state, d) {
   const graduated = enrolled && years[3].open && years[3].left.length === 0 && !!finalRecord && passes(finalRecord.grade);
   const taken = years.flatMap((item) => item.courses).filter((course) => course.record);
   // 졸업까지 해야 할 것: 체험이 있는 필수과목과 졸업 과제. 그중 이수한 비율.
-  const goals = years.flatMap((item) => item.courses).filter((course) => (course.required && !course.planned) || course.final);
+  const goals = years.flatMap((item) => item.courses).filter((course) => (course.required && !course.planned && !course.exempt) || course.final);
   const done = goals.filter((course) => course.passed).length;
   return {
     enrolled,
@@ -194,7 +213,7 @@ export function completeCourse(state, id, subject, note = "") {
  */
 export function nextStepOf(progress) {
   const year = progress.openYear;
-  const goals = progress.years[year - 1].courses.filter((course) => (course.required && !course.planned) || (year === 4 && course.final));
+  const goals = progress.years[year - 1].courses.filter((course) => (course.required && !course.planned && !course.exempt) || (year === 4 && course.final));
   const done = goals.filter((course) => course.passed).length;
   return {
     target: year < 4 ? year + 1 : null,
@@ -241,11 +260,7 @@ export function normalize(value) {
       return kept ? [[key, kept]] : [];
     }));
   const journeys = Object.fromEntries(Object.keys(value.journeys || {}).filter((id) => built.has(id)).map((id) => [id, {}]));
-  return {
-    ...structuredClone(initialState),
-    catalog,
-    journeys,
-    records: pick(value.records, (item, { d }) =>
+  const records = pick(value.records, (item, { d }) =>
       journeys[d.id] && isGrade(item?.grade)
         ? {
             grade: item.grade,
@@ -254,7 +269,19 @@ export function normalize(value) {
             last: isGrade(item.last) ? item.last : item.grade,
           }
         : null,
-    ),
+  );
+  const exempt = pick(value.exempt, (item, { d, subject }) => (item === true && journeys[d.id] && !isPlanned(d, subject) ? true : null));
+  // 저장된 기록의 이수 조건 버전. 버전이 없는 기록은 이수 조건이 생기기 전(0)이다.
+  const conditions = Number.isInteger(value.conditions) && value.conditions >= 0 ? Math.min(value.conditions, CONDITIONS) : 0;
+  if (conditions < CONDITIONS)
+    for (const id of Object.keys(journeys)) Object.assign(exempt, grandfather({ journeys, records, exempt }, built.get(id), conditions));
+  return {
+    ...structuredClone(initialState),
+    catalog,
+    journeys,
+    records,
+    conditions: CONDITIONS,
+    exempt,
     plays: pick(value.plays, (item, { d, subject }) =>
       item?.game === gameOf(d, subject) && cleanScore(item.score) ? { game: item.game, summary: String(item.summary || "").slice(0, 200), score: cleanScore(item.score) } : null,
     ),
@@ -267,6 +294,27 @@ export function normalize(value) {
     studying: Object.hasOwn(journeys, value.studying) ? value.studying : null,
     onboarded: !!value.onboarded,
   };
+}
+
+/**
+ * 이수 조건 버전 from 이후에 체험이 생긴 필수과목 가운데, 그 체험이 없던 조건으로 계산했을 때 이미 다음 학년이 열려 있던
+ * (4학년 과목은 이미 졸업한) 과목을 예외로 돌려준다: { "학과id|과목": true }. 아직 다음 학년이 열리지 않은 사용자는 새 조건을 따른다.
+ */
+export function grandfather(state, d, from) {
+  if (!d || !state.journeys?.[d.id]) return {};
+  const added = Object.entries(LABS[d.id] || {})
+    .filter(([subject, lab]) => lab.since > from && labFor(d, subject) && isRequired(d, subject))
+    .map(([subject]) => subject);
+  if (!added.length) return {};
+  const before = progressOf(state, d, { ignore: new Set(added) });
+  return Object.fromEntries(
+    added
+      .filter((subject) => {
+        const year = yearOf(d, subject);
+        return year < 4 ? before.years[year].open : before.graduated;
+      })
+      .map((subject) => [courseKey(d.id, subject), true]),
+  );
 }
 
 // 저장된 기록을 읽는다. 이전 형식(학기제) 기록은 쓸 수 없어 지우되, 시작 화면을 지나왔는지는 이어 받는다.
