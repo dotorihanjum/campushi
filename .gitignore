@@ -227,3 +227,6 @@ frontend/dist/
 backend/.venv/
 backend/.cache/
 .DS_Store
+
+# 사용자가 모은 강의계획서·활동 원자료(저장소에 넣지 않는다. 필요한 내용만 앱 데이터로 정리한다)
+/학과데이터/

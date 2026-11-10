@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import React, { Component, Suspense, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { icon, img, yearCharacter } from "./assets.js";
 import {
   BackButton,
@@ -28,6 +28,7 @@ import {
   gameOf,
   isRequired,
   kindOf,
+  labFor,
   nextStepOf,
   progressOf,
   recordOf,
@@ -41,6 +42,8 @@ import LessonGame, { useLessonGame } from "./Games.jsx";
 import { Rub } from "./Templates.jsx";
 import { templates } from "./experiences.js";
 import { GROUPS, groupName } from "./groups.js";
+import { gameFor } from "./games.js";
+import { LAB_SCREENS } from "./labs/components.js";
 import {
   ALL,
   BODY_MAX,
@@ -898,7 +901,13 @@ function TabBar({ active, nav, state }) {
 
 // 체험의 이름: 졸업 과제, 전공 실습(예: 순서 맞추기), 연습 문제 유형(예: 이론 퀴즈).
 const experienceName = (d, id) =>
-  id === "final" ? "졸업 과제" : id.startsWith("group:") && d.practice ? `전공 실습(${templates[d.practice.template].title})` : lessonTypes[id]?.title || "";
+  id === "final"
+    ? "졸업 과제"
+    : id.startsWith("lab:")
+      ? "실습 과제"
+      : id.startsWith("group:") && d.practice
+        ? `전공 실습(${templates[d.practice.template].title})`
+        : lessonTypes[id]?.title || "";
 
 /** 들어야 할 과목 카드. 성적이 있으면 재수강이 필요하다고 알린다. */
 function CourseCard({ top, d, course, wait, onClick }) {
@@ -1331,6 +1340,39 @@ function quizTask(game) {
   if (game.type === "match") return `서로 관련된 ${n}쌍의 짝을 맞춰요.`;
   return `${n}개를 알맞은 칸으로 나눠요.`;
 }
+/** 체험 화면을 불러오는 동안. */
+function LabLoading() {
+  return (
+    <Screen>
+      <p className="absolute inset-x-[20px] top-[200px] text-center text-[14px] text-ink-3" role="status">
+        실습 화면을 불러오는 중이에요…
+      </p>
+    </Screen>
+  );
+}
+
+/** 체험 화면을 불러오지 못하거나(네트워크) 화면에 오류가 나면, 앱 전체가 멈추지 않게 이 자리에서 알린다. */
+class LabBoundary extends Component {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error) {
+    console.error("실습 화면 오류", error);
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <Screen footer={<FilledButton onClick={this.props.onQuit}>수업으로 돌아가기</FilledButton>}>
+        <div className="absolute inset-x-[20px] top-[160px]" role="alert">
+          <h1 className="text-[22px] font-bold leading-[32px] text-navy">실습 화면을 열지 못했어요</h1>
+          <p className="mt-[8px] text-[14px] leading-[22px] text-gray">인터넷 연결을 확인하고 다시 들어와 주세요. 쓰던 코드는 이 브라우저에 남아 있어요.</p>
+        </div>
+      </Screen>
+    );
+  }
+}
+
 export function Lesson({ active, nav, route, state, setState }) {
   // 이 화면은 들어올 때의 과목 하나를 다룬다. 열린 학년의 과목만 들을 수 있다.
   const [v] = useState(() => view(state));
@@ -1342,8 +1384,11 @@ export function Lesson({ active, nav, route, state, setState }) {
   const isFinal = game === "final";
   // 학과군 전공 실습이면 그 체험 데이터. 아니면 연습 문제 유형(이론 수업)이거나 null(체험 구현 예정).
   const practice = typeof game === "string" && game.startsWith("group:") ? v.d.practice : null;
-  const typed = !practice && isLessonType(game);
-  const quiz = useLessonGame(typed ? subject : null);
+  // 진짜 수업 체험(labs). 있으면 직접 해보기는 이 체험이고, 연습 문제가 있으면 배우기 단계에서 성적 없이 풀어 본다.
+  const lab = ok ? labFor(v.d, subject) : null;
+  const typed = !practice && !lab && isLessonType(game);
+  const warmup = lab ? gameFor(subject, v.d.lessonGames) : null;
+  const quiz = useLessonGame(typed || warmup ? subject : null);
   const [draft, setDraft] = useState(() => (ok ? (state.drafts[key] ?? "") : ""));
   // 체험이나 기록을 이미 시작한 수업은 기록 단계부터 이어간다.
   const [step, setStep] = useState(() => (ok && (state.plays[key] || state.drafts[key]) ? 2 : 0));
@@ -1372,7 +1417,7 @@ export function Lesson({ active, nav, route, state, setState }) {
   const record = recordOf(state, d.id, subject);
 
   // 체험이 아직 없는 과목(연습 문제가 없어졌거나 형식이 맞지 않는 경우 포함): 구현 예정이라고 알린다. 성적은 남지 않는다.
-  if (!isFinal && !practice && (!typed || quiz.status === "basic"))
+  if (!isFinal && !practice && !lab && (!typed || quiz.status === "basic"))
     return (
       <Screen foot={700} footer={<FilledButton onClick={nav.back}>과목 목록으로</FilledButton>}>
         {header}
@@ -1499,12 +1544,12 @@ export function Lesson({ active, nav, route, state, setState }) {
       </Screen>
     );
 
-  // 수업의 종류: 졸업 프로젝트(AI 가르치기 등), 학과군 전공 실습, 연습 문제(불러오는 중·오류 포함).
-  const mode = isFinal ? "project" : practice ? "practice" : quiz.status === "ready" ? "quiz" : quiz.status;
+  // 수업의 종류: 졸업 프로젝트(AI 가르치기 등), 학과군 전공 실습, 진짜 수업 체험, 연습 문제(불러오는 중·오류 포함).
+  const mode = isFinal ? "project" : practice ? "practice" : lab ? "lab" : quiz.status === "ready" ? "quiz" : quiz.status;
   const play = state.plays[key]?.game === game ? state.plays[key] : null;
   const played = play?.summary || "";
   const preview = play ? gradeOf(play.score) : null;
-  const headline = mode === "project" ? final.name : mode === "practice" ? practice.title : mode === "quiz" ? quiz.game.title : subject;
+  const headline = mode === "project" ? final.name : mode === "practice" ? practice.title : mode === "lab" ? lab.title : mode === "quiz" ? quiz.game.title : subject;
   const warn = (message) => {
     setNotice(message);
     setShake((n) => n + 1);
@@ -1527,11 +1572,33 @@ export function Lesson({ active, nav, route, state, setState }) {
   };
   const written = !!draft.trim();
 
+  // 진짜 수업 체험은 화면 전체를 그 수업의 공간으로 바꿔서 한다. 나가면 배우기로(이미 제출했으면 기록으로), 제출하면 기록 단계로 간다.
+  if (mode === "lab" && step === 1) {
+    const LabScreen = LAB_SCREENS[lab.id];
+    const leave = () => go(play ? 2 : 0);
+    return (
+      <LabBoundary onQuit={leave}>
+        <Suspense fallback={<LabLoading />}>
+          <LabScreen
+            lab={lab}
+            subject={subject}
+            saveKey={key}
+            onQuit={leave}
+            onDone={(summary, score) => {
+              setState((s) => savePlay(s, d.id, subject, game, summary, score));
+              go(2);
+            }}
+          />
+        </Suspense>
+      </LabBoundary>
+    );
+  }
+
   let body;
   let action;
   if (step === 0) {
-    const task = mode === "project" ? final.task : mode === "practice" ? practice.task : mode === "quiz" ? quizTask(quiz.game) : null;
-    const learn = (mode === "practice" ? practice : mode === "project" ? final : null)?.learn;
+    const task = mode === "project" ? final.task : mode === "practice" ? practice.task : mode === "lab" ? lab.task : mode === "quiz" ? quizTask(quiz.game) : null;
+    const learn = (mode === "practice" ? practice : mode === "project" ? final : mode === "lab" ? lab : null)?.learn;
     body = (
       <>
         {mode === "loading" && (
@@ -1557,16 +1624,46 @@ export function Lesson({ active, nav, route, state, setState }) {
             <p style={delay(0.12)}>{task}</p>
           </MintCard>
         )}
-        {(mode === "quiz" || mode === "practice" || mode === "project") && (
+        {mode === "lab" && (
+          <p className="a-up mt-[12px] text-[12px] leading-[18px] text-gray" style={delay(0.14)}>
+            {`근거: ${lab.source}`}
+          </p>
+        )}
+        {(mode === "quiz" || mode === "practice" || mode === "project" || mode === "lab") && (
           <p className="a-up mt-[12px] text-[12.5px] leading-[19px] text-ink-3" style={delay(0.16)}>
             {final.kind === "artwork" && isFinal
               ? "끝까지 하면 통과(P)예요."
-              : `처음 고른 답으로 성적을 매겨요. ${PASS_GRADE} 이상이면 이수예요.`}
+              : mode === "lab"
+                ? `직접 해보기의 과제 채점 결과로 성적을 매겨요. ${PASS_GRADE} 이상이면 이수예요.`
+                : `처음 고른 답으로 성적을 매겨요. ${PASS_GRADE} 이상이면 이수예요.`}
             {record ? ` 지금 성적은 ${gradeText(record)}이고, 다시 들으면 가장 좋은 성적이 남아요.` : ""}
           </p>
         )}
       </>
     );
+    if (mode === "lab" && warmup)
+      body = (
+        <>
+          {body}
+          <div className="a-up mt-[22px]" style={delay(0.2)}>
+            <p className="mb-[8px] text-[12.5px] leading-[19px] text-ink-3">수업에서 배우는 개념을 먼저 풀어 봐요. 이 연습은 성적에 들어가지 않아요.</p>
+            {quiz.status === "ready" ? (
+              <LessonGame game={quiz.game} played="" onComplete={() => {}} />
+            ) : quiz.status === "loading" ? (
+              <p className="text-[13.5px] text-ink-3" role="status">
+                연습 문제를 불러오는 중이에요…
+              </p>
+            ) : quiz.status === "error" ? (
+              <div role="alert">
+                <p className="body-copy">{quiz.message}</p>
+                <button className="button" onClick={quiz.retry}>
+                  다시 시도
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </>
+      );
     action = (
       <FilledButton onClick={() => go(1)} disabled={mode === "loading" || mode === "error"}>
         직접 해보기
@@ -1589,9 +1686,9 @@ export function Lesson({ active, nav, route, state, setState }) {
   } else {
     body = (
       <>
-        {(mode === "quiz" || mode === "project" || (mode === "practice" && practice.learn)) && (
+        {(mode === "quiz" || mode === "project" || mode === "lab" || (mode === "practice" && practice.learn)) && (
           <MintCard title="배운 내용" className="a-up mt-[22px]">
-            <p>{mode === "quiz" ? quiz.game.explanation : mode === "project" ? final.explanation : practice.learn}</p>
+            <p>{mode === "quiz" ? quiz.game.explanation : mode === "project" ? final.explanation : mode === "lab" ? lab.takeaway : practice.learn}</p>
           </MintCard>
         )}
         {played && (
@@ -1691,7 +1788,9 @@ export function Courses({ active, nav, route, state }) {
         ? "졸업 조건을 모두 채웠어요."
         : `4학년 필수과목을 ${PASS_GRADE} 이상으로 이수하고 졸업 과제(${d.finalSubject})를 마치면 졸업해요.`;
   const badge = (course) =>
-    course.record ? (
+    course.added && !course.record ? (
+      <span className="flex h-[22px] shrink-0 items-center rounded-full border border-mint bg-mint px-[8px] text-[11px] font-bold text-white">새 체험</span>
+    ) : course.record ? (
       <span
         className={`flex h-[22px] shrink-0 items-center rounded-full border px-[8px] text-[11px] font-bold ${
           course.passed ? "border-mint bg-mint-soft text-mint-deep" : "border-[#e8a33d] bg-cream text-[#9a5b00]"
@@ -1748,6 +1847,7 @@ export function Courses({ active, nav, route, state }) {
                       ? `졸업 과제 · ${d.final.name}`
                       : `${course.kind} · ${course.planned ? "체험을 만들고 있어요" : `${experienceName(d, gameOf(d, course.subject))}로 체험해요`}`}
                     {course.record && course.record.attempts > 1 ? ` · ${course.record.attempts}번 들음` : ""}
+                    {course.added ? " · 새 체험이 추가됐어요. 다음 학년은 그대로 열려 있고, 다시 해볼 수 있어요" : ""}
                   </span>
                 </span>
                 {badge(course)}
