@@ -20,7 +20,7 @@ const PLAN_FIELDS = ["topic", "reason", "method"];
 
 // 체험 틀의 화면. 데이터 형식과 채점은 experiences.js에 있다.
 // 틀마다 data(검사를 통과한 체험 데이터)를 받고, 체험을 끝내면 onComplete(요약 한 줄, 점수)를 부른다.
-// 점수는 { correct, total }(처음 고른 답 기준으로 맞힌 수)이고 성적은 grades.js가 매긴다. 점수를 매길 수 없는 체험은 "P"다.
+// 점수는 { correct, total }(처음 고른 답 기준으로 맞힌 수)로 기록 요약에만 쓰고, 성적·해금에는 쓰지 않는다(이수는 끝까지 해보고 기록을 남기면 P). 점수를 매길 수 없는 체험은 "P"다.
 
 const sceneImages = { sand: img.sceneSand, paint: img.scenePaint };
 // 마지막 글자에 받침이 있는지. 숫자는 읽는 소리로 본다(영·일·삼·육·칠·팔은 받침이 있다).

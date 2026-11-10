@@ -172,7 +172,7 @@ export function buildDocument(files, token, mode) {
   return doctype ? doctype[0] + head + html.slice(doctype[0].length) : head + html;
 }
 
-/** 채점 결과 → 성적 점수({ correct, total }). results에 없는 항목은 통과하지 못한 것으로 본다. */
+/** 채점 결과 → 통과 수({ correct, total }, 제출 화면과 기록 요약용). results에 없는 항목은 통과하지 못한 것으로 본다. */
 export function scoreOf(checks, results) {
   return { correct: checks.filter((check) => results?.[check.id] === true).length, total: checks.length };
 }

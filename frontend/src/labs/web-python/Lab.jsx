@@ -146,7 +146,7 @@ export default function WebPythonLab({ lab, subject, saveKey, onDone, onQuit }) 
         </ol>
         <h3 className="mt-[18px] text-[14px] font-bold">채점 기준</h3>
         <p className="mt-[4px] text-[12.5px] leading-[19px]" style={{ color: theme.sub }}>
-          필수 항목을 모두 통과해야 다음 단계로 가요. 성적은 전체 {checks.length}개 항목 중 통과한 비율이에요.
+          필수 항목을 모두 통과해야 다음 단계로 가요. 나머지는 더 다듬어 보는 항목이고, 성적에는 들어가지 않아요.
         </p>
         <div className="mt-[10px]">
           <Checklist theme={theme} checks={checks} results={{}} label="채점 기준" />
@@ -237,7 +237,7 @@ export default function WebPythonLab({ lab, subject, saveKey, onDone, onQuit }) 
         </p>
         <h2 className="mt-[4px] text-[22px] font-bold leading-[30px]">{`채점 결과 ${score.correct}/${score.total}`}</h2>
         <p role="status" className="mt-[6px] text-[13px] leading-[20px]" style={{ color: theme.sub }}>
-          {status || "완성도 항목까지 통과하면 성적이 올라가요. 더 고치고 다시 제출해도 돼요."}
+          {status || "필수 항목은 모두 끝냈어요. 남은 항목을 더 다듬어 봐도 되고, 이대로 제출해도 돼요."}
         </p>
         <div className="mt-[12px]">
           <Sandbox theme={theme} docs={docs} onMessage={onMessage} title="완성한 페이지" height={300} />

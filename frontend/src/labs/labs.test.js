@@ -18,7 +18,7 @@ const dept = (state) => departmentsOf(state).find((d) => d.id === RAW.id);
 // 과목을 들어 성적을 받는다.
 function take(state, subject, correct, total = 10) {
   const d = dept(state);
-  return completeCourse(savePlay(state, RAW.id, subject, gameOf(d, subject), "결과", { correct, total }), RAW.id, subject, "");
+  return completeCourse(savePlay(state, RAW.id, subject, gameOf(d, subject), "결과", { correct, total }), RAW.id, subject, "해봤어요");
 }
 // 이 기능이 나오기 전에 저장된 기록(이수 조건 버전이 없다).
 const savedBefore = (records) => ({
@@ -78,17 +78,15 @@ test("기존 사용자: 이미 2학년이 열렸으면 다시 잠그지 않고, 
   // 다시 저장했다 불러와도(새 학과 데이터를 받아도) 예외는 그대로이고, 다시 계산하지 않는다.
   state = normalize(JSON.parse(JSON.stringify(state)));
   assert.deepEqual(state.exempt, { [courseKey(RAW.id, WEB)]: true });
-  // 새 체험을 들어 볼 수 있고, 이수하면 더는 "추가됨"으로 알리지 않는다. 낮은 성적이어도 다시 잠기지 않는다.
+  // 새 체험을 들어 볼 수 있고, 이수하면 더는 "추가됨"으로 알리지 않는다.
   state = take(state, WEB, 3);
   progress = progressOf(state, dept(state));
   assert.equal(progress.years[1].open, true);
-  assert.equal(progress.years[0].courses.find((c) => c.subject === WEB).added, true);
-  state = take(state, WEB, 10);
-  assert.equal(progressOf(state, dept(state)).years[0].courses.find((c) => c.subject === WEB).added, false);
+  assert.equal(progress.years[0].courses.find((c) => c.subject === WEB).added, false);
 });
 
 test("이수 중인 사용자: 아직 2학년이 열리지 않았으면 새 조건을 따른다", () => {
-  // 미분적분학을 C+로 받아 재수강해야 하는 상태.
+  // 예전 기준으로 미분적분학을 C+로 받고 기록은 남기지 않아 이수하지 못한 상태.
   const key = courseKey(RAW.id, CALC);
   let state = normalize(savedBefore({ [key]: { grade: "C+", percent: 65, attempts: 1 } }));
   assert.deepEqual(state.exempt, {});

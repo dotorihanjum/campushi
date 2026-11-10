@@ -66,10 +66,6 @@ test("채점: 통과한 항목 수 / 전체, 미션은 필수 항목을 모두 �
   assert.equal(missionDone(checks, { ...html, title: false }, "html"), true);
   // 문자열 "true" 같은 값은 통과가 아니다.
   assert.equal(missionDone(checks, { ...html, h1: "true" }, "html"), false);
-  // 필수만 모두 통과하면 이수(B- 70%) 이상이다.
-  const cores = Object.fromEntries(checks.filter((c) => c.core).map((c) => [c.id, true]));
-  const { correct, total } = scoreOf(checks, cores);
-  assert.ok(correct / total >= 0.7);
 });
 
 test("색 읽기와 명도 대비(WCAG)", () => {
