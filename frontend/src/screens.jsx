@@ -2285,7 +2285,7 @@ export function My({ nav, state, setState }) {
         </section>
 
         <MenuGroup title="체험" d={0.06}>
-          <MenuRow label="나의 체험 기록" value={journeys.length ? `${journeys.length}개 학과` : "아직 없음"} onClick={() => nav.reset(["home", "experience"], "fade")} />
+          <MenuRow label="나의 학과 체험" value={journeys.length ? `${journeys.length}개 학과` : "아직 없음"} onClick={() => nav.reset(["home", "experience"], "fade")} />
         </MenuGroup>
 
         <MenuGroup title="설정" d={0.12}>
@@ -2330,7 +2330,7 @@ export function Experiences({ nav, state, setState }) {
         className="flow no-scrollbar absolute left-0 top-[96px] w-full overflow-y-auto px-[20px] pb-[32px] pt-[4px]"
         style={{ bottom: `calc(${TAB_H}px - var(--bt) * 1px)` }}
       >
-        <h1 className="a-up text-[26px] font-bold leading-[34px] text-navy">나의 체험 기록</h1>
+        <h1 className="a-up text-[26px] font-bold leading-[34px] text-navy">나의 학과 체험</h1>
         <p className="a-up mt-[4px] text-[14px] leading-[22px] text-gray" style={delay(0.06)}>
           {journeys.length ? "학과를 누르면 그 학과의 과목과 진행 상황을 볼 수 있어요." : "학과에 체험 입학하면 여기에서 진행 상황을 볼 수 있어요."}
         </p>
