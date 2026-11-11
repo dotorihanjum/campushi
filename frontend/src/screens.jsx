@@ -869,11 +869,10 @@ const TABS = [
 function TabBar({ active, nav, state }) {
   const go = (id) => {
     if (id === active) return;
-    if (id === "home") nav.reset(["home"]);
+    // 탭은 모두 같은 페이드로 바꾸고, 쌓지 않고 홈 위에 하나만 둔다
+    // (탭을 여러 번 오가도 뒤로 가기는 홈으로 돌아간다).
     // 전공: 지금 체험 중인 학과의 홈. 입학한 학과가 없으면 그 화면이 안내를 보여준다.
-    if (id === "major") nav.push("major");
-    if (id === "community") nav.push("community");
-    if (id === "my") nav.push("my");
+    nav.reset(id === "home" ? ["home"] : ["home", id], "fade");
   };
   return (
     <div className="absolute left-0 w-full border-t border-mint bg-white" style={{ top: TAB_TOP, height: TAB_H }}>
