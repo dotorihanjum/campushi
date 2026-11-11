@@ -60,7 +60,7 @@ import {
 } from "./community.js";
 import { MOCK_MENTORS } from "./communityMock.js";
 import { CAMPUS, CAMPUSES, departmentsIn, findCampuses } from "./campus.js";
-import CampusMap, { MAP_H, MAP_W } from "./CampusMap.jsx";
+import CampusMap, { MapCredit, MAP_H, MAP_W } from "./CampusMap.jsx";
 
 /* ------------------------------------------------------------------ */
 /* 공통                                                                */
@@ -1113,7 +1113,8 @@ export function Home({ nav, route, state, setState, catalog }) {
             width={MAP_W}
             height={MAP_H}
             focus={MAP_CENTER}
-            label={`${CAMPUS.name} 지도. 끌거나 화살표 키로 둘러봐요.`}
+            label={`${CAMPUS.name} 지도. 끌거나 화살표 키로 둘러보고, 두 손가락이나 +·- 키로 확대·축소해요.`}
+            overlay={<MapCredit />}
             className="h-full rounded-[24px] border border-[#cfe5c6] bg-[#cdeac2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint-deep"
           >
             <CampusMap departments={list} onOpen={setBuilding} onLocked={locked} />

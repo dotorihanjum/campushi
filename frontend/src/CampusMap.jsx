@@ -57,6 +57,20 @@ const placeOfId = new Map(PLACES.map((p) => [p.osm, p]));
 /**
  * 지도. departments: 학과 목록(학과가 있는 건물만 열림), onOpen(건물 이름): 열린 건물을 눌렀을 때, onLocked(건물 이름): 잠긴 건물을 눌렀을 때.
  */
+// 오픈스트리트맵 데이터 출처(ODbL에 따라 표기해야 한다). 확대·끌기와 상관없이 늘 보이게 지도 틀 위(PanView의 overlay)에 둔다.
+export function MapCredit() {
+  return (
+    <a
+      href="https://www.openstreetmap.org/copyright"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="absolute bottom-[8px] left-[10px] rounded-full bg-white/80 px-[6px] text-[9px] leading-[14px] text-ink-3"
+    >
+      © OpenStreetMap
+    </a>
+  );
+}
+
 export default function CampusMap({ departments, onOpen, onLocked }) {
   return (
     <div className="relative overflow-hidden" style={{ width: MAP_W, height: MAP_H }}>
@@ -158,16 +172,6 @@ export default function CampusMap({ departments, onOpen, onLocked }) {
           </button>
         );
       })}
-
-      {/* 오픈스트리트맵 데이터 출처(ODbL에 따라 표기해야 한다) */}
-      <a
-        href="https://www.openstreetmap.org/copyright"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="absolute bottom-[6px] right-[10px] rounded-full bg-white/70 px-[6px] text-[9px] leading-[14px] text-ink-3"
-      >
-        © OpenStreetMap
-      </a>
     </div>
   );
 }

@@ -829,3 +829,39 @@ body {
   color: #302b27;
 }
 
+
+/* ---------- 지도 확대 막대: |——●——| ---------- */
+.zoom-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 32px;
+  margin: 0 2px;
+  background:
+    linear-gradient(#087f77, #087f77) left center / 2px 12px no-repeat,
+    linear-gradient(#087f77, #087f77) right center / 2px 12px no-repeat,
+    linear-gradient(#9fded9, #9fded9) center / 100% 2px no-repeat;
+  cursor: pointer;
+}
+.zoom-range:focus { outline: none; }
+.zoom-range:focus-visible { outline: 2px solid #087f77; outline-offset: 2px; border-radius: 4px; }
+.zoom-range::-webkit-slider-runnable-track { height: 32px; background: transparent; }
+.zoom-range::-moz-range-track { height: 32px; background: transparent; }
+.zoom-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 9px;
+  border-radius: 50%;
+  background: #27d8cd;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+}
+.zoom-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #27d8cd;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+}

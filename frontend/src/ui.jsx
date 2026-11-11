@@ -316,39 +316,68 @@ export function delay(s) {
 const PAN_SLOP = 5;
 // 화살표 키 한 번에 미는 거리(px).
 const PAN_STEP = 48;
+// 가장 크게 확대하는 배율. 가장 작게는 내용이 틀을 빈틈없이 덮는 배율까지(1보다 크지 않게) 줄인다.
+const ZOOM_MAX = 2.5;
+// 확대·축소 버튼과 +, - 키 한 번에 바꾸는 배율(곱한다).
+const ZOOM_STEP = 1.25;
 
 const clampPan = (v, frame, content) => Math.min(0, Math.max(frame - content, v));
+const clampZoom = (z, min) => Math.min(ZOOM_MAX, Math.max(min, z));
 
 /**
- * 화면 안에 고정된 틀 안에서 그보다 큰 내용(width×height)을 끌어 보는 상자. 틀은 움직이지 않고 내용만 transform으로 옮기며,
- * 내용 끝이 틀 가장자리를 넘어 빈 곳이 보이지 않게 막는다. 마우스·터치는 포인터 이벤트로 함께 받고, 틀 안에서 끄는 동안에는
- * 페이지가 같이 스크롤되지 않는다(touch-action: none). PAN_SLOP 넘게 끈 뒤에 뗀 것은 안쪽 버튼의 클릭으로 치지 않는다.
+ * 화면 안에 고정된 틀 안에서 그보다 큰 내용(width×height)을 끌어 보고 확대·축소하는 상자. 틀은 움직이지 않고 내용만
+ * transform으로 옮기고 키우며, 내용 끝이 틀 가장자리를 넘어 빈 곳이 보이지 않게 막는다. 마우스·터치는 포인터 이벤트로 함께
+ * 받고, 틀 안에서 끄는 동안에는 페이지가 같이 스크롤되지 않는다(touch-action: none). PAN_SLOP 넘게 끈 뒤에 뗀 것은 안쪽 버튼의
+ * 클릭으로 치지 않는다.
+ * 확대·축소: 두 손가락 벌리기·오므리기, Ctrl+휠(노트북 터치패드 핀치), 틀의 +·- 키, 오른쪽 아래 막대(−·+ 버튼과 끌 수 있는 손잡이).
  * focus: 처음(그리고 끌기 전 틀 크기가 바뀔 때) 틀 가운데에 둘 내용 안의 점 [x, y].
+ * overlay: 틀 위에 고정해 둘 것(끌기·확대와 함께 움직이지 않는다. 예: 지도 출처 표기).
  * 키보드로 안쪽 버튼에 포커스가 가면 그 버튼이 보이게 밀고, 틀에 포커스가 있으면 화살표 키로 민다.
  */
-export function PanView({ width, height, focus, label, className = "", style, children }) {
+export function PanView({ width, height, focus, label, className = "", style, overlay, children }) {
   const frame = useRef(null);
   const canvas = useRef(null);
   const pos = useRef({ x: 0, y: 0 });
+  const zoomRef = useRef(1);
+  const minRef = useRef(1);
   const size = useRef({ w: 0, h: 0 });
+  // 지금 틀에 닿아 있는 포인터(id → 화면 좌표). 두 개면 확대·축소, 하나면 끌기다.
+  const points = useRef(new Map());
   const drag = useRef(null);
   const moved = useRef(false);
   const touched = useRef(false);
   const raf = useRef(0);
+  // 아래 확대 막대에 보여 줄 배율과 가장 작은 배율.
+  const [zoom, setZoom] = useState(1);
+  const [minZoom, setMinZoom] = useState(1);
   const [fx, fy] = focus;
 
   const paint = () => {
     raf.current = 0;
-    if (canvas.current) canvas.current.style.transform = `translate3d(${pos.current.x}px, ${pos.current.y}px, 0)`;
+    if (canvas.current) {
+      canvas.current.style.transform = `translate(${pos.current.x}px, ${pos.current.y}px) scale(${zoomRef.current})`;
+    }
   };
   const moveTo = (x, y, now = false) => {
-    pos.current = { x: clampPan(x, size.current.w, width), y: clampPan(y, size.current.h, height) };
+    const z = zoomRef.current;
+    pos.current = { x: clampPan(x, size.current.w, width * z), y: clampPan(y, size.current.h, height * z) };
     if (now) {
       window.cancelAnimationFrame(raf.current);
       paint();
     } else if (!raf.current) raf.current = window.requestAnimationFrame(paint);
   };
+  // 확대된 내용 안의 점(px, 배율 적용)을 틀 가운데로.
   const center = (x, y, now) => moveTo(size.current.w / 2 - x, size.current.h / 2 - y, now);
+  // 배율을 z로 바꾸되 틀 안의 점 (px, py)에 있던 내용은 그 자리에 둔다.
+  const zoomAt = (z, px, py, now = false) => {
+    const next = clampZoom(z, minRef.current);
+    const k = next / zoomRef.current;
+    zoomRef.current = next;
+    touched.current = true;
+    moveTo(px - (px - pos.current.x) * k, py - (py - pos.current.y) * k, now);
+    setZoom(next);
+  };
+  const zoomCenter = (z) => zoomAt(z, size.current.w / 2, size.current.h / 2, true);
 
   // 틀 크기(화면 높이에 따라 바뀐다)를 재고, 아직 끌지 않았으면 focus를 가운데 두고, 끌었으면 범위 안으로만 당긴다.
   useEffect(() => {
@@ -356,33 +385,91 @@ export function PanView({ width, height, focus, label, className = "", style, ch
     if (!el) return;
     const measure = () => {
       size.current = { w: el.clientWidth, h: el.clientHeight };
+      const min = Math.min(1, Math.max(size.current.w / width, size.current.h / height));
+      minRef.current = min;
+      setMinZoom(min);
+      if (zoomRef.current < min) {
+        zoomRef.current = min;
+        setZoom(min);
+      }
       if (touched.current) moveTo(pos.current.x, pos.current.y, true);
-      else center(fx, fy, true);
+      else center(fx * zoomRef.current, fy * zoomRef.current, true);
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(el);
+    // Ctrl+휠(터치패드 핀치 포함)은 페이지 확대 대신 지도를 확대한다. 그냥 휠은 페이지 스크롤로 둔다.
+    const wheel = (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const s = scaleOf(el);
+      const box = el.getBoundingClientRect();
+      zoomAt(zoomRef.current * Math.exp(-e.deltaY / 400), (e.clientX - box.left) / s - el.clientLeft, (e.clientY - box.top) / s - el.clientTop);
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
     return () => {
       observer.disconnect();
+      el.removeEventListener("wheel", wheel);
       window.cancelAnimationFrame(raf.current);
       raf.current = 0;
     };
-    // moveTo·center는 ref만 쓴다.
+    // moveTo·center·zoomAt은 ref만 쓴다.
   }, [fx, fy, width, height]);
 
   // 앱 화면 전체가 창 크기에 맞게 확대·축소되어 있으므로, 포인터가 움직인 화면 px를 틀 안의 px로 바꾼다.
   const scaleOf = (el) => el.getBoundingClientRect().width / el.offsetWidth || 1;
+  // 화면 좌표 → 틀 안의 좌표.
+  const local = (x, y) => {
+    const el = frame.current;
+    const s = scaleOf(el);
+    const box = el.getBoundingClientRect();
+    return [(x - box.left) / s - el.clientLeft, (y - box.top) / s - el.clientTop];
+  };
+  // 남은 포인터 하나로 끌기를 (다시) 시작한다.
+  const startDrag = (id, type, el) => {
+    const p = points.current.get(id);
+    drag.current = { id, type, sx: p.x, sy: p.y, x: pos.current.x, y: pos.current.y, scale: scaleOf(el) };
+  };
+  const startPinch = () => {
+    const [a, b] = [...points.current.values()];
+    const [mx, my] = local((a.x + b.x) / 2, (a.y + b.y) / 2);
+    drag.current = { type: "pinch", d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: zoomRef.current, cx: (mx - pos.current.x) / zoomRef.current, cy: (my - pos.current.y) / zoomRef.current };
+  };
 
   const down = (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    // 두 번째 손가락은 무시한다(마우스는 앞선 끌기의 떼기를 놓쳤어도 새로 시작한다).
-    if (drag.current && drag.current.type !== "mouse" && e.pointerType !== "mouse") return;
+    if (e.pointerType === "mouse") points.current.clear();
+    points.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (points.current.size === 2 && e.pointerType !== "mouse") {
+      // 두 번째 손가락이 닿으면 확대·축소로 바꾼다. 이 손가락들을 뗄 때 오는 클릭은 버린다.
+      moved.current = true;
+      touched.current = true;
+      for (const id of points.current.keys()) e.currentTarget.setPointerCapture?.(id);
+      startPinch();
+      return;
+    }
+    if (points.current.size > 2) return;
+    // 끄는 동안만 내용을 따로 된 층으로 올려 부드럽게 옮기고, 손을 떼면 내린다(올려 둔 채 확대하면 그림이 흐려진다).
+    if (canvas.current) canvas.current.style.willChange = "transform";
     moved.current = false;
-    drag.current = { id: e.pointerId, type: e.pointerType, sx: e.clientX, sy: e.clientY, x: pos.current.x, y: pos.current.y, scale: scaleOf(e.currentTarget) };
+    startDrag(e.pointerId, e.pointerType, e.currentTarget);
   };
   const move = (e) => {
+    if (!points.current.has(e.pointerId)) return;
+    points.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const d = drag.current;
-    if (!d || d.id !== e.pointerId) return;
+    if (!d) return;
+    if (d.type === "pinch") {
+      if (points.current.size < 2) return;
+      const [a, b] = [...points.current.values()];
+      const [mx, my] = local((a.x + b.x) / 2, (a.y + b.y) / 2);
+      const next = clampZoom((d.z * Math.hypot(a.x - b.x, a.y - b.y)) / d.d, minRef.current);
+      zoomRef.current = next;
+      moveTo(mx - d.cx * next, my - d.cy * next);
+      setZoom(next);
+      return;
+    }
+    if (d.id !== e.pointerId) return;
     const dx = (e.clientX - d.sx) / d.scale;
     const dy = (e.clientY - d.sy) / d.scale;
     if (!moved.current) {
@@ -397,9 +484,18 @@ export function PanView({ width, height, focus, label, className = "", style, ch
   // 터치는 처음 닿은 안쪽 요소가 포인터를 붙잡고 있다가 틀이 가져오면 그 요소에서 lostpointercapture가 올라오므로,
   // 틀 자신이 놓친 경우만 끌기를 끝낸다.
   const up = (e) => {
-    if (drag.current?.id !== e.pointerId) return;
-    drag.current = null;
+    if (!points.current.delete(e.pointerId)) return;
     if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    const left = points.current.size;
+    if (left === 0) {
+      drag.current = null;
+      if (canvas.current) canvas.current.style.willChange = "";
+    }
+    // 확대하던 두 손가락 중 하나를 떼면 남은 손가락으로 이어서 끈다.
+    else if (left === 1 && drag.current?.type === "pinch") {
+      const [id] = points.current.keys();
+      startDrag(id, "touch", e.currentTarget);
+    } else if (left === 2) startPinch();
   };
   // 끌고 난 뒤 따라오는 클릭은 버리고, 다음 누르기부터 다시 받는다.
   const clickCapture = (e) => {
@@ -427,6 +523,11 @@ export function PanView({ width, height, focus, label, className = "", style, ch
   };
   const key = (e) => {
     if (e.target !== frame.current) return;
+    if (e.key === "+" || e.key === "=" || e.key === "-" || e.key === "_") {
+      e.preventDefault();
+      zoomCenter(zoomRef.current * (e.key === "+" || e.key === "=" ? ZOOM_STEP : 1 / ZOOM_STEP));
+      return;
+    }
     const step = { ArrowLeft: [PAN_STEP, 0], ArrowRight: [-PAN_STEP, 0], ArrowUp: [0, PAN_STEP], ArrowDown: [0, -PAN_STEP] }[e.key];
     if (!step) return;
     e.preventDefault();
@@ -434,26 +535,54 @@ export function PanView({ width, height, focus, label, className = "", style, ch
     moveTo(pos.current.x + step[0], pos.current.y + step[1]);
   };
 
+  // 확대 막대는 배율을 로그 눈금으로 보여 준다(가장 작게 0 ~ 가장 크게 100). 줄일 수 없는 틀이면 0 ~ 100이 1 ~ ZOOM_MAX다.
+  const span = Math.log(ZOOM_MAX / minZoom) || 1;
+  const level = Math.round((Math.log(zoom / minZoom) / span) * 100);
+  const fromLevel = (v) => minZoom * Math.exp((v / 100) * span);
+  const zoomButton = "pressable flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full text-[18px] font-semibold leading-none text-mint-deep disabled:text-[#c4c4c4] focus-visible:outline-2 focus-visible:outline-mint-deep";
+
   return (
-    <div
-      ref={frame}
-      role="region"
-      aria-label={label}
-      tabIndex={0}
-      onPointerDown={down}
-      onPointerMove={move}
-      onPointerUp={up}
-      onPointerCancel={up}
-      onLostPointerCapture={(e) => e.target === e.currentTarget && up(e)}
-      onClickCapture={clickCapture}
-      onFocus={focusIn}
-      onKeyDown={key}
-      onDragStart={(e) => e.preventDefault()}
-      className={`relative cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing ${className}`}
-      style={style}
-    >
-      <div ref={canvas} className="absolute left-0 top-0 will-change-transform" style={{ width, height }}>
-        {children}
+    <div className="relative h-full w-full">
+      <div
+        ref={frame}
+        role="region"
+        aria-label={label}
+        tabIndex={0}
+        onPointerDown={down}
+        onPointerMove={move}
+        onPointerUp={up}
+        onPointerCancel={up}
+        onLostPointerCapture={(e) => e.target === e.currentTarget && up(e)}
+        onClickCapture={clickCapture}
+        onFocus={focusIn}
+        onKeyDown={key}
+        onDragStart={(e) => e.preventDefault()}
+        className={`relative cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing ${className}`}
+        style={style}
+      >
+        <div ref={canvas} className="absolute left-0 top-0 origin-top-left" style={{ width, height }}>
+          {children}
+        </div>
+      </div>
+      {overlay}
+      <div className="absolute bottom-[8px] right-[8px] flex items-center rounded-full bg-white/90 px-[2px] shadow-[0_2px_8px_rgba(0,0,0,0.12)]">
+        <button type="button" aria-label="지도 축소" className={zoomButton} disabled={level <= 0} onClick={() => zoomCenter(zoomRef.current / ZOOM_STEP)}>
+          −
+        </button>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={level}
+          onChange={(e) => zoomCenter(fromLevel(Number(e.target.value)))}
+          aria-label="지도 확대 정도"
+          aria-valuetext={`${Math.round(zoom * 100)}%`}
+          className="zoom-range w-[84px]"
+        />
+        <button type="button" aria-label="지도 확대" className={zoomButton} disabled={level >= 100} onClick={() => zoomCenter(zoomRef.current * ZOOM_STEP)}>
+          +
+        </button>
       </div>
     </div>
   );
