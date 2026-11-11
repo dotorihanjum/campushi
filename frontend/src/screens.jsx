@@ -1106,9 +1106,9 @@ export function Home({ nav, route, state, setState, catalog }) {
       {/* 지도와 그 바로 밑의 캐릭터·말풍선 줄. 탭바 위까지의 높이에 맞춰, 화면이 낮으면 지도 보이는 영역이 줄어든다
           (줄어든 만큼은 지도를 위아래로 밀어 본다). 캐릭터·말풍선 줄은 높이가 정해져 있어서 말이 바뀌어도 지도 크기가
           변하지 않고, 지도 위로는 그려지지 않는다(처음 도착할 때 떨어지는 캐릭터도 이 줄 안에서만 보인다).
-          캐릭터와 말풍선은 세로 가운데로 맞추고, 캐릭터는 지도와 약 20px 떨어진다(줄 위 여백 8 + 가운데 맞춤 12). */}
+          캐릭터와 말풍선은 세로 가운데로 맞추고, 캐릭터는 지도와 약 14px 떨어진다(줄 위 여백 2 + 가운데 맞춤 12). */}
       <div className="absolute inset-x-0 isolate flex flex-col" style={{ top: HOME_TOP, height: `calc(${HOME_FOLD} - ${HOME_TOP}px)` }}>
-        <div className="min-h-[120px] flex-1 px-[16px] pt-[14px]" style={{ maxHeight: MAP_H + 2 + 14 }}>
+        <div className="min-h-[120px] flex-1 px-[16px] pt-[8px]" style={{ maxHeight: MAP_H + 2 + 8 }}>
           {/* 지도 틀은 화면 안에 고정되고(네 모서리가 늘 보인다), 그보다 큰 지도 그림만 틀 안에서 끌어 본다. */}
           <PanView
             width={MAP_W}
@@ -1120,7 +1120,7 @@ export function Home({ nav, route, state, setState, catalog }) {
             <CampusMap departments={list} onOpen={setBuilding} onLocked={locked} />
           </PanView>
         </div>
-        <div className="flex h-[112px] shrink-0 items-center gap-[10px] py-[8px] pl-[16px] pr-[18px]" style={{ clipPath: "inset(0 -24px -24px -24px)" }}>
+        <div className="flex h-[100px] shrink-0 items-center gap-[10px] py-[2px] pl-[16px] pr-[18px]" style={{ clipPath: "inset(0 -24px -24px -24px)" }}>
           <div className="relative h-[72px] w-[72px] shrink-0">
             <span className="a-fade absolute bottom-[-2px] left-[8px] h-[10px] w-[56px] rounded-[50%] bg-[rgba(20,60,40,0.14)]" style={delay(landing ? 1 : 0)} aria-hidden />
             <img
