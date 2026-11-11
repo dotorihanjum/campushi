@@ -1013,14 +1013,13 @@ function guideLine({ landing, hint, list, catalog, studying, progress }) {
     : `${studying.name} 4학년이에요. 졸업까지 조금만 더 힘내요!`;
 }
 
-// 홈 지도 영역(지도 + 캐릭터 줄)의 높이: 탭바 위까지에서 PEEK만큼 덜어 아래 '학과 둘러보기' 제목이 살짝 보이게 한다.
+// 홈 지도 영역(지도 + 캐릭터 줄)의 높이: 탭바 위까지 채운다. 아래 '학과 둘러보기'는 밀어 올려야 보인다(2026-11-11 사용자 결정).
 const HOME_TOP = 164;
 // 학과 둘러보기 제목 높이.
 const DEPT_HEAD = 44;
-const PEEK = 34;
 // 처음에는 지도 그림의 한가운데(가로·세로)가 지도 틀 가운데 오게 둔다(2026-11-10 사용자 요청).
 const MAP_CENTER = [MAP_W / 2, MAP_H / 2];
-const HOME_FOLD = `calc((var(--vh) + var(--tt) + var(--bt) - ${TAB_H} - ${PEEK}) * 1px)`;
+const HOME_FOLD = `calc((var(--vh) + var(--tt) + var(--bt) - ${TAB_H}) * 1px)`;
 
 export function Home({ nav, route, state, setState, catalog }) {
   const list = all(state);
@@ -1079,7 +1078,7 @@ export function Home({ nav, route, state, setState, catalog }) {
   );
   return (
     <Screen
-      h={`calc((var(--vh) + var(--tt) + var(--bt) - ${TAB_H} - ${PEEK} + ${DEPT_HEAD + Math.max(pickerHeight(list.length), 60) + 16}) * 1px)`}
+      h={`calc((var(--vh) + var(--tt) + var(--bt) - ${TAB_H} + ${DEPT_HEAD + Math.max(pickerHeight(list.length), 60) + 16}) * 1px)`}
       foot={TAB_TOP}
       veil={false}
       overlay={sheet}
