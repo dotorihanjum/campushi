@@ -2353,19 +2353,21 @@ export function Experiences({ nav, state, setState }) {
             {journeys.map(({ d, progress }, i) => {
               const average = averagePoint(progress.taken.map((course) => course.record.grade));
               const studying = d.id === studyingId;
+              // 체험 중인(졸업 전) 학과는 흰 카드, 졸업한 학과는 노란 카드.
+              const done = progress.graduated;
               return (
-                <li key={d.id} className="a-up overflow-hidden rounded-[20px] border border-cream-line bg-cream" style={delay(0.12 + Math.min(i, 6) * 0.06)}>
+                <li key={d.id} className={`a-up overflow-hidden rounded-[20px] border ${done ? "border-cream-line bg-cream" : "border-line bg-white"}`} style={delay(0.12 + Math.min(i, 6) * 0.06)}>
                   <button
                     onClick={() => open(d, "major")}
                     aria-label={`${d.name} 학과 홈으로 가기`}
-                    className="pressable flex w-full items-center gap-[12px] p-[16px] text-left active:bg-cream-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mint-deep"
+                    className={`pressable flex w-full items-center gap-[12px] p-[16px] text-left ${done ? "active:bg-cream-2" : "active:bg-chalk"} focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mint-deep`}
                   >
                     <img src={yearCharacter(progress.openYear).src} alt="" className="h-[56px] w-[56px] shrink-0 object-contain" />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-[6px]">
                         <strong className="min-w-0 truncate text-[17px] font-semibold leading-[24px] text-slate">{d.name}</strong>
-                        <span className={`shrink-0 rounded-full px-[9px] py-[1px] text-[12px] font-semibold leading-[18px] ${progress.graduated ? "bg-sun/40 text-ink" : "bg-white text-mint-deep"}`}>
-                          {progress.graduated ? "졸업" : `${progress.openYear}학년`}
+                        <span className={`shrink-0 rounded-full px-[9px] py-[1px] text-[12px] font-semibold leading-[18px] ${done ? "bg-sun/40 text-ink" : "bg-mint-soft text-mint-deep"}`}>
+                          {done ? "졸업" : `${progress.openYear}학년`}
                         </span>
                         {studying && <span className="shrink-0 text-[12px] font-semibold leading-[18px] text-mint">체험 중</span>}
                       </span>
@@ -2382,7 +2384,7 @@ export function Experiences({ nav, state, setState }) {
                     <Chevron />
                   </button>
                   {(progress.graduated || progress.taken.length > 0) && (
-                    <div className="flex flex-wrap gap-[8px] border-t border-cream-line px-[16px] py-[12px]">
+                    <div className={`flex flex-wrap gap-[8px] border-t px-[16px] py-[12px] ${done ? "border-cream-line" : "border-line"}`}>
                       {progress.graduated && (
                         <button className="button ghost" onClick={() => open(d, "graduation")}>
                           졸업 리포트 보기
