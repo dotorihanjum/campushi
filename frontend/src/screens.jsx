@@ -59,7 +59,7 @@ import {
   timeAgo,
 } from "./community.js";
 import { MOCK_MENTORS } from "./communityMock.js";
-import { CAMPUS, CAMPUSES, departmentsIn, findCampuses } from "./campus.js";
+import { CAMPUS, CAMPUSES, densestSpot, departmentsIn, findCampuses } from "./campus.js";
 import CampusMap, { MapCredit, MAP_H, MAP_W } from "./CampusMap.jsx";
 
 /* ------------------------------------------------------------------ */
@@ -1017,8 +1017,9 @@ function guideLine({ landing, hint, list, catalog, studying, progress }) {
 const HOME_TOP = 164;
 // 학과 둘러보기 제목 높이.
 const DEPT_HEAD = 44;
-// 처음에는 지도 그림의 한가운데(가로·세로)가 지도 틀 가운데 오게 둔다(2026-11-10 사용자 요청).
-const MAP_CENTER = [MAP_W / 2, MAP_H / 2];
+// 처음에는 지도 틀에 보이는 크기 안에 건물이 가장 많이 들어오는 곳의 가운데를 보여 준다(2026-11-11 사용자 요청,
+// 그림 한가운데는 건물이 적은 숲이라서).
+const MAP_FOCUS = (w, h) => densestSpot(w, h);
 const HOME_FOLD = `calc((var(--vh) + var(--tt) + var(--bt) - ${TAB_H}) * 1px)`;
 
 export function Home({ nav, route, state, setState, catalog }) {
@@ -1112,7 +1113,7 @@ export function Home({ nav, route, state, setState, catalog }) {
           <PanView
             width={MAP_W}
             height={MAP_H}
-            focus={MAP_CENTER}
+            focus={MAP_FOCUS}
             label={`${CAMPUS.name} 지도. 끌거나 화살표 키로 둘러보고, 두 손가락이나 +·- 키로 확대·축소해요.`}
             overlay={<MapCredit />}
             className="h-full rounded-[24px] border border-[#cfe5c6] bg-[#cdeac2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint-deep"

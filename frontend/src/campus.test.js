@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CAMPUS, PLACES, departmentsIn, placeOf } from "./campus.js";
+import { CAMPUS, PLACES, densestSpot, departmentsIn, placeOf } from "./campus.js";
 import { BUILDINGS, MAP_H, MAP_W, ROADS, TREES } from "./campusMapData.js";
 import { createDepartment } from "./model.js";
 
@@ -66,4 +66,20 @@ test("학교 검색: 학교 이름(띄어쓰기 무시, '○○대' 줄임말 �
   assert.deepEqual(ids("경희대 국제"), []);
   assert.deepEqual(ids("연세대"), []);
   assert.deepEqual(ids("x".repeat(500)), []);
+});
+
+test("홈 지도는 처음에 건물이 가장 많이 모인 곳의 가운데를 보여 준다", () => {
+  const box = (cx, cy) => ({ cx, cy, w: 10, h: 10 });
+  // 왼쪽에 셋이 모이고 오른쪽에 하나 떨어져 있으면, 왼쪽 셋을 감싸는 상자의 가운데.
+  assert.deepEqual(densestSpot(100, 100, [box(10, 10), box(50, 30), box(30, 70), box(400, 300)]), [30, 40]);
+  // 창이 모두를 담을 만큼 크면 전체의 가운데.
+  assert.deepEqual(densestSpot(1000, 1000, [box(10, 10), box(400, 300)]), [205, 155]);
+  // 건물이 없거나 창 크기를 모르면 그림 한가운데.
+  assert.deepEqual(densestSpot(100, 100, []), [MAP_W / 2, MAP_H / 2]);
+  assert.deepEqual(densestSpot(0, 0), [MAP_W / 2, MAP_H / 2]);
+  // 실제 지도: 틀(폭 368)에 보이는 곳은 건물이 몰린 중앙도서관~예술디자인대학 쪽이라, 그림 한가운데보다 왼쪽이다.
+  const [x] = densestSpot(368, 400);
+  assert.ok(x < MAP_W / 2 - 60, `x=${x}`);
+  const inside = BUILDINGS.filter((b) => Math.abs(b.cx - x) <= 184);
+  assert.ok(["중앙도서관", "학생회관", "전자정보대학", "예술디자인대학"].every((n) => inside.some((b) => b.name === n)));
 });

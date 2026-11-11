@@ -59,3 +59,26 @@ export const placeOf = (name) => PLACES.find((place) => place.kind === "college"
 
 // 건물마다 그 건물에 있는 (서비스의) 학과. 학과가 하나도 없는 단과대 건물은 잠긴 건물로 보인다.
 export const departmentsIn = (departments, name) => departments.filter((d) => d.building === name);
+
+/**
+ * 폭 w·높이 h(지도 px)의 창을 지도 위에 놓았을 때 바닥 중심이 가장 많이 들어오는 건물 무리를 찾아, 그 무리를 감싸는 상자의
+ * 가운데 [x, y]를 돌려준다. 홈 지도가 처음 보여 줄 곳이다. 가장 많이 담는 창은 늘 왼쪽·위쪽 끝이 어떤 건물 중심에 닿게 옮길
+ * 수 있으므로 그 자리들만 본다. 같은 수의 창이 여럿이면 왼쪽 위의 것을 고른다(매번 같은 곳을 보여 주도록).
+ */
+export function densestSpot(w, h, buildings = BUILDINGS) {
+  if (!buildings.length || !(w > 0) || !(h > 0)) return [MAP_W / 2, MAP_H / 2];
+  const xs = [...new Set(buildings.map((b) => b.cx))].sort((a, b) => a - b);
+  const ys = [...new Set(buildings.map((b) => b.cy))].sort((a, b) => a - b);
+  let best = [];
+  for (const x of xs) {
+    for (const y of ys) {
+      const inside = buildings.filter((b) => b.cx >= x && b.cx <= x + w && b.cy >= y && b.cy <= y + h);
+      if (inside.length > best.length) best = inside;
+    }
+  }
+  const left = Math.min(...best.map((b) => b.cx - b.w / 2));
+  const right = Math.max(...best.map((b) => b.cx + b.w / 2));
+  const top = Math.min(...best.map((b) => b.cy - b.h / 2));
+  const bottom = Math.max(...best.map((b) => b.cy + b.h / 2));
+  return [(left + right) / 2, (top + bottom) / 2];
+}

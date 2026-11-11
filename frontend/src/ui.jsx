@@ -330,7 +330,8 @@ const clampZoom = (z, min) => Math.min(ZOOM_MAX, Math.max(min, z));
  * 받고, 틀 안에서 끄는 동안에는 페이지가 같이 스크롤되지 않는다(touch-action: none). PAN_SLOP 넘게 끈 뒤에 뗀 것은 안쪽 버튼의
  * 클릭으로 치지 않는다.
  * 확대·축소: 두 손가락 벌리기·오므리기, Ctrl+휠(노트북 터치패드 핀치), 틀의 +·- 키, 오른쪽 아래 막대(−·+ 버튼과 끌 수 있는 손잡이).
- * focus: 처음(그리고 끌기 전 틀 크기가 바뀔 때) 틀 가운데에 둘 내용 안의 점 [x, y].
+ * focus: 처음(그리고 끌기 전 틀 크기가 바뀔 때) 틀 가운데에 둘 내용 안의 점 [x, y]. 틀에 보이는 내용 크기(폭, 높이)를 받아
+ *   그 점을 돌려주는 함수여도 된다(화면 높이에 따라 보이는 영역이 달라질 때).
  * overlay: 틀 위에 고정해 둘 것(끌기·확대와 함께 움직이지 않는다. 예: 지도 출처 표기).
  * 키보드로 안쪽 버튼에 포커스가 가면 그 버튼이 보이게 밀고, 틀에 포커스가 있으면 화살표 키로 민다.
  */
@@ -350,7 +351,6 @@ export function PanView({ width, height, focus, label, className = "", style, ov
   // 아래 확대 막대에 보여 줄 배율과 가장 작은 배율.
   const [zoom, setZoom] = useState(1);
   const [minZoom, setMinZoom] = useState(1);
-  const [fx, fy] = focus;
 
   const paint = () => {
     raf.current = 0;
@@ -393,7 +393,11 @@ export function PanView({ width, height, focus, label, className = "", style, ov
         setZoom(min);
       }
       if (touched.current) moveTo(pos.current.x, pos.current.y, true);
-      else center(fx * zoomRef.current, fy * zoomRef.current, true);
+      else {
+        const z = zoomRef.current;
+        const [fx, fy] = typeof focus === "function" ? focus(size.current.w / z, size.current.h / z) : focus;
+        center(fx * z, fy * z, true);
+      }
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -414,7 +418,7 @@ export function PanView({ width, height, focus, label, className = "", style, ov
       raf.current = 0;
     };
     // moveTo·center·zoomAt은 ref만 쓴다.
-  }, [fx, fy, width, height]);
+  }, [focus, width, height]);
 
   // 앱 화면 전체가 창 크기에 맞게 확대·축소되어 있으므로, 포인터가 움직인 화면 px를 틀 안의 px로 바꾼다.
   const scaleOf = (el) => el.getBoundingClientRect().width / el.offsetWidth || 1;
