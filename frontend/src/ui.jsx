@@ -124,15 +124,16 @@ export function Screen({ children, footer, foot = 740, veil = true, h, resetOn, 
 }
 
 /**
- * 확인 창. 화면을 어둡게 덮고 가운데에 띄운다. 열리면 첫 버튼에 초점을 두고, Tab은 창 안에서만 돌며,
- * Esc나 바깥을 누르면 닫힌다. 닫히면 열기 전에 초점이 있던 곳으로 돌려준다.
+ * 확인 창. 화면을 어둡게 덮고 가운데에 띄운다. 열리면 data-autofocus가 붙은 것(없으면 첫 버튼)에 초점을 두고,
+ * Tab은 창 안의 버튼·입력·링크 사이에서만 돌며, Esc나 바깥을 누르면 닫힌다. 닫히면 열기 전에 초점이 있던 곳으로 돌려준다.
  */
+const FOCUSABLE = "button:not([disabled]), input:not([disabled]), a[href]";
 export function Dialog({ title, children, actions, onClose }) {
   const box = useRef(null);
   const titleId = useId();
   useEffect(() => {
     const opener = document.activeElement;
-    box.current.querySelector("button:not([disabled])")?.focus({ preventScroll: true });
+    (box.current.querySelector("[data-autofocus]") || box.current.querySelector("button:not([disabled])"))?.focus({ preventScroll: true });
     return () => opener?.focus?.({ preventScroll: true });
   }, []);
   const keys = (e) => {
@@ -141,7 +142,7 @@ export function Dialog({ title, children, actions, onClose }) {
       onClose();
     }
     if (e.key !== "Tab") return;
-    const buttons = [...box.current.querySelectorAll("button:not([disabled])")];
+    const buttons = [...box.current.querySelectorAll(FOCUSABLE)];
     const at = buttons.indexOf(document.activeElement);
     const next = (at + (e.shiftKey ? -1 : 1) + buttons.length) % buttons.length;
     e.preventDefault();

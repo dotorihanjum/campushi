@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  cleanNickname,
+  NICKNAME_MAX,
   CREDIT_PER_PASS,
   OLD_STORAGE_KEYS,
   STORAGE_KEY,
@@ -259,4 +261,15 @@ test("과목을 이수할 때마다 크레딧을 받고, 다시 해서 이수해
 test("처음 상태는 학과 데이터 없이 시작한다", () => {
   assert.deepEqual(normalize(undefined), initialState);
   assert.deepEqual(departmentsOf(initialState), []);
+});
+
+test("프로필 이름은 앞뒤 공백을 지우고 12자까지만 저장한다", () => {
+  assert.equal(cleanNickname("  미래의   개발자 \n"), "미래의 개발자");
+  assert.equal(cleanNickname("가".repeat(20)), "가".repeat(NICKNAME_MAX));
+  assert.equal([...cleanNickname("😀".repeat(20))].length, NICKNAME_MAX);
+  assert.equal(cleanNickname("   "), "");
+  assert.equal(cleanNickname(42), "");
+  assert.equal(normalize({ nickname: "  도토리 " }).nickname, "도토리");
+  assert.equal(normalize({ nickname: { x: 1 } }).nickname, "");
+  assert.equal(normalize({}).nickname, "");
 });

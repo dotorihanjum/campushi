@@ -22,6 +22,13 @@ const asFinal = (data) => ({ kind: data.template === "A" ? "artwork" : "project"
 // 과목을 이수하면 받는 크레딧. 재수강해서 이수해도 받는다(2026-11-09 사용자 결정, 임시값).
 // 지급량·반복 제한·구매는 값이 정해지면 바꾼다. 모은 크레딧은 멘토링이 생기면 쓴다.
 export const CREDIT_PER_PASS = 5;
+// 마이페이지 프로필에 쓰는 이름(이 브라우저에만 저장, 계정과 상관없다)의 최대 글자 수.
+export const NICKNAME_MAX = 12;
+// 앞뒤 공백과 줄바꿈을 지우고 NICKNAME_MAX자(한글 한 글자 = 1자)까지 자른다. 이름으로 쓸 수 없으면 "".
+export function cleanNickname(value) {
+  if (typeof value !== "string") return "";
+  return [...value.replace(/\s+/g, " ").trim()].slice(0, NICKNAME_MAX).join("").trim();
+}
 
 export const initialState = {
   version: 2,
@@ -41,6 +48,8 @@ export const initialState = {
   catalog: [],
   // 모은 크레딧(모든 학과 공용).
   credits: 0,
+  // 마이페이지 프로필의 이름. 정하지 않았으면 "".
+  nickname: "",
   onboarded: false,
   // 캠퍼스에 도착하는 인트로를 봤는지.
   introSeen: false,
@@ -296,6 +305,7 @@ export function normalize(value) {
     notes: pick(value.notes, (item) => (typeof item === "string" && item.trim() ? item.slice(0, 3000) : null)),
     drafts: pick(value.drafts, (item) => (typeof item === "string" ? item.slice(0, 3000) : null)),
     credits: Number.isInteger(value.credits) && value.credits > 0 ? value.credits : 0,
+    nickname: cleanNickname(value.nickname),
     introSeen: !!value.introSeen,
     campus: isOpenCampus(value.campus) ? value.campus : null,
     current: built.has(value.current) ? value.current : null,

@@ -20,7 +20,9 @@ import {
 } from "./ui.jsx";
 import {
   CREDIT_PER_PASS,
+  NICKNAME_MAX,
   YEARS,
+  cleanNickname,
   departmentsOf,
   completeCourse,
   courseKey,
@@ -2047,97 +2049,314 @@ function download(name, text) {
   window.setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
+function Chevron() {
+  return (
+    <svg width="8" height="13" viewBox="0 0 8 13" className="shrink-0 text-faint" aria-hidden>
+      <path d="M1.5 1.5 6.5 6.5l-5 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// 마이페이지 목록 한 줄(누르면 창을 열거나 화면을 옮긴다).
+function MenuRow({ label, value, onClick, tone = "text-ink-2" }) {
+  return (
+    <li>
+      <button onClick={onClick} className="pressable flex min-h-[52px] w-full items-center gap-[10px] px-[16px] text-left active:bg-chalk focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mint-deep">
+        <span className={`min-w-0 flex-1 truncate text-[15px] ${tone}`}>{label}</span>
+        {value && <span className="max-w-[170px] shrink-0 truncate text-[13px] text-gray">{value}</span>}
+        <Chevron />
+      </button>
+    </li>
+  );
+}
+
+function MenuGroup({ title, children, d = 0 }) {
+  return (
+    <section className="a-up mt-[28px]" style={delay(d)}>
+      <h2 className="mb-[8px] px-[4px] text-[13px] font-semibold leading-[20px] text-slate">{title}</h2>
+      <ul className="divide-y divide-line overflow-hidden rounded-[18px] border border-line bg-white">{children}</ul>
+    </section>
+  );
+}
+
+function ProgressBar({ percent, label }) {
+  return (
+    <div className="h-[8px] overflow-hidden rounded-full bg-track" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+      <div className="h-full rounded-full bg-mint transition-[width] duration-700" style={{ width: `${percent}%` }} />
+    </div>
+  );
+}
+
 export function My({ nav, state, setState }) {
-  const [confirming, setConfirming] = useState(false);
-  const journeys = Object.entries(state.journeys)
-    .map(([id]) => ({ d: all(state).find((item) => item.id === id && item.school) }))
-    .filter((item) => item.d);
+  // 열려 있는 창: "name"(이름 바꾸기), "credit", "storage", "sources", "reset".
+  const [sheet, setSheet] = useState(null);
+  const [name, setName] = useState("");
+  const [toast, setToast] = useState("");
+  const toastTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(toastTimer.current), []);
+  const say = (text) => {
+    setToast(text);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(""), 2200);
+  };
+  const departments = all(state);
+  const journeys = Object.keys(state.journeys)
+    .map((id) => departments.find((item) => item.id === id && item.school))
+    .filter(Boolean)
+    .map((d) => ({ d, progress: progressOf(state, d) }));
+  // 지금 체험 중인 학과(홈과 같다: 홈에 보여 주던 학과, 없으면 가장 최근에 입학한 학과).
+  const studyingId = state.journeys[state.studying] ? state.studying : latestJourney(state);
+  const studying = journeys.find((item) => item.d.id === studyingId) || null;
+  const character = yearCharacter(studying?.progress.openYear || 1);
+  const passed = journeys.reduce((sum, item) => sum + item.progress.passedCount, 0);
+  const graduated = journeys.filter((item) => item.progress.graduated).length;
+  const sources = departments.filter((d) => d.source.url);
+  const nickname = state.nickname || "";
+
   const choose = (d, to) => {
     setState((s) => ({ ...s, current: d.id }));
     if (to === "major") nav.reset(["home", "major"]);
     else nav.push(to);
   };
+  const openName = () => {
+    setName(nickname);
+    setSheet("name");
+  };
+  const saveName = (e) => {
+    e.preventDefault();
+    const next = cleanNickname(name);
+    setState((s) => ({ ...s, nickname: next }));
+    setSheet(null);
+    if (next !== nickname) say(next ? "이름을 바꿨어요." : "이름을 지웠어요.");
+  };
+  const close = () => setSheet(null);
+  const closeButton = (
+    <button className="button ghost" onClick={close}>
+      닫기
+    </button>
+  );
+  const link = "text-mint-deep underline underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-mint-deep";
+
+  const dialogs = {
+    name: (
+      <Dialog
+        title="이름 바꾸기"
+        onClose={close}
+        actions={
+          <>
+            <button type="submit" form="nickname-form" className="button">
+              저장하기
+            </button>
+            <button className="button ghost" onClick={close}>
+              취소
+            </button>
+          </>
+        }
+      >
+        <form id="nickname-form" onSubmit={saveName}>
+          <label htmlFor="nickname" className="block">
+            {`마이페이지에 보일 이름이에요. ${NICKNAME_MAX}자까지 쓸 수 있고, 비워 두면 이름 없이 보여요.`}
+          </label>
+          <input
+            id="nickname"
+            data-autofocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={NICKNAME_MAX * 2}
+            autoComplete="nickname"
+            placeholder="예: 미래의 개발자"
+            className={`${INPUT} mt-[12px] h-[48px] w-full`}
+          />
+          <p className={`mt-[6px] text-right text-[12px] tabular-nums ${[...name.trim()].length > NICKNAME_MAX ? "text-[#c62a2f]" : "text-gray"}`} aria-live="polite">
+            {[...name.trim()].length > NICKNAME_MAX ? `${NICKNAME_MAX}자까지만 저장돼요` : `${[...name.trim()].length} / ${NICKNAME_MAX}`}
+          </p>
+        </form>
+      </Dialog>
+    ),
+    credit: (
+      <Dialog title="크레딧은 어디에 쓰나요?" onClose={close} actions={closeButton}>
+        {`과목을 이수할 때마다 크레딧 ${josa(String(CREDIT_PER_PASS), "을", "를")} 받아요. 같은 과목을 다시 해서 이수해도 받아요. 모은 크레딧은 모든 학과에서 함께 쓰고, 재학생 멘토링이 열리면 쓸 수 있어요.`}
+      </Dialog>
+    ),
+    storage: (
+      <Dialog title="기록은 어디에 저장되나요?" onClose={close} actions={closeButton}>
+        체험 기록, 한 줄 기록, 크레딧, 이름은 지금 쓰는 이 브라우저에만 저장돼요. 다른 기기나 브라우저에서는 보이지 않고, 브라우저의 사이트 데이터를 지우면 함께 사라져요. 남겨 두고 싶은 기록은 체험 기록의 &lsquo;리포트 내려받기&rsquo;로 저장해 주세요.
+      </Dialog>
+    ),
+    sources: (
+      <Dialog title="자료 출처" onClose={close} actions={closeButton}>
+        <p>학년별 과목은 학교의 공식 교육과정 편성표를 따라요.</p>
+        <ul className="mt-[10px] grid gap-[8px]">
+          {sources.map((d) => (
+            <li key={d.id}>
+              <a href={d.source.url} target="_blank" rel="noopener noreferrer" className={link}>
+                {`${d.name}${d.source.year ? ` ${d.source.year} 교육과정` : " 교육과정"}`}
+              </a>
+            </li>
+          ))}
+          <li>
+            <a href={CAMPUS.source} target="_blank" rel="noopener noreferrer" className={link}>
+              {`${CAMPUS.school} ${CAMPUS.name} 캠퍼스맵(건물 이름·번호)`}
+            </a>
+          </li>
+          <li>
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className={link}>
+              지도 모양 © OpenStreetMap 기여자
+            </a>
+          </li>
+        </ul>
+      </Dialog>
+    ),
+    reset: (
+      <Dialog
+        title="처음부터 다시 시작할까요?"
+        onClose={close}
+        actions={
+          <>
+            <button className="button ghost" onClick={close}>
+              그대로 두기
+            </button>
+            <button
+              className="button danger"
+              onClick={() => {
+                // 학과 데이터는 남겨 두어 처음부터 다시 시작해도 바로 학과를 볼 수 있게 한다.
+                setState((s) => ({ ...structuredClone(initialState), catalog: s.catalog }));
+                nav.reset(["splash"]);
+              }}
+            >
+              모두 지우기
+            </button>
+          </>
+        }
+      >
+        입학한 학과, 성적, 한 줄 기록, 크레딧, 이름이 모두 지워지고 되돌릴 수 없어요. 남겨 둘 리포트는 먼저 내려받아 주세요.
+      </Dialog>
+    ),
+  };
+
   return (
-    <Screen foot={TAB_TOP} veil={false} footer={<TabBar active="my" nav={nav} state={state} />}>
+    <Screen
+      foot={TAB_TOP}
+      veil={false}
+      footer={<TabBar active="my" nav={nav} state={state} />}
+      overlay={
+        <>
+          {sheet && dialogs[sheet]}
+          <Toast>{toast}</Toast>
+        </>
+      }
+    >
       <Header title="마이페이지" />
       <div
-        className="flow no-scrollbar absolute left-0 top-[104px] w-full overflow-y-auto px-[20px] pb-[24px] pt-[20px]"
+        className="flow no-scrollbar absolute left-0 top-[96px] w-full overflow-y-auto px-[20px] pb-[32px] pt-[12px]"
         style={{ bottom: `calc(${TAB_H}px - var(--bt) * 1px)` }}
       >
-        <div className="flex items-center justify-between">
-          <h1 className="a-up text-[20px] font-semibold leading-[28px] text-mint">나의 체험 기록</h1>
-          <CreditPill credits={state.credits || 0} className="a-up" />
-        </div>
-        <p className="a-up mt-[4px] text-[14px] leading-[22px] text-gray" style={delay(0.06)}>
-          {`과목을 이수할 때마다 크레딧 ${josa(String(CREDIT_PER_PASS), "을", "를")} 받아요. 모은 크레딧은 멘토링이 생기면 쓸 수 있어요. 기록은 이 브라우저에만 저장돼요.`}
-        </p>
-        {journeys.length === 0 && <p className="a-fade mt-[40px] text-center text-[14px] text-mute">아직 체험한 학과가 없어요.</p>}
-        {journeys.map(({ d }, i) => {
-          const progress = progressOf(state, d);
-          const finished = progress.graduated;
-          const average = averagePoint(progress.taken.map((course) => course.record.grade));
-          return (
-            <div key={d.id} className="a-up mt-[14px] rounded-[16px] border border-cream-line bg-cream p-[16px]" style={delay(0.12 + Math.min(i, 6) * 0.06)}>
-              <strong className="block overflow-hidden text-ellipsis whitespace-nowrap text-[16px] font-semibold text-slate">
-                {d.school} {d.name}
-              </strong>
-              <p className="mt-[4px] text-[12px] leading-[18px] text-gray">
-                {`${finished ? "졸업" : `${progress.openYear}학년 진행 중`} · 이수 ${progress.passedCount}과목${average === null ? "" : ` · 평점 ${average.toFixed(2)}`}`}
-              </p>
-              <div className="mt-[12px] flex flex-wrap gap-[8px]">
-                <button className="button" onClick={() => choose(d, "major")}>
-                  이어서 체험하기
-                </button>
-                {finished && (
-                  <button className="button ghost" onClick={() => choose(d, "graduation")}>
-                    졸업 리포트 보기
-                  </button>
-                )}
-                {progress.taken.length > 0 && (
-                  <button className="button ghost" onClick={() => download(`${d.school}-${d.name}-체험-리포트.txt`, reportText(state, d))}>
-                    리포트 내려받기
-                  </button>
-                )}
-              </div>
+        {/* 프로필: 학년 캐릭터, 이름, 학교와 지금 체험 중인 학과, 숫자 세 개. */}
+        <section aria-label="프로필" className="a-up rounded-[24px] border border-[#c4eee9] bg-mint-soft p-[18px]">
+          <div className="flex items-center gap-[14px]">
+            <div className="flex h-[76px] w-[76px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#c4eee9] bg-white">
+              <img src={character.src} alt={character.alt} className="h-[60px] w-[60px] object-contain" />
             </div>
-          );
-        })}
-        <div className="mt-[28px] text-center">
-          {confirming ? (
-            <div role="alert">
-              <p className="text-[13px] leading-[20px] text-ink-3">
-                추천 질문의 답, 체험 기록, 리포트가 모두 지워져요.
-                <br />
-                필요한 리포트는 먼저 내려받아 주세요.
+            <div className="min-w-0 flex-1">
+              <button onClick={openName} className="pressable group flex max-w-full items-center gap-[6px] rounded-[8px] text-left focus-visible:outline-2 focus-visible:outline-mint-deep">
+                <span className={`truncate text-[20px] font-bold leading-[28px] ${nickname ? "text-navy" : "text-mute"}`}>{nickname || "이름을 정해 주세요"}</span>
+                <svg width="16" height="16" viewBox="0 0 16 16" className="shrink-0 text-mint-deep" aria-hidden>
+                  <path d="M10.5 2.5l3 3L5.5 13.5H2.5v-3z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                </svg>
+                <span className="sr-only">이름 바꾸기</span>
+              </button>
+              <p className="mt-[2px] truncate text-[13px] leading-[20px] text-slate">{`${CAMPUS.school} ${CAMPUS.name}`}</p>
+              <p className="truncate text-[13px] font-semibold leading-[20px] text-mint-deep">
+                {studying
+                  ? `${studying.d.name} ${studying.progress.graduated ? "졸업" : `${studying.progress.openYear}학년`}`
+                  : "아직 입학한 학과가 없어요"}
               </p>
-              <div className="mt-[10px] flex justify-center gap-[8px]">
-                <button className="button ghost" onClick={() => setConfirming(false)}>
-                  그대로 두기
-                </button>
-                <button
-                  className="button danger"
-                  onClick={() => {
-                    // 학과 데이터는 남겨 두어 처음부터 다시 시작해도 바로 학과를 볼 수 있게 한다.
-                    setState((s) => ({ ...structuredClone(initialState), catalog: s.catalog }));
-                    nav.reset(["splash"]);
-                  }}
-                >
-                  모두 지우기
-                </button>
+            </div>
+          </div>
+          <dl className="mt-[16px] grid grid-cols-3 divide-x divide-line rounded-[16px] bg-white py-[12px] text-center">
+            {[
+              ["크레딧", state.credits || 0],
+              ["이수한 과목", passed],
+              ["졸업한 학과", graduated],
+            ].map(([label, value]) => (
+              <div key={label} className="flex flex-col-reverse">
+                <dt className="text-[12px] leading-[18px] text-gray">{label}</dt>
+                <dd className="text-[20px] font-bold leading-[28px] text-navy tabular-nums">{value}</dd>
               </div>
+            ))}
+          </dl>
+        </section>
+
+        {/* 학과별 체험 기록. */}
+        <section className="a-up mt-[28px]" style={delay(0.06)}>
+          <h2 className="mb-[8px] flex items-baseline justify-between px-[4px] text-[13px] font-semibold leading-[20px] text-slate">
+            나의 체험 기록
+            {journeys.length > 0 && <span className="font-normal text-gray">{`${journeys.length}개 학과`}</span>}
+          </h2>
+          {journeys.length === 0 ? (
+            <div className="rounded-[18px] border border-dashed border-line bg-chalk px-[16px] py-[22px] text-center">
+              <p className="text-[14px] leading-[22px] text-ink-3">아직 입학한 학과가 없어요. 홈에서 학과를 골라 첫 수업을 들어 봐요.</p>
+              <button className="button mt-[12px]" onClick={() => nav.reset([["home", { focus: "departments" }]])}>
+                학과 둘러보기
+              </button>
             </div>
           ) : (
-            <>
-              <button className="button ghost mb-[14px]" onClick={() => nav.push("school", { change: true })}>
-                {`학교 바꾸기 · 지금 ${CAMPUS.school} ${CAMPUS.name}`}
-              </button>
-              <br />
-              <button className="text-button" onClick={() => setConfirming(true)}>
-              처음부터 다시 시작하기
-              </button>
-            </>
+            <ul className="grid gap-[12px]">
+              {journeys.map(({ d, progress }) => {
+                const average = averagePoint(progress.taken.map((course) => course.record.grade));
+                return (
+                  <li key={d.id} className="rounded-[18px] border border-cream-line bg-cream p-[16px]">
+                    <div className="flex items-center gap-[8px]">
+                      <strong className="min-w-0 flex-1 truncate text-[16px] font-semibold text-slate">{d.name}</strong>
+                      <span className={`shrink-0 rounded-full px-[10px] py-[2px] text-[12px] font-semibold leading-[18px] ${progress.graduated ? "bg-sun/40 text-ink" : "bg-white text-mint-deep"}`}>
+                        {progress.graduated ? "졸업" : `${progress.openYear}학년`}
+                      </span>
+                    </div>
+                    <p className="mt-[2px] text-[12px] leading-[18px] text-gray">
+                      {`이수 ${progress.passedCount}과목${average === null ? "" : ` · 평점 ${average.toFixed(2)} / 4.5`}`}
+                    </p>
+                    <div className="mt-[12px] flex items-center gap-[10px]">
+                      <div className="flex-1">
+                        <ProgressBar percent={progress.percent} label={`${d.name} 졸업까지 진행률`} />
+                      </div>
+                      <span className="shrink-0 text-[12px] font-semibold text-mint-deep tabular-nums">{progress.graduated ? "졸업 완료" : `졸업까지 ${progress.percent}%`}</span>
+                    </div>
+                    <div className="mt-[14px] flex flex-wrap gap-[8px]">
+                      <button className="button" onClick={() => choose(d, "major")}>
+                        {progress.graduated ? "과목 계속 듣기" : "이어서 체험하기"}
+                      </button>
+                      {progress.graduated && (
+                        <button className="button ghost" onClick={() => choose(d, "graduation")}>
+                          졸업 리포트 보기
+                        </button>
+                      )}
+                      {progress.taken.length > 0 && (
+                        <button className="button ghost" onClick={() => download(`${d.school}-${d.name}-체험-리포트.txt`, reportText(state, d))}>
+                          리포트 내려받기
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
-        </div>
+        </section>
+
+        <MenuGroup title="설정" d={0.12}>
+          <MenuRow label="이름 바꾸기" value={nickname || "정하지 않음"} onClick={openName} />
+          <MenuRow label="학교 바꾸기" value={`${CAMPUS.school} ${CAMPUS.name}`} onClick={() => nav.push("school", { change: true })} />
+        </MenuGroup>
+
+        <MenuGroup title="도움말" d={0.18}>
+          <MenuRow label="크레딧은 어디에 쓰나요?" onClick={() => setSheet("credit")} />
+          <MenuRow label="기록은 어디에 저장되나요?" onClick={() => setSheet("storage")} />
+          <MenuRow label="자료 출처" onClick={() => setSheet("sources")} />
+        </MenuGroup>
+
+        <MenuGroup title="기록 관리" d={0.24}>
+          <MenuRow label="처음부터 다시 시작하기" tone="text-[#c62a2f]" onClick={() => setSheet("reset")} />
+        </MenuGroup>
       </div>
     </Screen>
   );
