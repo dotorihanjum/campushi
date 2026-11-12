@@ -3,7 +3,7 @@ import { gameFor, isGame } from "./games.js";
 import { groupExperience, GROUPS } from "./groups.js";
 import { better, cleanScore, isGrade, passes, PASS } from "./grades.js";
 import { isOpenCampus } from "./campus.js";
-import { CONDITIONS, LABS, labOf } from "./labs/index.js";
+import { CONDITIONS, addedSince, labOf } from "./labs/index.js";
 
 // 학기 없이 학년 단위로 진행한다(2026-11-09 사용자 결정). 열린 학년의 과목은 아무 순서로나 듣고,
 // 그 학년 필수과목(전공기초·전공필수) 중 체험이 있는 것을 모두 이수하면 다음 학년이 열린다.
@@ -315,14 +315,12 @@ export function normalize(value) {
 }
 
 /**
- * 이수 조건 버전 from 이후에 체험이 생긴 필수과목 가운데, 그 체험이 없던 조건으로 계산했을 때 이미 다음 학년이 열려 있던
+ * 이수 조건 버전 from 이후에 체험이 생긴(진짜 수업 체험, 다시 공개한 이론 퀴즈 — labs/index.js의 addedSince) 필수과목 가운데, 그 체험이 없던 조건으로 계산했을 때 이미 다음 학년이 열려 있던
  * (4학년 과목은 이미 졸업한) 과목을 예외로 돌려준다: { "학과id|과목": true }. 아직 다음 학년이 열리지 않은 사용자는 새 조건을 따른다.
  */
 export function grandfather(state, d, from) {
   if (!d || !state.journeys?.[d.id]) return {};
-  const added = Object.entries(LABS[d.id] || {})
-    .filter(([subject, lab]) => lab.since > from && labFor(d, subject) && isRequired(d, subject))
-    .map(([subject]) => subject);
+  const added = addedSince(d.id, from).filter((subject) => !isPlanned(d, subject) && isRequired(d, subject));
   if (!added.length) return {};
   const before = progressOf(state, d, { ignore: new Set(added) });
   return Object.fromEntries(

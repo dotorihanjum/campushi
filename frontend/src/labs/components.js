@@ -1,7 +1,4 @@
-import { lazy } from "react";
-
 // 과목 체험 화면. 그 과목에 들어갈 때만 불러온다(첫 화면 번들에 넣지 않는다). 키는 labs/index.js의 체험 id다.
-export const LAB_SCREENS = {
-  "python-functions": lazy(() => import("./python-functions/Lab.jsx")),
-  "stack-queue": lazy(() => import("./stack-queue/Lab.jsx")),
-};
+// 지금 공개한 진짜 수업 체험은 없다(2026-11-12 사용자 결정으로 웹/파이선·자료구조 체험을 뺐다). 새 체험은
+// "<id>": lazy(() => import("./<id>/Lab.jsx")) 꼴로 넣는다.
+export const LAB_SCREENS = {};

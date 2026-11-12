@@ -42,8 +42,14 @@ class ApiTest(unittest.TestCase):
         self.assertIn("데이터베이스", cse["years"]["3"])
         # 2023-1 ~ 2026-2 개설 기록이 없는 과목은 뺐다(SOURCE.md).
         self.assertNotIn("웹보안", cse["years"]["4"])
-        # 이론 퀴즈 15과목은 체험 설계 원칙에 맞지 않아 다시 쓸 때까지 내렸다(2026-11-10 사용자 결정). 지금 공개한 연습 문제는 없다.
-        self.assertEqual(cse["games"], {})
+        # 이론 퀴즈 15과목은 2026-11-10에 내렸다가 2026-11-12 사용자 결정으로 다시 공개했다. 지금 공개한 연습 문제는 이 15과목뿐이다.
+        self.assertEqual(
+            set(cse["games"]),
+            {"이산구조", "미분적분학", "미분방정식", "선형대수", "실감미디어컴퓨팅기초",
+             "신호와시스템", "회로와신호", "확률및랜덤변수", "컴퓨터구조", "논리회로", "기계학습",
+             "게임프로그래밍입문", "풀스택서비스네트워킹", "마이크로서비스프로그래밍", "오픈소스SW개발방법및도구"},
+        )
+        self.assertEqual(set(cse["games"].values()), {"theory"})
         self.assertEqual(design["games"], {})
         self.assertEqual(len(design["years"]["2"]), 10)
 
@@ -138,14 +144,16 @@ class ApiTest(unittest.TestCase):
                 self.assertTrue(game["terms"] and game["facts"] and game["units"])
         main.lesson_games.cache_clear()
 
-    def test_withdrawn_theory_banks_are_not_served(self):
-        # 2026-11-10 사용자 결정: 고등학생이 용어를 외워야만 풀 수 있는 이론 퀴즈는 다시 쓸 때까지 내린다.
+    def test_restored_theory_banks_are_served(self):
+        # 2026-11-10에 내렸던 이론 퀴즈를 2026-11-12 사용자 결정으로 다시 공개했다. 내린 기록과 다시 공개한 기록은 check에 남고 화면에는 보내지 않는다.
         main.lesson_games.cache_clear()
         banks = theory_banks.load()
-        self.assertTrue(all(bank["status"] != "verified" and bank["check"].get("withdrawn") for bank in banks))
-        for department in self.client.get("/api/departments").json()["departments"]:
-            self.assertNotIn("theory", department["games"].values())
-        self.assertEqual(self.client.post("/api/lesson_game", json={"subject": "미분방정식"}).status_code, 404)
+        self.assertTrue(all(bank["status"] == "verified" and bank["check"].get("withdrawn") and bank["check"].get("restored") for bank in banks))
+        response = self.client.post("/api/lesson_game", json={"subject": "미분방정식"})
+        self.assertEqual(response.status_code, 200)
+        game = response.json()["game"]
+        self.assertEqual(game["type"], "theory")
+        self.assertNotIn("check", game)
 
     def test_unverified_theory_banks_are_hidden(self):
         bank = theory_banks.load()[0]
