@@ -1,6 +1,68 @@
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
 @import 'tailwindcss';
 
+/* 마이페이지: 본문과 조작 영역은 화면 높이에 관계없이 크기를 유지한다. */
+.my-page { color: var(--color-navy); line-height: 1.5; }
+.my-page button { cursor: pointer; }
+.my-page button:focus-visible { outline: 2px solid var(--color-mint-deep); outline-offset: 3px; }
+.my-title { font-size: 24px; font-weight: 700; line-height: 32px; margin-bottom: 20px; }
+.my-profile { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 16px; border-radius: 24px; background: var(--color-mint-soft); }
+.my-profile-credit { display: flex; flex-basis: 100%; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 10px 14px; background: white; border-radius: 14px; color: var(--color-navy); font-size: 15px; text-align: left; }
+.my-profile-credit:hover { background: var(--color-chalk); }
+.my-credit-value { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-slate); }
+.my-credit-value strong { color: var(--color-mint-deep); font-size: 22px; line-height: 28px; font-variant-numeric: tabular-nums; }
+.my-avatar { position: relative; display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; flex-shrink: 0; background: white; border-radius: 50%; }
+.my-avatar img { width: 54px; height: 54px; object-fit: contain; }
+.my-avatar.has-photo img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.my-avatar-edit { position: absolute; right: -2px; bottom: -2px; display: grid; place-items: center; width: 22px; height: 22px; border: 2px solid white; border-radius: 50%; background: var(--color-mint-deep); color: white; font-size: 14px; }
+.my-profile-editor { overflow-y: auto; padding: 4px; }
+.my-photo-preview { display: grid; place-items: center; width: 88px; height: 88px; margin: 4px auto 16px; background: var(--color-mint-soft); border-radius: 50%; overflow: hidden; }
+.my-photo-preview img { width: 72px; height: 72px; object-fit: contain; }
+.my-photo-preview img.is-photo { width: 100%; height: 100%; object-fit: cover; }
+.my-photo-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.my-photo-options button { min-height: 48px; padding: 8px; border: 1px solid var(--color-line); border-radius: 12px; color: var(--color-navy); font-size: 14px; cursor: pointer; }
+.my-photo-options button[aria-pressed=true] { border-color: var(--color-mint-deep); background: var(--color-mint-soft); color: var(--color-mint-deep); font-weight: 600; }
+.my-photo-options button:focus-visible { outline: 2px solid var(--color-mint-deep); outline-offset: 2px; }
+.my-photo-options button:disabled { opacity: .6; cursor: wait; }
+.my-photo-help { color: var(--color-slate); font-size: 14px; line-height: 22px; }
+.my-profile-editor label { margin-top: 20px; font-size: 16px; font-weight: 600; color: var(--color-navy); }
+.my-profile-error { margin-top: 8px; color: #a52930; font-size: 14px; line-height: 22px; }
+.my-name-row, .my-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.my-name { font-size: 20px; font-weight: 700; overflow-wrap: anywhere; }
+.my-edit { display: grid; place-items: center; min-width: 48px; min-height: 48px; padding: 0 8px; flex-shrink: 0; color: var(--color-mint-deep); border-radius: 8px; }
+.my-secondary { color: var(--color-slate); font-size: 14px; line-height: 22px; overflow-wrap: anywhere; }
+.my-profile-status { margin-top: 4px; font-size: 14px; line-height: 22px; color: var(--color-mint-deep); font-weight: 500; overflow-wrap: anywhere; }
+.my-section { margin-top: 28px; }
+.my-section h2 { font-size: 18px; line-height: 26px; font-weight: 700; }
+.my-section > ul, .my-section > .my-empty { margin-top: 12px; }
+.my-empty { padding: 20px; border-radius: 20px; background: var(--color-chalk); }
+.my-empty-title { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
+.my-empty .my-action { width: 100%; margin-top: 16px; }
+.my-action { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; padding: 10px 12px; border-radius: 12px; background: var(--color-mint-soft); color: var(--color-mint-deep); font-size: 15px; font-weight: 600; text-align: left; }
+.my-action.primary { background: var(--color-mint); color: var(--color-navy); }
+.my-action:hover, .my-action:active, .my-edit:hover { background: color-mix(in srgb, var(--color-mint-soft) 85%, var(--color-mint-deep)); }
+.my-storage { display: flex; width: 100%; min-height: 48px; gap: 8px; align-items: center; color: var(--color-slate); font-size: 14px; text-align: left; border-radius: 8px; }
+.my-storage > svg { flex-shrink: 0; }
+.my-storage > span { flex: 1; }
+.my-record-summary { margin-top: 6px; font-size: 14px; color: var(--color-slate); }
+.my-record-summary strong { color: var(--color-navy); font-variant-numeric: tabular-nums; }
+.my-journeys { display: grid; gap: 12px; }
+.my-journey { padding: 16px; border: 1px solid var(--color-line); border-radius: 20px; }
+.my-journey.is-graduated { background: var(--color-cream); border-color: var(--color-cream-line); }
+.my-journey h3 { font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+.my-year { flex-shrink: 0; background: var(--color-mint-soft); border-radius: 8px; padding: 3px 8px; color: var(--color-mint-deep); font-size: 14px; }
+.my-journey .my-secondary { margin: 6px 0 12px; }
+.my-record-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(136px, 1fr)); gap: 8px; margin-top: 16px; }
+.my-menu-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 12px 0; text-align: left; font-size: 16px; border-radius: 8px; }
+.my-menu-row:hover { background: var(--color-chalk); }
+.my-menu-value { flex-shrink: 0; font-size: 14px; color: var(--color-slate); font-variant-numeric: tabular-nums; }
+.my-reset { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--color-line); }
+.my-reset button { min-height: 48px; color: #a52930; font-size: 14px; border-radius: 8px; }
+.my-reset p { font-size: 14px; color: var(--color-slate); }
+.my-record-notes { overflow-y: auto; overflow-wrap: anywhere; white-space: pre-wrap; }
+.my-record-notes li + li { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-line); }
+.my-record-notes h3 { color: var(--color-navy); font-size: 16px; font-weight: 600; }
+
 @theme {
   --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
   --color-mint: #27d8cd;

@@ -4,6 +4,7 @@ import { groupExperience, GROUPS } from "./groups.js";
 import { better, cleanScore, gradeOf, isGrade, passes, PASS } from "./grades.js";
 import { isOpenCampus } from "./campus.js";
 import { CONDITIONS, addedSince, labOf } from "./labs/index.js";
+import { cleanProfilePhoto } from "./profilePhoto.js";
 
 // 학기 없이 학년 단위로 진행한다(2026-11-09 사용자 결정). 열린 학년의 과목은 아무 순서로나 듣고,
 // 그 학년 필수과목(전공기초·전공필수) 중 체험이 있는 것을 모두 B- 이상(작품 체험은 P)으로 이수하면 다음 학년이 열린다.
@@ -49,6 +50,8 @@ export const initialState = {
   credits: 0,
   // 마이페이지 프로필의 이름. 정하지 않았으면 "".
   nickname: "",
+  // null이면 현재 학년에 맞는 기본 캐릭터를 표시한다.
+  profilePhoto: null,
   onboarded: false,
   // 캠퍼스에 도착하는 인트로를 봤는지.
   introSeen: false,
@@ -309,6 +312,7 @@ export function normalize(value) {
     drafts: pick(value.drafts, (item) => (typeof item === "string" ? item.slice(0, 3000) : null)),
     credits: Number.isInteger(value.credits) && value.credits > 0 ? value.credits : 0,
     nickname: cleanNickname(value.nickname),
+    profilePhoto: cleanProfilePhoto(value.profilePhoto),
     introSeen: !!value.introSeen,
     campus: isOpenCampus(value.campus) ? value.campus : null,
     current: built.has(value.current) ? value.current : null,

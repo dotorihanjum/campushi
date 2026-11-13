@@ -47,3 +47,7 @@ npm run build
 | `api/index.py`, `vercel.json` | Vercel 배포 설정(정적 프런트 + 서버리스 API) |
 
 작업 규칙은 `CLAUDE.md`에 있습니다.
+
+## 마이페이지 프론트엔드 인수인계
+
+[마이페이지 프론트엔드 인수인계](docs/frontend-handoff.md)에 현재 UI, 브라우저 저장 형식, 백엔드 연결 지점과 미구현 API 제안을 정리했습니다. 로그인과 사용자 서버 저장은 아직 없습니다.

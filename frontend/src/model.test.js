@@ -253,3 +253,15 @@ test("프로필 이름은 앞뒤 공백을 지우고 12자까지만 저장한다
   assert.equal(normalize({ nickname: { x: 1 } }).nickname, "");
   assert.equal(normalize({}).nickname, "");
 });
+
+test("프로필 사진은 새로고침과 학과 데이터 갱신 후에도 유지되고, 선택하지 않으면 기본 캐릭터다", () => {
+  const photo = "data:image/jpeg;base64,/9j/AA==";
+  const state = { ...enrolled(), profilePhoto: photo };
+  const storage = { getItem: (key) => key === STORAGE_KEY ? JSON.stringify(state) : null };
+  assert.equal(loadState(storage).profilePhoto, photo);
+  assert.equal(refreshCatalog(state, [RAW_CSE]).profilePhoto, photo);
+  assert.equal(normalize({ profilePhoto: "https://example.com/photo.jpg" }).profilePhoto, null);
+  assert.equal(normalize({}).profilePhoto, null);
+  assert.equal(normalize({ ...state, profilePhoto: null }).profilePhoto, null);
+  assert.equal(initialState.profilePhoto, null);
+});
