@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { SCREENS } from "./screens.jsx";
+import { SCREENS } from "./screens/index.js";
 import { STORAGE_KEY, loadState, refreshCatalog } from "./model.js";
 import { getDepartments } from "./api.js";
 

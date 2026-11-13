@@ -29,7 +29,7 @@
 
 | 파일 | 변경 내용 |
 | --- | --- |
-| [screens.jsx](../frontend/src/screens.jsx) | `My`, `MenuRow`, `MenuGroup`. 프로필 편집, 사진 선택, 학과별 기록창, 마이페이지에서 리포트 내려받기 |
+| [screens/My.jsx](../frontend/src/screens/My.jsx) | `My`, `MenuRow`, `MenuGroup`. 프로필 편집, 사진 선택, 학과별 기록창, 마이페이지에서 리포트 내려받기(리포트 글·내려받기는 [screens/shared.jsx](../frontend/src/screens/shared.jsx)의 `reportText`·`download`). 2026-11-13에 `screens.jsx`를 화면별 파일로 나눴다 |
 | [index.css](../frontend/src/index.css) | `my-` 접두사의 마이페이지 스타일. 기존 색상 토큰 사용 |
 | [profilePhoto.js](../frontend/src/profilePhoto.js) | `prepareProfilePhoto`, `cleanProfilePhoto`, 사진 크기 제한 |
 | [model.js](../frontend/src/model.js) | `initialState.profilePhoto`와 `normalize`의 사진 복원 |
