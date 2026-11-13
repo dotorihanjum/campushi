@@ -202,7 +202,7 @@ test("과목의 체험은 연습 문제 유형이고, 모르는 유형이나 없
   assert.ok(!isGame("group:music") && !isGame("stroop") && !isGame("없는게임") && !isGame(undefined));
 });
 
-test("연습 문제가 있는 과목은 그 문제를 끝까지 풀고 기록을 남겨야 이수(P)하고, 저장했다 불러와도 그대로다", () => {
+test("연습 문제가 있는 과목은 그 문제를 끝까지 풀어야 성적을 받고, 저장했다 불러와도 그대로다", () => {
   const d = createDepartment(RAW_CSE);
   assert.deepEqual(d.lessonGames, { 객체지향프로그래밍: "match", 미분적분학: "theory", 운영체제: "sort" });
   assert.equal(gameOf(d, "객체지향프로그래밍"), "match");
@@ -210,8 +210,7 @@ test("연습 문제가 있는 과목은 그 문제를 끝까지 풀고 기록을
   const enrolled = { ...structuredClone(initialState), catalog: [RAW_CSE], journeys: { [d.id]: {} } };
   assert.equal(completeCourse(enrolled, d.id, "객체지향프로그래밍", "기록"), enrolled);
   const played = savePlay(enrolled, d.id, "객체지향프로그래밍", "match", "4쌍 짝 맞추기 · 틀린 시도 1번", { correct: 3, total: 4 });
-  // 맞힌 수(3/4)와 상관없이 P다.
-  assert.deepEqual(completeCourse(played, d.id, "객체지향프로그래밍", "기록").records[key], { grade: "P", percent: null, attempts: 1, last: "P" });
+  assert.deepEqual(completeCourse(played, d.id, "객체지향프로그래밍", "기록").records[key], { grade: "B0", percent: 75, attempts: 1, last: "B0" });
   const restored = loadState({
     getItem: (name) => (name === STORAGE_KEY ? JSON.stringify({ ...played, plays: { ...played.plays, [courseKey(d.id, "운영체제")]: { game: "scenario", summary: "x", score: { correct: 1, total: 1 } } } }) : null),
   });

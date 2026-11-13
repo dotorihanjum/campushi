@@ -1,14 +1,13 @@
 import { cleanLessonGames } from "./lessonGames.js";
 import { gameFor, isGame } from "./games.js";
 import { groupExperience, GROUPS } from "./groups.js";
-import { better, cleanScore, isGrade, passes, PASS } from "./grades.js";
+import { better, cleanScore, gradeOf, isGrade, passes, PASS } from "./grades.js";
 import { isOpenCampus } from "./campus.js";
 import { CONDITIONS, addedSince, labOf } from "./labs/index.js";
 
 // 학기 없이 학년 단위로 진행한다(2026-11-09 사용자 결정). 열린 학년의 과목은 아무 순서로나 듣고,
-// 그 학년 필수과목(전공기초·전공필수) 중 체험이 있는 것을 모두 이수하면 다음 학년이 열린다.
-// 이수 = 체험을 끝까지 해보고 한 줄 기록을 남긴 것이다. 맞히고 틀린 것(정답률)은 성적·해금에 쓰지 않는다(2026-11-10 사용자 결정).
-// 새로 받는 성적은 모두 P이고, 그 전에 받은 등급 기록은 그대로 둔다(B- 이상이면 이수, C+ 이하여도 기록을 남겼으면 이수).
+// 그 학년 필수과목(전공기초·전공필수) 중 체험이 있는 것을 모두 B- 이상(작품 체험은 P)으로 이수하면 다음 학년이 열린다.
+// 성적은 체험 결과의 정답률로 매기고(grades.js), 한 줄 기록은 남기지 않아도 된다(2026-11-13 사용자 결정으로 11-10 이전 방식으로 되돌림).
 // 이전 학기제 기록(campushi-v1)과 형식이 달라 새 키로 저장한다.
 export const STORAGE_KEY = "campushi-v2";
 export const OLD_STORAGE_KEYS = ["campushi-v1"];
@@ -136,10 +135,10 @@ export const isPlanned = (d, subject) => !gameOf(d, subject);
 export const departmentsOf = (state) => (state.catalog || []).map(createDepartment).filter(Boolean);
 const findDepartment = (state, id) => departmentsOf(state).find((d) => d.id === id) || null;
 export const recordOf = (state, id, subject) => state.records?.[courseKey(id, subject)] || null;
-/** 과목을 이수했는지: 끝까지 해보고 기록을 남겼거나(P), 예전 기준으로 B- 이상을 받았다. */
+/** 과목을 이수했는지: B- 이상 또는 P를 받았다. */
 export const isPassed = (state, id, subject) => {
   const record = recordOf(state, id, subject);
-  return !!record && (passes(record.grade) || !!state.notes?.[courseKey(id, subject)]);
+  return !!record && passes(record.grade);
 };
 
 /**
@@ -152,10 +151,11 @@ export function progressOf(state, d, { ignore } = {}) {
   const years = [];
   for (const year of YEARS) {
     const courses = d.years[year].map((subject) => {
-      const record = recordOf(state, d.id, subject);
       // ignore: 계산에서 체험이 없던 것으로 볼 과목(이전 이수 조건으로 계산할 때, normalize).
       const planned = isPlanned(d, subject) || !!ignore?.has(subject);
-      const passed = isPassed(state, d.id, subject);
+      // 체험이 빠져 구현 예정이 된 과목(예: 2026-11-12에 뺀 웹/파이선·자료구조)의 지난 성적은 저장해 두되 보여 주지 않는다.
+      const record = isPlanned(d, subject) ? null : recordOf(state, d.id, subject);
+      const passed = !!record && passes(record.grade);
       const exempt = !planned && !!state.exempt?.[courseKey(d.id, subject)];
       return {
         subject,
@@ -194,9 +194,9 @@ export function progressOf(state, d, { ignore } = {}) {
 }
 
 /**
- * 수업을 마친다(이수). 입학한 학과의 열린 학년 과목이고, 그 과목의 체험을 끝까지 해본 결과(plays)와 한 줄 기록(note)이 있어야 한다.
- * 성적은 P이고(정답률로 매기지 않는다), 예전에 B- 이상 등급을 받은 과목이면 그 등급을 남긴다. 들은 횟수를 늘리고,
- * 기록을 남기고, 쓰던 기록과 체험 결과는 지운다.
+ * 수업을 마치고 성적을 받는다. 입학한 학과의 열린 학년 과목이고, 그 과목의 체험을 끝까지 해본 결과(plays)가 있어야 한다.
+ * 성적은 체험 결과의 정답률로 매기고(점수가 없는 작품 체험은 P), 다시 들으면 더 좋은 성적을 남기고 들은 횟수를 늘린다.
+ * 한 줄 기록은 적었으면 남기고(없어도 마칠 수 있다), 쓰던 기록과 체험 결과는 지운다.
  */
 export function completeCourse(state, id, subject, note = "") {
   const d = findDepartment(state, id);
@@ -206,21 +206,24 @@ export function completeCourse(state, id, subject, note = "") {
   if (!year || !game || !progressOf(state, d).years[year - 1].open) return state;
   const key = courseKey(id, subject);
   const play = state.plays?.[key];
+  const result = play?.game === game ? gradeOf(play.score) : null;
+  if (!result) return state;
   const text = String(note).trim();
-  if (play?.game !== game || !cleanScore(play.score) || !text) return state;
   const old = state.records?.[key];
-  // 예전에 이수한 등급(B- 이상)이 있으면 그것을, 아니면 P를 남긴다.
-  const grade = better(old?.grade, PASS);
-  const percent = grade === PASS ? null : old.percent;
+  // 이번 성적이 더 좋거나(같은 등급이면 정답률이 더 높으면) 이번 것을 남긴다.
+  const improved =
+    !old || (better(old.grade, result.grade) === result.grade && (old.grade !== result.grade || (result.percent ?? -1) > (old.percent ?? -1)));
+  const grade = improved ? result.grade : old.grade;
+  const percent = improved ? result.percent : old.percent;
   const { [key]: finishedPlay, ...plays } = state.plays;
   const { [key]: finishedDraft, ...drafts } = state.drafts || {};
   return {
     ...state,
     plays,
     drafts,
-    credits: (state.credits || 0) + CREDIT_PER_PASS,
-    notes: { ...state.notes, [key]: text.slice(0, 3000) },
-    records: { ...state.records, [key]: { grade, percent, attempts: (old?.attempts || 0) + 1, last: PASS } },
+    credits: (state.credits || 0) + (passes(result.grade) ? CREDIT_PER_PASS : 0),
+    notes: text ? { ...state.notes, [key]: text.slice(0, 3000) } : state.notes,
+    records: { ...state.records, [key]: { grade, percent, attempts: (old?.attempts || 0) + 1, last: result.grade } },
   };
 }
 

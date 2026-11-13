@@ -38,7 +38,7 @@ import {
   yearOf,
   yearSubjects,
 } from "./model.js";
-import { averagePoint, PASS } from "./grades.js";
+import { averagePoint, gradeOf, passes, PASS, PASS_GRADE } from "./grades.js";
 import { isLessonType, lessonTypes } from "./lessonGames.js";
 import LessonGame, { useLessonGame } from "./Games.jsx";
 import { Rub } from "./Templates.jsx";
@@ -911,15 +911,15 @@ const experienceName = (d, id) =>
         ? `전공 실습(${templates[d.practice.template].title})`
         : lessonTypes[id]?.title || "";
 
-/** 과목 카드. 구현 예정·이수(성적, 다시 듣기)·기록을 남기지 않은 과목·안 들은 과목을 배지로 알린다. */
+/** 과목 카드. 구현 예정·이수(성적, 다시 듣기)·재수강이 필요한 과목·안 들은 과목을 배지로 알린다. */
 function CourseRow({ d, course, onClick }) {
   const sub =
     course.record && !course.passed
-      ? "한 줄 기록을 남기면 이수돼요"
+      ? `${course.record.grade} · ${PASS_GRADE} 이상이어야 이수돼요`
       : course.final
         ? `${course.year}학년 · 졸업 과제 · ${d.final.name}`
         : `${course.year}학년 · ${course.kind} · ${course.planned ? "체험을 만들고 있어요" : experienceName(d, gameOf(d, course.subject))}`;
-  const badge = course.planned ? "구현 예정" : course.passed ? `${course.record.grade} · 다시 듣기` : course.record ? "기록 남기기" : "듣기";
+  const badge = course.planned ? "구현 예정" : course.passed ? `${course.record.grade} · 다시 듣기` : course.record ? "재수강" : "듣기";
   return (
     <button
       onClick={onClick}
@@ -1323,7 +1323,7 @@ export function Major({ active, nav, state, setState }) {
             {todo.length ? (
               <CourseList d={d} courses={todo} nav={nav} label={graduated ? "아직 안 들은 과목" : `${openYear}학년 과목`} />
             ) : (
-              <p className="text-[13px] leading-[20px] text-ink-3">체험할 수 있는 과목을 모두 들었어요. 들었던 과목을 다시 해 볼 수도 있어요.</p>
+              <p className="text-[13px] leading-[20px] text-ink-3">체험할 수 있는 과목을 모두 들었어요. 재수강해서 성적을 올릴 수도 있어요.</p>
             )}
           </div>
         </section>
@@ -1504,16 +1504,18 @@ export function Lesson({ active, nav, route, state, setState }) {
       </Screen>
     );
 
-  // 수업을 마친다: 이수를 남기고(정답률로 성적을 매기지 않는다), 다음 학년이 열렸는지·졸업했는지 알려준다.
+  // 수업을 마친다: 성적을 매겨 남기고(재수강이면 더 좋은 성적), 다음 학년이 열렸는지·졸업했는지 알려준다.
   const finishWith = (base, text) => {
     window.clearTimeout(timer.current);
     const before = progressOf(base, d);
     const after = completeCourse(base, d.id, subject, text);
     if (after === base) return false;
+    const got = gradeOf(base.plays[key].score);
     const progress = progressOf(after, d);
     setState(after);
     moved.current = true;
     setResult({
+      ...got,
       best: recordOf(after, d.id, subject),
       credits: (after.credits || 0) - (base.credits || 0),
       // 새로 열린 학년들(체험이 있는 필수과목이 없는 학년은 함께 열린다).
@@ -1531,6 +1533,7 @@ export function Lesson({ active, nav, route, state, setState }) {
   };
 
   if (result) {
+    const passed = passes(result.grade);
     return (
       <Screen
         foot={700}
@@ -1541,7 +1544,7 @@ export function Lesson({ active, nav, route, state, setState }) {
             <>
               <div className="absolute inset-x-[20px] top-[708px] flex h-[36px] items-center justify-end">
                 <button onClick={again} className="pressable h-[36px] rounded-full border border-line bg-white px-[14px] text-[13px] font-semibold text-slate">
-                  다시 해보기
+                  다시 듣기
                 </button>
               </div>
               <FilledButton onClick={nav.back}>과목 목록으로</FilledButton>
@@ -1552,24 +1555,30 @@ export function Lesson({ active, nav, route, state, setState }) {
         {header}
         <div ref={scroller} className="flow no-scrollbar absolute bottom-[174px] left-0 top-[100px] w-full overflow-y-auto px-[20px] pt-[18px]">
           <h1 ref={heading} tabIndex={-1} className="a-up text-[26px] font-bold leading-[36px] text-navy outline-none">
-            {`${subject} 이수`}
+            {`${subject} 성적`}
           </h1>
-          <p className="a-pop mt-[18px] text-[56px] font-extrabold leading-[64px] text-mint-deep" style={delay(0.1)} aria-label={`성적 ${result.best.grade}`}>
-            {result.best.grade}
+          <p className="a-pop mt-[18px] text-[56px] font-extrabold leading-[64px] text-mint-deep" style={delay(0.1)} aria-label={`이번 성적 ${result.grade}`}>
+            {result.grade}
           </p>
           <p className="a-up mt-[4px] text-[14px] leading-[22px] text-gray" style={delay(0.16)}>
-            {result.best.grade === PASS ? "끝까지 해보고 기록을 남겨서 이수(P)했어요." : `끝까지 해보고 기록을 남겼어요. 성적표에는 예전에 받은 ${gradeText(result.best)}이 남아요.`}
+            {result.grade === PASS ? "끝까지 해서 통과(P)했어요." : lab ? `채점 항목 통과 ${result.percent}%` : `정답률 ${result.percent}%`}
+            {result.best && result.best.grade !== result.grade ? ` · 남는 성적은 가장 좋은 ${gradeText(result.best)}이에요` : ""}
           </p>
           {result.credits > 0 && <CreditPill credits={result.credits} className="a-pop mt-[12px] inline-flex" style={delay(0.2)} />}
           {result.credits > 0 && <span className="sr-only">{`크레딧 ${josa(String(result.credits), "을", "를")} 받았어요`}</span>}
-          <MintCard title={result.graduated ? "졸업을 축하해요!" : result.opened ? `${result.opened.join("·")}학년이 열렸어요!` : "이수했어요"} className="a-up mt-[22px]">
+          <MintCard
+            title={result.graduated ? "졸업을 축하해요!" : result.opened ? `${result.opened.join("·")}학년이 열렸어요!` : passes(result.best?.grade) ? "이수했어요" : "재수강이 필요해요"}
+            className="a-up mt-[22px]"
+          >
             <p style={delay(0.2)}>
               {result.graduated
                 ? `${d.name} 체험 과정을 모두 마쳤어요. 성적표와 졸업증명서를 받아요.`
                 : result.opened
-                  ? `${result.opened[0] - 1}학년 필수과목을 모두 이수했어요. 이제 ${result.opened.at(-1)}학년 과목까지 들을 수 있어요.` +
+                  ? `${result.opened[0] - 1}학년 필수과목을 모두 ${PASS_GRADE} 이상으로 이수했어요. 이제 ${result.opened.at(-1)}학년 과목까지 들을 수 있어요.` +
                     (result.opened.length > 1 ? ` ${result.opened.slice(0, -1).join("·")}학년은 체험이 있는 필수과목이 아직 없어 함께 열렸어요.` : "")
-                  : `${isRequired(d, subject) ? "필수과목으로 인정됐어요." : "선택과목으로 성적표에 남아요."} 다시 해 볼 수도 있어요.`}
+                  : passes(result.best?.grade)
+                    ? `${isRequired(d, subject) ? "필수과목으로 인정됐어요." : "선택과목으로 성적표에 남아요."} 다시 들으면 문제가 바뀌고, 가장 좋은 성적이 남아요.`
+                    : `${PASS_GRADE} 이상이어야 이수로 인정돼요.${isRequired(d, subject) ? " 필수과목이라 다음 학년이 열리려면 다시 들어야 해요." : ""} 다시 들으면 문제가 바뀌어요.`}
             </p>
           </MintCard>
           {result.opened && (
@@ -1577,6 +1586,11 @@ export function Lesson({ active, nav, route, state, setState }) {
               <img src={yearCharacter(result.opened.at(-1)).src} alt={yearCharacter(result.opened.at(-1)).alt} className="h-[64px] w-[72px] object-contain" />
               <p className="whitespace-pre-line text-[13px] font-semibold leading-[19px] text-ink-2">{`${result.opened.at(-1)}학년이 되어\n캐릭터도 자랐어요!`}</p>
             </div>
+          )}
+          {!passed && passes(result.best?.grade) && (
+            <p className="a-up mt-[12px] text-[12.5px] leading-[19px] text-ink-3" style={delay(0.24)}>
+              이번 성적은 낮지만 이전에 받은 더 좋은 성적이 남아 있어요.
+            </p>
           )}
         </div>
       </Screen>
@@ -1587,6 +1601,7 @@ export function Lesson({ active, nav, route, state, setState }) {
   const mode = isFinal ? "project" : practice ? "practice" : lab ? "lab" : quiz.status === "ready" ? "quiz" : quiz.status;
   const play = state.plays[key]?.game === game ? state.plays[key] : null;
   const played = play?.summary || "";
+  const preview = play ? gradeOf(play.score) : null;
   const headline = mode === "project" ? final.name : mode === "practice" ? practice.title : mode === "lab" ? lab.title : mode === "quiz" ? quiz.game.title : subject;
   const warn = (message) => {
     setNotice(message);
@@ -1623,9 +1638,9 @@ export function Lesson({ active, nav, route, state, setState }) {
   };
   const finish = () => {
     if (!play) return warn("먼저 직접 해보기를 끝까지 해보세요.");
-    if (!draft.trim()) return warn("해보니 어땠는지 한 줄 기록을 남겨야 이수돼요.");
-    if (!finishWith(state, draft)) warn("이수를 남기지 못했어요. 과목 목록에서 다시 들어와 주세요.");
+    if (!finishWith(state, draft)) warn("성적을 남기지 못했어요. 과목 목록에서 다시 들어와 주세요.");
   };
+  const written = !!draft.trim();
 
   let body;
   let action;
@@ -1664,7 +1679,11 @@ export function Lesson({ active, nav, route, state, setState }) {
         )}
         {(mode === "quiz" || mode === "practice" || mode === "project" || mode === "lab") && (
           <p className="a-up mt-[12px] text-[12.5px] leading-[19px] text-ink-3" style={delay(0.16)}>
-            {"끝까지 해보고 한 줄 기록을 남기면 이수(P)예요. 맞히고 틀린 것은 성적에 들어가지 않아요."}
+            {final.kind === "artwork" && isFinal
+              ? "끝까지 하면 통과(P)예요."
+              : mode === "lab"
+                ? `직접 해보기의 과제 채점 결과로 성적을 매겨요. ${PASS_GRADE} 이상이면 이수예요.`
+                : `처음 고른 답으로 성적을 매겨요. ${PASS_GRADE} 이상이면 이수예요.`}
             {record ? ` 지금 성적은 ${gradeText(record)}이고, 다시 들으면 가장 좋은 성적이 남아요.` : ""}
           </p>
         )}
@@ -1750,7 +1769,7 @@ export function Lesson({ active, nav, route, state, setState }) {
         )}
         {played && (
           <p className="a-up mt-[14px] text-[13px] leading-[20px] text-mint-deep" style={delay(0.06)}>
-            {`오늘 해본 것 · ${played}`}
+            {`오늘 해본 것 · ${played}${preview ? ` · 예상 성적 ${preview.grade}` : ""}`}
           </p>
         )}
         <label className="note-card a-up mt-[16px] block" style={delay(0.12)}>
@@ -1767,7 +1786,7 @@ export function Lesson({ active, nav, route, state, setState }) {
         </label>
       </>
     );
-    action = <FilledButton onClick={finish}>기록 남기고 마치기</FilledButton>;
+    action = <FilledButton onClick={finish}>{written ? "기록 저장하고 성적 받기" : "기록 건너뛰고 성적 받기"}</FilledButton>;
   }
 
   return (
@@ -1836,14 +1855,14 @@ export function Courses({ active, nav, route, state }) {
   const counted = required.filter((course) => !course.planned);
   const before = progress.years[year - 2];
   const guide = !info.open
-    ? `${year - 1}학년 필수과목을 모두 이수하면 열려요.${before?.open ? ` 남은 과목: ${before.left.map((course) => course.subject).join(", ")}` : ""}`
+    ? `${year - 1}학년 필수과목을 모두 ${PASS_GRADE} 이상으로 이수하면 열려요.${before?.open ? ` 남은 과목: ${before.left.map((course) => course.subject).join(", ")}` : ""}`
     : year < 4
       ? info.left.length
-        ? `필수 ${counted.length}과목(체험이 있는 것) 중 ${info.left.length}과목이 남았어요. 끝까지 해보고 기록을 남기면 ${year + 1}학년이 열려요.`
+        ? `필수 ${counted.length}과목(체험이 있는 것) 중 ${info.left.length}과목이 남았어요. 모두 ${PASS_GRADE} 이상이면 ${year + 1}학년이 열려요.`
         : `${year}학년 필수과목을 모두 이수했어요. ${year + 1}학년이 열렸어요.`
       : progress.graduated
         ? "졸업 조건을 모두 채웠어요."
-        : `4학년 필수과목을 이수하고 졸업 과제(${d.finalSubject})를 마치면 졸업해요.`;
+        : `4학년 필수과목을 ${PASS_GRADE} 이상으로 이수하고 졸업 과제(${d.finalSubject})를 마치면 졸업해요.`;
   const badge = (course) =>
     course.added && !course.record ? (
       <span className="flex h-[22px] shrink-0 items-center rounded-full border border-mint bg-mint px-[8px] text-[11px] font-bold text-white">새 체험</span>
@@ -1853,7 +1872,7 @@ export function Courses({ active, nav, route, state }) {
           course.passed ? "border-mint bg-mint-soft text-mint-deep" : "border-[#e8a33d] bg-cream text-[#9a5b00]"
         }`}
       >
-        {course.passed ? course.record.grade : "기록 남기기"}
+        {course.passed ? course.record.grade : `${course.record.grade} · 재수강`}
       </span>
     ) : course.planned ? (
       <span className="flex h-[22px] shrink-0 items-center rounded-full border border-line bg-white px-[8px] text-[11px] font-semibold text-gray">구현 예정</span>
@@ -2030,7 +2049,7 @@ function reportText(state, d) {
       ? taken
           .map(
             (course) =>
-              `- ${course.subject} (${course.final ? "졸업 과제" : course.kind}) ${gradeText(course.record)}${course.passed ? "" : " [기록을 남기면 이수]"}\n  ${state.notes[courseKey(d.id, course.subject)] || "기록 없음"}`,
+              `- ${course.subject} (${course.final ? "졸업 과제" : course.kind}) ${gradeText(course.record)}${course.passed ? "" : " [재수강 필요]"}\n  ${state.notes[courseKey(d.id, course.subject)] || "기록 없음"}`,
           )
           .join("\n")
       : "- 들은 과목 없음";

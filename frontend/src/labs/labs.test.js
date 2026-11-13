@@ -17,10 +17,10 @@ const RAW = {
   games: { [CALC]: "theory", [ARCH]: "theory" },
 };
 const dept = (state) => departmentsOf(state).find((d) => d.id === RAW.id);
-// 과목을 끝까지 해보고 기록을 남긴다(이수).
-function take(state, subject) {
+// 과목을 들어 정답률로 성적을 받는다(기본 10문항 중 9개 = A0, 이수).
+function take(state, subject, correct = 9) {
   const d = dept(state);
-  return completeCourse(savePlay(state, RAW.id, subject, gameOf(d, subject), "결과", { correct: 1, total: 10 }), RAW.id, subject, "해봤어요");
+  return completeCourse(savePlay(state, RAW.id, subject, gameOf(d, subject), "결과", { correct, total: 10 }), RAW.id, subject);
 }
 // 이론 퀴즈를 내렸던 동안(이수 조건 버전 2) 저장된 기록.
 const savedAt = (conditions, records = {}) => ({
@@ -98,4 +98,27 @@ test("입학하지 않은 학과와 이미 지금 조건으로 저장된 기록�
   // 이산구조는 이 데이터에서 퀴즈가 없고, 웹/파이선은 체험이 빠져 예외가 될 수 없다.
   assert.deepEqual(state.exempt, {});
   assert.equal(progressOf(state, dept(state)).years[1].open, false);
+});
+
+test("체험이 빠진 과목(웹/파이선)의 지난 성적은 저장해 두지만 과목 목록·이수 수에는 보이지 않는다", () => {
+  const key = courseKey(RAW.id, WEB);
+  const state = normalize({ ...savedAt(CONDITIONS, { [key]: { grade: "P", percent: null, attempts: 1, last: "P" } }), notes: { [key]: "기록" } });
+  assert.equal(state.records[key].grade, "P");
+  const progress = progressOf(state, dept(state));
+  const web = progress.years[0].courses.find((c) => c.subject === WEB);
+  assert.equal(web.planned, true);
+  assert.equal(web.record, null);
+  assert.equal(web.passed, false);
+  assert.equal(progress.taken.length, 0);
+});
+
+test("이론 퀴즈는 정답률로 성적을 받고, B- 미만이면 다음 학년이 열리지 않는다. 기록은 없어도 된다", () => {
+  let state = normalize({ ...structuredClone(initialState), catalog: [RAW], journeys: { [RAW.id]: {} } });
+  state = take(state, CALC, 5);
+  assert.equal(state.records[courseKey(RAW.id, CALC)].grade, "D+");
+  assert.equal(progressOf(state, dept(state)).years[1].open, false);
+  state = take(state, CALC, 8);
+  assert.equal(state.records[courseKey(RAW.id, CALC)].grade, "B+");
+  assert.equal(state.notes[courseKey(RAW.id, CALC)], undefined);
+  assert.equal(progressOf(state, dept(state)).years[1].open, true);
 });

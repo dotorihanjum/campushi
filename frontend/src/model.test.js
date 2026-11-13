@@ -34,11 +34,11 @@ const enrolled = (raws = [RAW_CSE], ids = [RAW_CSE.id]) => ({
   journeys: Object.fromEntries(ids.map((id) => [id, {}])),
   current: ids[0],
 });
-// 과목을 끝까지 해보고(맞힌 수 / 전체) 한 줄 기록을 남겨 마친다.
-function take(state, id, subject, correct, total = 10, note = "해봤어요") {
+// 과목을 들어 성적을 받는다(맞힌 수 / 전체).
+function take(state, id, subject, correct, total = 10) {
   const d = departmentsOf(state).find((item) => item.id === id);
   const score = correct === "P" ? "P" : { correct, total };
-  return completeCourse(savePlay(state, id, subject, gameOf(d, subject), "결과", score), id, subject, note);
+  return completeCourse(savePlay(state, id, subject, gameOf(d, subject), "결과", score), id, subject, "");
 }
 const progress = (state, id = RAW_CSE.id) => progressOf(state, departmentsOf(state).find((d) => d.id === id));
 
@@ -83,7 +83,7 @@ test("과목마다 이수구분·학년·체험(졸업 과제, 전공 실습, �
   assert.deepEqual(yearSubjects(d)[0], { year: 1, open: ["객체지향프로그래밍", "미분적분학"], others: ["이산구조"] });
 });
 
-test("1학년은 처음부터 열리고, 체험이 있는 필수과목을 모두 이수(끝까지 해보고 기록)하면 다음 학년이 열린다", () => {
+test("1학년은 처음부터 열리고, 체험이 있는 필수과목을 모두 B- 이상 받으면 다음 학년이 열린다", () => {
   let state = enrolled();
   let p = progress(state);
   assert.deepEqual(p.years.map((y) => y.open), [true, false, false, false]);
@@ -91,11 +91,10 @@ test("1학년은 처음부터 열리고, 체험이 있는 필수과목을 모두
   assert.equal(p.openYear, 1);
   // 선택과목은 들어도 해금과 상관없다(이산구조는 구현 예정이라 들을 수도 없다).
   assert.equal(take(state, RAW_CSE.id, "이산구조", 10), state);
-  // 하나도 못 맞혀도 끝까지 해보고 기록을 남기면 이수(P)다.
-  state = take(state, RAW_CSE.id, "객체지향프로그래밍", 0);
-  assert.equal(recordOf(state, RAW_CSE.id, "객체지향프로그래밍").grade, "P");
+  state = take(state, RAW_CSE.id, "객체지향프로그래밍", 7); // 70% B-
+  assert.equal(recordOf(state, RAW_CSE.id, "객체지향프로그래밍").grade, "B-");
   assert.equal(progress(state).openYear, 1);
-  state = take(state, RAW_CSE.id, "미분적분학", 9);
+  state = take(state, RAW_CSE.id, "미분적분학", 9); // 90% A0
   p = progress(state);
   // 2학년 필수(오픈소스SW개발방법및도구·컴퓨터구조)는 체험이 없어 조건에서 빠지므로 3학년까지 바로 열린다.
   assert.deepEqual(p.years.map((y) => y.open), [true, true, true, false]);
@@ -119,41 +118,22 @@ test("다음 학년 해금까지의 진행은 지금 학년 필수과목(체험�
   assert.equal(nextStepOf(progress(state)).percent, 100);
 });
 
-test("정답률은 성적·해금에 쓰지 않고, 기록을 남기지 않으면 마칠 수 없다", () => {
+test("C+ 이하는 재수강해야 하고, 재수강하면 가장 좋은 성적이 남는다", () => {
   let state = enrolled();
-  const key = courseKey(RAW_CSE.id, "미분적분학");
-  const played = savePlay(state, RAW_CSE.id, "미분적분학", "theory", "결과", { correct: 1, total: 10 });
-  // 기록이 비었거나 공백뿐이면 마치지 않는다.
-  assert.equal(completeCourse(played, RAW_CSE.id, "미분적분학", ""), played);
-  assert.equal(completeCourse(played, RAW_CSE.id, "미분적분학", "   "), played);
-  state = completeCourse(played, RAW_CSE.id, "미분적분학", "어려웠지만 그래프가 재밌었다");
-  assert.deepEqual(recordOf(state, RAW_CSE.id, "미분적분학"), { grade: "P", percent: null, attempts: 1, last: "P" });
-  assert.equal(state.notes[key], "어려웠지만 그래프가 재밌었다");
-  assert.equal(progress(state).years[0].courses.find((c) => c.subject === "미분적분학").passed, true);
-  // 다시 해도 P이고 들은 횟수만 늘어난다.
   state = take(state, RAW_CSE.id, "미분적분학", 10);
-  assert.deepEqual(recordOf(state, RAW_CSE.id, "미분적분학"), { grade: "P", percent: null, attempts: 2, last: "P" });
-});
-
-test("예전 기준으로 받은 등급 기록: B- 이상은 그대로 이수, C+ 이하는 기록이 있으면 이수이고 다시 하면 P가 된다", () => {
-  const oop = courseKey(RAW_CSE.id, "객체지향프로그래밍");
-  const calc = courseKey(RAW_CSE.id, "미분적분학");
-  let state = normalize({
-    ...enrolled(),
-    records: { [oop]: { grade: "C0", percent: 60, attempts: 1 }, [calc]: { grade: "B+", percent: 80, attempts: 1 } },
-  });
+  state = take(state, RAW_CSE.id, "객체지향프로그래밍", 6); // 60% C0
   let p = progress(state);
-  // B+는 기록이 없어도 이수, 기록 없는 C0는 아직 이수가 아니다.
-  assert.equal(p.years[0].courses.find((c) => c.subject === "미분적분학").passed, true);
+  assert.equal(p.openYear, 1);
   assert.deepEqual(p.years[0].left.map((c) => c.subject), ["객체지향프로그래밍"]);
-  // 같은 C0라도 그때 기록을 남겼으면 이수다(끝까지 해보고 기록을 남긴 것이므로).
-  assert.equal(progress({ ...state, notes: { [oop]: "남긴 기록" } }).openYear, 3);
-  // 기록을 남기며 다시 하면 C0 대신 P가 남고, B+는 다시 해도 B+가 남는다.
-  state = take(state, RAW_CSE.id, "객체지향프로그래밍", 2);
-  assert.deepEqual(recordOf(state, RAW_CSE.id, "객체지향프로그래밍"), { grade: "P", percent: null, attempts: 2, last: "P" });
-  state = take(state, RAW_CSE.id, "미분적분학", 0);
-  assert.deepEqual(recordOf(state, RAW_CSE.id, "미분적분학"), { grade: "B+", percent: 80, attempts: 2, last: "P" });
+  assert.equal(p.years[0].courses.find((c) => c.subject === "객체지향프로그래밍").passed, false);
+  state = take(state, RAW_CSE.id, "객체지향프로그래밍", 8); // 80% B+
+  state = take(state, RAW_CSE.id, "객체지향프로그래밍", 5); // 50% D+ — 더 낮으면 B+가 남는다
+  const record = recordOf(state, RAW_CSE.id, "객체지향프로그래밍");
+  assert.deepEqual(record, { grade: "B+", percent: 80, attempts: 3, last: "D+" });
   assert.equal(progress(state).openYear, 3);
+  // 같은 등급이면 정답률이 더 높은 쪽을 남긴다.
+  state = take(state, RAW_CSE.id, "미분적분학", 19, 20);
+  assert.deepEqual(recordOf(state, RAW_CSE.id, "미분적분학"), { grade: "A+", percent: 100, attempts: 2, last: "A+" });
 });
 
 test("성적은 입학한 학과의 열린 학년 과목을, 그 체험을 끝까지 해봐야 받는다", () => {
@@ -178,14 +158,15 @@ test("성적은 입학한 학과의 열린 학년 과목을, 그 체험을 끝�
   assert.equal(done.notes[key], "재밌었다");
 });
 
-test("4학년 필수(체험이 있는 것)와 졸업 과제를 이수하면 졸업한다. 졸업 과제도 기록을 남겨야 이수다", () => {
+test("4학년 필수(체험이 있는 것)와 졸업 과제를 이수하면 졸업한다. 작품 졸업 과제는 끝까지 하면 P다", () => {
   let state = enrolled();
   for (const [subject, n] of [["객체지향프로그래밍", 10], ["미분적분학", 10], ["알고리즘", 10], ["운영체제", 10]]) state = take(state, RAW_CSE.id, subject, n);
   let p = progress(state);
   assert.equal(p.openYear, 4);
   assert.equal(p.graduated, false);
-  assert.equal(take(state, RAW_CSE.id, "졸업프로젝트", 9, 10, "").records[courseKey(RAW_CSE.id, "졸업프로젝트")], undefined);
-  state = take(state, RAW_CSE.id, "졸업프로젝트", 5);
+  state = take(state, RAW_CSE.id, "졸업프로젝트", 5); // 50% — 졸업 과제도 B- 이상이어야 한다
+  assert.equal(progress(state).graduated, false);
+  state = take(state, RAW_CSE.id, "졸업프로젝트", 8);
   p = progress(state);
   assert.equal(p.graduated, true);
   assert.equal(p.percent, 100);
@@ -243,12 +224,11 @@ test("서버에서 새 학과 데이터를 받으면 바꾸고, 쓸 수 없는 �
   assert.deepEqual(departmentsOf(next).map((d) => d.id), [RAW_ID.id]);
 });
 
-test("과목을 이수할 때마다 크레딧을 받고, 다시 해서 이수해도 받는다", () => {
+test("과목을 이수(B- 이상 또는 P)할 때마다 크레딧을 받고, 재수강해서 이수해도 받는다", () => {
   let state = enrolled();
-  // 기록 없이는 마치지 못해 크레딧도 없다.
-  state = take(state, RAW_CSE.id, "미분적분학", 5, 10, "");
+  state = take(state, RAW_CSE.id, "미분적분학", 5); // D+ — 이수가 아니라 크레딧 없음
   assert.equal(state.credits, 0);
-  state = take(state, RAW_CSE.id, "미분적분학", 0);
+  state = take(state, RAW_CSE.id, "미분적분학", 7); // B-
   assert.equal(state.credits, CREDIT_PER_PASS);
   state = take(state, RAW_CSE.id, "미분적분학", 10);
   assert.equal(state.credits, CREDIT_PER_PASS * 2);
