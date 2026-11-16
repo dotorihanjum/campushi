@@ -19,5 +19,5 @@ labels: ["status:todo"]
 
 ## 담당·위험도
 - 역할: role:frontend / role:backend / role:planner-designer / role:qa
-- 담당: owner:ai(AI 세션) 또는 사람 팀원(GitHub 담당자 지정)
+- 담당: 학과 체험(원준 몫)이면 담당자 `dotorihanjum` + `owner:ai`, 그 밖이면 담당자 비워 둠(팀원이 스스로 가져감, 2026-11-17 원준 결정)
 - 원준 승인 필요(`needs-approval`) 여부와 이유: <!-- docs/PLAN.md 6장 -->
