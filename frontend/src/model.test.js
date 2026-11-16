@@ -4,7 +4,9 @@ import { readFileSync } from "node:fs";
 import {
   cleanNickname,
   NICKNAME_MAX,
+  CREDIT_COOLDOWN_DAYS,
   CREDIT_PER_PASS,
+  creditWaitDays,
   OLD_STORAGE_KEYS,
   STORAGE_KEY,
   completeCourse,
@@ -35,11 +37,12 @@ const enrolled = (raws = [RAW_CSE], ids = [RAW_CSE.id]) => ({
   current: ids[0],
 });
 // 과목을 들어 성적을 받는다(맞힌 수 / 전체).
-function take(state, id, subject, correct, total = 10) {
+function take(state, id, subject, correct, total = 10, now = Date.now()) {
   const d = departmentsOf(state).find((item) => item.id === id);
   const score = correct === "P" ? "P" : { correct, total };
-  return completeCourse(savePlay(state, id, subject, gameOf(d, subject), "결과", score), id, subject, "");
+  return completeCourse(savePlay(state, id, subject, gameOf(d, subject), "결과", score), id, subject, "", now);
 }
+const DAY = 24 * 60 * 60 * 1000;
 const progress = (state, id = RAW_CSE.id) => progressOf(state, departmentsOf(state).find((d) => d.id === id));
 
 test("실제 학과 데이터(서버 파일)는 프런트 형식 검사를 통과하고, 필수과목은 편성표의 이수구분이다", () => {
@@ -224,16 +227,33 @@ test("서버에서 새 학과 데이터를 받으면 바꾸고, 쓸 수 없는 �
   assert.deepEqual(departmentsOf(next).map((d) => d.id), [RAW_ID.id]);
 });
 
-test("과목을 이수(B- 이상 또는 P)할 때마다 크레딧을 받고, 재수강해서 이수해도 받는다", () => {
+test("과목을 처음 이수(B- 이상 또는 P)하면 크레딧을 받고, 같은 과목은 마지막으로 받은 날부터 7일이 지나야 다시 받는다", () => {
+  const t0 = Date.UTC(2026, 10, 16);
   let state = enrolled();
-  state = take(state, RAW_CSE.id, "미분적분학", 5); // D+ — 이수가 아니라 크레딧 없음
+  state = take(state, RAW_CSE.id, "미분적분학", 5, 10, t0); // D+ — 이수가 아니라 크레딧 없음
   assert.equal(state.credits, 0);
-  state = take(state, RAW_CSE.id, "미분적분학", 7); // B-
+  assert.deepEqual(state.creditedAt, {});
+  state = take(state, RAW_CSE.id, "미분적분학", 7, 10, t0); // B-
   assert.equal(state.credits, CREDIT_PER_PASS);
-  state = take(state, RAW_CSE.id, "미분적분학", 10);
+  assert.equal(state.creditedAt[courseKey(RAW_CSE.id, "미분적분학")], t0);
+  // 6일 뒤 다시 이수: 크레딧 없음, 하루 남음. 받은 날은 그대로다.
+  assert.equal(creditWaitDays(state, RAW_CSE.id, "미분적분학", t0 + 6 * DAY), 1);
+  state = take(state, RAW_CSE.id, "미분적분학", 10, 10, t0 + 6 * DAY);
+  assert.equal(state.credits, CREDIT_PER_PASS);
+  assert.equal(state.creditedAt[courseKey(RAW_CSE.id, "미분적분학")], t0);
+  // 다른 과목은 따로 센다.
+  state = take(state, RAW_CSE.id, "객체지향프로그래밍", 9, 10, t0 + 6 * DAY);
   assert.equal(state.credits, CREDIT_PER_PASS * 2);
-  // 저장했다 불러와도 그대로이고, 이상한 값은 0으로 둔다.
-  assert.equal(normalize(state).credits, CREDIT_PER_PASS * 2);
+  // 7일이 지나면 다시 받는다.
+  assert.equal(creditWaitDays(state, RAW_CSE.id, "미분적분학", t0 + CREDIT_COOLDOWN_DAYS * DAY), 0);
+  state = take(state, RAW_CSE.id, "미분적분학", 9, 10, t0 + CREDIT_COOLDOWN_DAYS * DAY);
+  assert.equal(state.credits, CREDIT_PER_PASS * 3);
+  assert.equal(state.creditedAt[courseKey(RAW_CSE.id, "미분적분학")], t0 + CREDIT_COOLDOWN_DAYS * DAY);
+  // 저장했다 불러와도 그대로이고, 이상한 값은 버린다. 학과 데이터가 없어도 받은 날은 남는다.
+  assert.equal(normalize(state).credits, CREDIT_PER_PASS * 3);
+  assert.deepEqual(normalize(state).creditedAt, state.creditedAt);
+  assert.deepEqual(normalize({ ...state, catalog: [] }).creditedAt, state.creditedAt);
+  assert.deepEqual(normalize({ ...state, creditedAt: { "x|y": "1", nokey: 5, "a|b": -1, "c|d": 3 } }).creditedAt, { "c|d": 3 });
   for (const credits of [-3, 1.5, "10", null]) assert.equal(normalize({ ...state, credits }).credits, 0);
   assert.equal(normalize({ ...state, introSeen: true }).introSeen, true);
 });

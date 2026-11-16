@@ -3,8 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { prepareProfilePhoto } from "../profilePhoto.js";
 import { yearCharacter } from "../assets.js";
 import { delay, Screen, Dialog, Toast } from "../ui.jsx";
-import { CREDIT_PER_PASS, NICKNAME_MAX, STORAGE_KEY, cleanNickname, courseKey, initialState, progressOf } from "../model.js";
+import { CREDIT_COOLDOWN_DAYS, CREDIT_PER_PASS, NICKNAME_MAX, STORAGE_KEY, cleanNickname, courseKey, initialState, progressOf } from "../model.js";
 import { CAMPUS } from "../campus.js";
+import { PASS_GRADE } from "../grades.js";
 import { Chevron, INPUT, ProgressBar, TAB_H, TAB_TOP, TabBar, all, download, gradeText, josa, latestJourney, reportText } from "./shared.jsx";
 
 // 마이페이지 목록 한 줄(누르면 창을 열거나 화면을 옮긴다).
@@ -30,7 +31,7 @@ function MenuGroup({ title, children, d = 0 }) {
 }
 
 export function My({ nav, state, setState }) {
-  // 열려 있는 창: profile, credit, storage, sources, reset, record:<학과id>.
+  // 열려 있는 창: profile, credit, storage, help, sources, reset, record:<학과id>.
   const [sheet, setSheet] = useState(null);
   const [name, setName] = useState("");
   const [photo, setPhoto] = useState(null);
@@ -173,12 +174,18 @@ export function My({ nav, state, setState }) {
     ),
     credit: (
       <Dialog title="크레딧은 어디에 쓰나요?" onClose={close} actions={closeButton}>
-        {`과목을 이수할 때마다 크레딧 ${josa(String(CREDIT_PER_PASS), "을", "를")} 받아요. 같은 과목을 다시 해서 이수해도 받아요. 모은 크레딧은 모든 학과에서 함께 쓰고, 재학생 멘토링이 열리면 쓸 수 있어요.`}
+        {`과목을 이수할 때마다 크레딧 ${josa(String(CREDIT_PER_PASS), "을", "를")} 받아요. 같은 과목을 다시 이수하면 마지막으로 받은 날부터 ${CREDIT_COOLDOWN_DAYS}일이 지나야 다시 받아요. 모은 크레딧은 모든 학과에서 함께 쓰고, 재학생 멘토링이 열리면 쓸 수 있어요.`}
       </Dialog>
     ),
     storage: (
       <Dialog title="기록은 어디에 저장되나요?" onClose={close} actions={closeButton}>
         체험 기록, 한 줄 기록, 크레딧, 이름, 프로필 사진은 지금 쓰는 이 브라우저에만 저장돼요. 다른 기기나 브라우저에서는 보이지 않고, 브라우저의 사이트 데이터를 지우면 함께 사라져요. 남겨 두고 싶은 기록은 체험 기록의 &lsquo;리포트 내려받기&rsquo;로 저장해 주세요.
+      </Dialog>
+    ),
+    help: (
+      <Dialog title="도움말" onClose={close} actions={closeButton}>
+        <p>학과에 입학해 학년별 과목을 체험하고, 필수과목을 {PASS_GRADE} 이상으로 이수하면 다음 학년이 열려요. 4학년 필수과목과 졸업 과제를 마치면 졸업해요.</p>
+        <p className="mt-[10px]">일부 체험 문제와 설명은 AI의 도움을 받아 만들고, 따로 검토한 뒤 공개해요.</p>
       </Dialog>
     ),
     sources: (
@@ -218,7 +225,7 @@ export function My({ nav, state, setState }) {
               className="button danger"
               onClick={() => {
                 // 학과 데이터는 남겨 두어 처음부터 다시 시작해도 바로 학과를 볼 수 있게 한다.
-                setState((s) => ({ ...structuredClone(initialState), catalog: s.catalog }));
+                setState((s) => ({ ...structuredClone(initialState), catalog: s.catalog, creditedAt: s.creditedAt || {} }));
                 nav.reset(["splash"]);
               }}
             >
@@ -227,7 +234,7 @@ export function My({ nav, state, setState }) {
           </>
         }
       >
-        입학한 학과, 성적, 한 줄 기록, 크레딧, 이름, 프로필 사진이 모두 지워지고 되돌릴 수 없어요. 남겨 둘 리포트는 먼저 내려받아 주세요.
+        입학한 학과, 성적, 한 줄 기록, 크레딧, 이름, 프로필 사진이 모두 지워지고 되돌릴 수 없어요. 과목별로 크레딧을 받은 날은 남아서, 같은 과목은 그날부터 {CREDIT_COOLDOWN_DAYS}일이 지나야 다시 받아요. 남겨 둘 리포트는 먼저 내려받아 주세요.
       </Dialog>
     ),
   };
@@ -352,6 +359,7 @@ export function My({ nav, state, setState }) {
 
         <MenuGroup title="설정 및 도움말" d={0.12}>
           <MenuRow label="학교 바꾸기" onClick={() => nav.push("school", { change: true })} />
+          <MenuRow label="도움말" onClick={() => setSheet("help")} />
           <MenuRow label="자료 출처" onClick={() => setSheet("sources")} />
         </MenuGroup>
         <div className="my-reset">

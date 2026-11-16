@@ -2,7 +2,7 @@
 import { Component, Suspense, useEffect, useRef, useState } from "react";
 import { yearCharacter } from "../assets.js";
 import { delay, FilledButton, Header, Screen } from "../ui.jsx";
-import { YEARS, completeCourse, courseKey, gameOf, isRequired, kindOf, labFor, progressOf, recordOf, savePlay, yearOf } from "../model.js";
+import { YEARS, completeCourse, courseKey, creditWaitDays, CREDIT_COOLDOWN_DAYS, gameOf, isRequired, kindOf, labFor, progressOf, recordOf, savePlay, yearOf } from "../model.js";
 import { gradeOf, passes, PASS, PASS_GRADE } from "../grades.js";
 import { isLessonType } from "../lessonGames.js";
 import LessonGame, { useLessonGame } from "../Games.jsx";
@@ -168,6 +168,8 @@ export function Lesson({ active, nav, route, state, setState }) {
       ...got,
       best: recordOf(after, d.id, subject),
       credits: (after.credits || 0) - (base.credits || 0),
+      // 이수했지만 7일 규칙 때문에 이번엔 크레딧을 받지 못했으면, 다시 받을 수 있기까지 남은 날.
+      creditWait: passes(got.grade) ? creditWaitDays(base, d.id, subject) : 0,
       // 새로 열린 학년들(체험이 있는 필수과목이 없는 학년은 함께 열린다).
       opened: progress.openYear > before.openYear ? YEARS.filter((y) => y > before.openYear && y <= progress.openYear) : null,
       graduated: progress.graduated && !before.graduated,
@@ -216,6 +218,11 @@ export function Lesson({ active, nav, route, state, setState }) {
           </p>
           {result.credits > 0 && <CreditPill credits={result.credits} className="a-pop mt-[12px] inline-flex" style={delay(0.2)} />}
           {result.credits > 0 && <span className="sr-only">{`크레딧 ${josa(String(result.credits), "을", "를")} 받았어요`}</span>}
+          {result.credits === 0 && result.creditWait > 0 && (
+            <p className="a-up mt-[8px] text-[13px] leading-[20px] text-gray" style={delay(0.2)}>
+              {`같은 과목 크레딧은 ${CREDIT_COOLDOWN_DAYS}일에 한 번 받아요. ${result.creditWait}일 뒤에 이수하면 다시 받아요.`}
+            </p>
+          )}
           <MintCard
             title={result.graduated ? "졸업을 축하해요!" : result.opened ? `${result.opened.join("·")}학년이 열렸어요!` : passes(result.best?.grade) ? "이수했어요" : "재수강이 필요해요"}
             className="a-up mt-[22px]"

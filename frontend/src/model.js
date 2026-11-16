@@ -19,9 +19,19 @@ export const ELECTIVE = "전공선택";
 // 졸업 과제. 틀 A(칠해서 완성하는 작품)는 artwork, 그 밖의 틀(G AI 가르치기 등)은 수업 안에서 끝까지 해보는 프로젝트다.
 const asFinal = (data) => ({ kind: data.template === "A" ? "artwork" : "project", name: data.title, ...data });
 
-// 과목을 이수하면 받는 크레딧. 재수강해서 이수해도 받는다(2026-11-09 사용자 결정, 임시값).
-// 지급량·반복 제한·구매는 값이 정해지면 바꾼다. 모은 크레딧은 멘토링이 생기면 쓴다.
+// 과목을 이수하면 받는 크레딧. 같은 과목을 다시 이수하면 마지막으로 받은 날부터 7일이 지났을 때만 다시 준다
+// (2026-11-15 사용자 결정, manyfast 크레딧 정책). 모은 크레딧은 멘토링이 생기면 쓴다.
 export const CREDIT_PER_PASS = 5;
+export const CREDIT_COOLDOWN_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** 이 과목을 지금 이수하면 크레딧을 받기까지 남은 날(올림). 0이면 지금 받을 수 있다. */
+export function creditWaitDays(state, id, subject, now = Date.now()) {
+  const last = state.creditedAt?.[courseKey(id, subject)];
+  if (!Number.isFinite(last)) return 0;
+  const left = last + CREDIT_COOLDOWN_DAYS * DAY_MS - now;
+  return left > 0 ? Math.ceil(left / DAY_MS) : 0;
+}
 // 마이페이지 프로필에 쓰는 이름(이 브라우저에만 저장, 계정과 상관없다)의 최대 글자 수.
 export const NICKNAME_MAX = 12;
 // 앞뒤 공백과 줄바꿈을 지우고 NICKNAME_MAX자(한글 한 글자 = 1자)까지 자른다. 이름으로 쓸 수 없으면 "".
@@ -48,6 +58,8 @@ export const initialState = {
   catalog: [],
   // 모은 크레딧(모든 학과 공용).
   credits: 0,
+  // 과목마다 마지막으로 크레딧을 받은 시각(ms): { "학과id|과목": 숫자 }. 7일 규칙에 쓰고, 처음부터 다시 시작해도 지우지 않는다.
+  creditedAt: {},
   // 마이페이지 프로필의 이름. 정하지 않았으면 "".
   nickname: "",
   // null이면 현재 학년에 맞는 기본 캐릭터를 표시한다.
@@ -201,7 +213,7 @@ export function progressOf(state, d, { ignore } = {}) {
  * 성적은 체험 결과의 정답률로 매기고(점수가 없는 작품 체험은 P), 다시 들으면 더 좋은 성적을 남기고 들은 횟수를 늘린다.
  * 한 줄 기록은 적었으면 남기고(없어도 마칠 수 있다), 쓰던 기록과 체험 결과는 지운다.
  */
-export function completeCourse(state, id, subject, note = "") {
+export function completeCourse(state, id, subject, note = "", now = Date.now()) {
   const d = findDepartment(state, id);
   if (!d || !state.journeys?.[id]) return state;
   const year = yearOf(d, subject);
@@ -220,11 +232,13 @@ export function completeCourse(state, id, subject, note = "") {
   const percent = improved ? result.percent : old.percent;
   const { [key]: finishedPlay, ...plays } = state.plays;
   const { [key]: finishedDraft, ...drafts } = state.drafts || {};
+  const credited = passes(result.grade) && creditWaitDays(state, id, subject, now) === 0;
   return {
     ...state,
     plays,
     drafts,
-    credits: (state.credits || 0) + (passes(result.grade) ? CREDIT_PER_PASS : 0),
+    credits: (state.credits || 0) + (credited ? CREDIT_PER_PASS : 0),
+    creditedAt: credited ? { ...state.creditedAt, [key]: now } : state.creditedAt || {},
     notes: text ? { ...state.notes, [key]: text.slice(0, 3000) } : state.notes,
     records: { ...state.records, [key]: { grade, percent, attempts: (old?.attempts || 0) + 1, last: result.grade } },
   };
@@ -262,6 +276,14 @@ export function yearSubjects(d) {
 }
 
 /* 저장 ----------------------------------------------------------------- */
+
+// 크레딧을 받은 시각 기록. 학과 데이터가 아직 없거나 과목이 빠져도 7일 규칙이 풀리지 않게 과목 이름은 검사하지 않는다.
+function cleanCreditedAt(value) {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(([key, at]) => typeof key === "string" && key.indexOf("|") > 0 && Number.isFinite(at) && at > 0),
+  );
+}
 
 /** 저장된 값(또는 새 학과 데이터를 넣은 상태)을 지금 형식에 맞게 정리한다. 맞지 않는 기록은 버린다. */
 export function normalize(value) {
@@ -311,6 +333,7 @@ export function normalize(value) {
     notes: pick(value.notes, (item) => (typeof item === "string" && item.trim() ? item.slice(0, 3000) : null)),
     drafts: pick(value.drafts, (item) => (typeof item === "string" ? item.slice(0, 3000) : null)),
     credits: Number.isInteger(value.credits) && value.credits > 0 ? value.credits : 0,
+    creditedAt: cleanCreditedAt(value.creditedAt),
     nickname: cleanNickname(value.nickname),
     profilePhoto: cleanProfilePhoto(value.profilePhoto),
     introSeen: !!value.introSeen,
