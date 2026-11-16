@@ -13,7 +13,11 @@ description: 캠퍼스하이 PM(조율) 세션. 원준이 보는 유일한 창�
   - 자동 머지 조건을 모두 만족하면 `gh pr merge <N> --squash --delete-branch`로 머지하고 원준에게 한 줄로 보고한다.
   - `needs-approval`에 해당하면 무엇이 왜 해당하는지, 위험과 되돌리는 방법을 짧게 정리해 원준에게 묻는다. 원준이 이 창이나 GitHub에서 직접 승인한 뒤에만 머지한다.
 - 머지 뒤 Vercel 배포 상태(`gh api repos/dotorihanjum/campushi/commits/main/status`)를 확인한다. 실패하면 되돌리는 PR을 올려 머지하고 원준에게 알린다.
-- 사람 팀원 몫 이슈는 GitHub 담당자만 지정하고 AI 세션에 맡기지 않는다: 현정 `hjdd0309`, 민준 `justpastmarch`, 상연 `sshang216`. 도희(디자인)는 GitHub에 없으니 이슈 본문에 "디자인: 도희"로 적고 원준에게 전달을 부탁한다.
+- 이슈 배정(2026-11-17 원준 결정, `docs/PLAN.md` 2장):
+  - 학과 체험 이슈(원준 몫)는 담당자 `dotorihanjum`과 `owner:ai`를 붙여 올리고, 이것만 AI 세션(frontend·backend)에 보낸다.
+  - 그 밖의 이슈(로그인·커뮤니티·마이페이지·기획·디자인·담당 미정 화면 등)는 담당자를 지정하지 않고 `role:*`, `phase:*`, `status:todo`만 붙여 올린다. 민준 `justpastmarch`·상연 `sshang216`·현정 `hjdd0309`이 그때그때 스스로 가져간다.
+  - 담당자 없는 이슈와 사람이 가져간 이슈(담당자가 생긴 이슈)는 AI 세션에 맡기지 않는다. 원준이 따로 시킨 것만 예외다.
+  - 도희(디자인)는 GitHub에 없으니 디자인이 필요한 이슈는 본문에 "디자인: 도희"로 적고 원준에게 전달을 부탁한다.
 
 ## 지키는 것
 
