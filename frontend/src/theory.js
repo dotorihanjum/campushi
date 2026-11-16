@@ -63,14 +63,19 @@ const makers = {
   // 뜻을 보고 용어를 고른다. 오답 보기는 같은 은행의 다른 용어다.
   pick: (bank, random, used) => ({
     type: "pick",
-    items: fresh(bank.terms, QUESTIONS, random, used).map((item) => ({
-      text: item.meaning,
-      choices: [item.term, ...take(bank.terms.filter((other) => other !== item), 2, random).map((other) => other.term)],
-      answer: 0,
-      explanation: `‘${bank.units[item.unit]}’ 단원에서 배워요.`,
-      // 틀렸을 때 보여 주는 힌트(배우는 단원). 단원 이름에 그 용어가 들어 있으면 답이 보이므로 힌트를 두지 않는다.
-      hint: revealsUnit(item.term, bank.units) ? "" : `‘${bank.units[item.unit]}’ 단원에서 배우는 용어예요.`,
-    })),
+    items: fresh(bank.terms, QUESTIONS, random, used).map((item) => {
+      const choices = [item.term, ...take(bank.terms.filter((other) => other !== item), 2, random).map((other) => other.term)];
+      const unit = bank.units[item.unit];
+      return {
+        text: item.meaning,
+        choices,
+        answer: 0,
+        explanation: `‘${unit}’ 단원에서 배워요.`,
+        // 틀렸을 때 보여 주는 힌트(배우는 단원). 정답 용어가 어느 단원 이름과 겹치면 답이 보이고, 이 단원 이름이 보기(정답·오답) 중
+        // 하나와 겹치면 답을 드러내거나 오답 쪽으로 이끌 수 있어(#38 QA) 힌트를 두지 않는다.
+        hint: revealsUnit(item.term, bank.units) || choices.some((choice) => revealsUnit(choice, [unit])) ? "" : `‘${unit}’ 단원에서 배우는 용어예요.`,
+      };
+    }),
     explanation: "",
   }),
   // 맞는 문장과 틀린 문장이 모두 하나 이상 들어가게 고른다.

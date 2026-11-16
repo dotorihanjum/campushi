@@ -316,7 +316,9 @@ test("이론 퀴즈 라운드(용어 고르기·분류하기)도 처음 고른 �
     facts: [],
     sequences: [],
   };
-  for (let seed = 1; seed <= 5; seed++) {
+  let hidden = 0;
+  let shown = 0;
+  for (let seed = 1; seed <= 20; seed++) {
     for (const round of theoryRounds(bank, seeded(seed)).filter((r) => r.type === "pick" || r.type === "sort")) {
       const questions = questionsOf(round, seeded(seed));
       const tries = play(questions, questions.map((q) => [wrongOf(q), rightOf(q)]), true);
@@ -324,15 +326,23 @@ test("이론 퀴즈 라운드(용어 고르기·분류하기)도 처음 고른 �
       if (round.type === "pick")
         for (const question of questions) {
           const answer = question.options[rightOf(question)].label;
-          // 단원 이름 ‘가방’이 들어 있는 '가방끈'은 답이 보이므로 힌트가 없다.
-          if (answer === "가방끈") assert.equal(question.hint, "");
-          else {
-            assert.match(question.hint, /단원에서 배우는 용어예요/);
-            assert.ok(!question.hint.includes(answer));
+          const unit = bank.units[bank.terms.find((t) => t.term === answer).unit];
+          const labels = question.options.map((o) => o.label);
+          // 단원 이름 ‘가방’이 들어 있는 '가방끈'이 정답이면 답이 보이고, 오답 보기에 있으면서 힌트 단원이 ‘가방’이면
+          // 오답 쪽으로 이끌 수 있어 힌트가 없다(#38 QA).
+          if (answer === "가방끈" || (labels.includes("가방끈") && unit === "가방")) {
+            assert.equal(question.hint, "");
+            hidden++;
+          } else {
+            assert.equal(question.hint, `‘${unit}’ 단원에서 배우는 용어예요.`);
+            for (const label of labels) assert.ok(!question.hint.includes(label), label);
+            shown++;
           }
         }
     }
   }
+  // 힌트를 비우는 경우와 보여 주는 경우가 모두 나왔다.
+  assert.ok(hidden > 0 && shown > 0, `hidden ${hidden}, shown ${shown}`);
   // 빈칸 채우기의 해설은 답을 담고 있어 힌트로 쓰지 않는다.
   assert.ok(questionsOf(BLANK).every((q) => q.hint === ""));
 });

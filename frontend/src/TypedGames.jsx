@@ -13,6 +13,9 @@ import {
   shuffle,
 } from "./lessonGames.js";
 
+// 문항이 나온 뒤 보기를 고를 수 있기까지의 시간(ms). 사람이 문항을 읽고 고르는 데는 이보다 오래 걸린다.
+const SETTLE_MS = 400;
+
 // 받침이 있는 한글로 끝나면 "은", 그 밖에는 "는".
 function josa(label) {
   const code = label.trim().charCodeAt(label.trim().length - 1);
@@ -49,19 +52,24 @@ function Questions({ game, onComplete, intro, unit, stack, renderText, after }) 
   // 화면이 다시 그려지기 전에 같은 보기를 연타해도 한 번만 반영하도록, 고른 기록과 결과 보고 여부를 바로 적어 둔다.
   const latest = useRef(tries);
   const reported = useRef(false);
-  const choices = useRef(null);
+  const prompt = useRef(null);
   const moved = useRef(false);
+  // 문항이 화면에 나온 시각. "다음 문제"·"다음 라운드"를 연타·더블클릭한 두 번째 입력이 새 문항의 보기를 고르지 않도록,
+  // 문항이 나오고 잠깐(SETTLE_MS)은 보기를 눌러도 고르지 않는다.
+  const shownAt = useRef(0);
   const question = questions[index];
   const picked = tries[index] ?? [];
   const settled = !!question && isSettled(question, picked, retry);
   const last = picked.at(-1);
-  // 다음 문제로 넘어가면 첫 보기에 초점을 둔다("다음 문제" 버튼이 사라져도 키보드로 이어서 고를 수 있게).
+  // 다음 문제로 넘어가면 문항 글에 초점을 둔다("다음 문제" 버튼이 사라져도 Tab 한 번으로 첫 보기에 간다).
+  // 첫 보기에 두면 Enter·Space 연타의 두 번째 입력이 그 보기를 골라 버린다(#38 QA).
   useEffect(() => {
-    if (!moved.current) return;
-    choices.current?.querySelector("button")?.focus();
+    shownAt.current = performance.now();
+    if (moved.current) prompt.current?.focus({ preventScroll: true });
   }, [index]);
 
   function choose(number) {
+    if (performance.now() - shownAt.current < SETTLE_MS) return;
     const next = choosePick(questions, latest.current, index, number, retry);
     if (next === latest.current) return;
     latest.current = next;
@@ -110,8 +118,10 @@ function Questions({ game, onComplete, intro, unit, stack, renderText, after }) 
       <p className="game-progress">
         {index + 1} / {questions.length}
       </p>
-      <p className="quiz-text">{renderText(question, settled)}</p>
-      <div ref={choices} className={`game-choices ${stack ? "stack" : ""}`} role="group" aria-label="보기">
+      <p ref={prompt} tabIndex={-1} className="quiz-text outline-none">
+        {renderText(question, settled)}
+      </p>
+      <div className={`game-choices ${stack ? "stack" : ""}`} role="group" aria-label="보기">
         {question.options.map((option, number) => {
           const { className, mark } = look(option, number);
           return (
