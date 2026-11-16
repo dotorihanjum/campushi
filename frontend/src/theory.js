@@ -1,6 +1,6 @@
 // 이론 수업 퀴즈: 과목의 문제 은행(lessonGames.js의 theory 형식)에서 체험할 때마다 라운드 3개를 새로 뽑는다.
 // 라운드마다 유형이 다르고, 문항도 은행에서 무작위로 고른다. 화면은 TypedGames.jsx의 Theory다.
-import { shuffle } from "./lessonGames.js";
+import { isAnswer, shuffle } from "./lessonGames.js";
 
 export const ROUNDS = 3;
 export const roundTitles = {
@@ -94,9 +94,13 @@ const makers = {
     if (count(chosen) < SORT_ITEMS) chosen = groups.slice(0, 3);
     if (count(chosen) < SORT_ITEMS) chosen = [...groups].sort((a, b) => b.terms.length - a.terms.length).slice(0, 3);
     const pools = chosen.map((group) => shuffle(group.terms, random));
-    const items = pools.flatMap((pool, category) => pool.slice(0, 2).map((item) => ({ text: item.term, category })));
+    const names = chosen.map((group) => group.name);
+    // 틀렸을 때 보여 주는 힌트(용어의 뜻). 뜻에 이 라운드의 칸 이름이 들어 있으면 정답 칸을 알려 주거나(10/254, 2026-11-17 점검)
+    // 다른 칸으로 이끌 수 있어(1/254) 힌트를 두지 않는다.
+    const sortItem = (item, category) => ({ text: item.term, category, hint: revealsUnit(item.meaning, names) ? "" : `뜻은 ${isAnswer(item.meaning)}.` });
+    const items = pools.flatMap((pool, category) => pool.slice(0, 2).map((item) => sortItem(item, category)));
     const rest = shuffle(
-      pools.flatMap((pool, category) => pool.slice(2).map((item) => ({ text: item.term, category }))),
+      pools.flatMap((pool, category) => pool.slice(2).map((item) => sortItem(item, category))),
       random,
     );
     const size = Math.min(SORT_MAX, Math.max(SORT_ITEMS, items.length));

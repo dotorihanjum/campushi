@@ -336,3 +336,38 @@ test("이론 퀴즈 라운드(용어 고르기·분류하기)도 처음 고른 �
   // 빈칸 채우기의 해설은 답을 담고 있어 힌트로 쓰지 않는다.
   assert.ok(questionsOf(BLANK).every((q) => q.hint === ""));
 });
+
+test("이론 퀴즈의 분류하기는 틀렸을 때 용어의 뜻을 힌트로 보여 주고, 뜻에 칸 이름이 있으면 힌트를 비운다", () => {
+  const bank = {
+    type: "theory",
+    units: ["바다", "하늘"],
+    terms: [
+      { term: "고래", meaning: "물속에 사는 큰 포유류", unit: 0 },
+      { term: "문어", meaning: "다리가 여덟 개인 동물", unit: 0 },
+      { term: "산호", meaning: "바다 속에 사는 작은 동물 무리", unit: 0 }, // 뜻에 정답 칸 이름(바다)
+      { term: "구름", meaning: "작은 물방울이 모인 것", unit: 1 },
+      { term: "제비", meaning: "봄에 오는 새", unit: 1 },
+      { term: "노을", meaning: "하늘이 붉게 물드는 것", unit: 1 }, // 뜻에 정답 칸 이름(하늘)
+      { term: "갈매기", meaning: "바다 위를 나는 새", unit: 1 }, // 뜻에 다른 칸 이름(바다)
+    ],
+    facts: [],
+    sequences: [],
+  };
+  const meaning = Object.fromEntries(bank.terms.map((t) => [t.term, t.meaning]));
+  const hidden = new Set(["산호", "노을", "갈매기"]);
+  let seen = 0;
+  for (let seed = 1; seed <= 8; seed++)
+    for (const round of theoryRounds(bank, seeded(seed)).filter((r) => r.type === "sort"))
+      for (const question of questionsOf(round, seeded(seed))) {
+        seen++;
+        if (hidden.has(question.text)) assert.equal(question.hint, "", question.text);
+        else assert.equal(question.hint, `뜻은 ${isAnswer(meaning[question.text])}.`);
+        // 힌트에 칸 이름(보기)이 들어가지 않는다.
+        for (const option of question.options) assert.ok(!question.hint.includes(option.label), `${question.text}: ${option.label}`);
+        // 다시 고르기와 채점은 그대로다(틀렸다 맞히면 0점).
+        assert.equal(retries(round.type), true);
+      }
+  assert.ok(seen > 0);
+  // 연습 문제 분류하기(서버 데이터)에는 힌트가 없다.
+  assert.ok(questionsOf(SORT).every((q) => q.hint === ""));
+});

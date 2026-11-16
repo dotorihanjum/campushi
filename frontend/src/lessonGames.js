@@ -208,6 +208,8 @@ export function questionsOf(game, random = Math.random) {
       text: item.text,
       options: game.categories.map((label, number) => ({ label, correct: number === item.category })),
       explanation: "",
+      // 이론 퀴즈의 분류하기는 theory.js가 용어의 뜻을 힌트로 넣는다(칸 이름이 보이면 비움). 연습 문제 분류하기에는 없다.
+      hint: typeof item.hint === "string" ? item.hint : "",
     }));
   return [];
 }
