@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { yearCharacter } from "../assets.js";
 import { BackButton, delay, FilledButton, Header, Screen, T } from "../ui.jsx";
-import { gameOf, nextStepOf } from "../model.js";
+import { gameOf, nextStepOf, skippedYears } from "../model.js";
 import { PASS_GRADE } from "../grades.js";
 import { CreditPill, TAB_TOP, TabBar, experienceName, latestJourney, useCountUp, view } from "./shared.jsx";
 
@@ -144,6 +144,9 @@ export function Major({ active, nav, state, setState }) {
   const fallbackYear = [...openYears].reverse().find(playable) ?? openYears.at(-1) ?? 1;
   const year = openYears.includes(pickYear) ? pickYear : fallbackYear;
   const more = order(years[year - 1].courses);
+  // 체험이 있는 필수과목이 없어 바로 넘어간 학년(manyfast F-KIJNMI, #21). 그 학년에 들을 수 있는 과목이 있으면 아래에서 들어 보라고 알린다.
+  const skipped = skippedYears(progress);
+  const skippedPlayable = skipped.some(playable);
   // 위쪽에 학교와 소속 단과대학을 쓴다. 한 줄(가운데 220px)이 빠듯한 긴 이름(17자 이상, 예: 소프트웨어융합대학)은 학교 아래로 줄을 바꾼다.
   const affiliation = d.college || d.building;
   const place = affiliation ? `${d.school} · ${affiliation}` : d.school;
@@ -209,6 +212,14 @@ export function Major({ active, nav, state, setState }) {
         </button>
       )}
       <div ref={listRef} className="absolute inset-x-[20px] pb-[8px]" style={{ top: LIST_TOP }}>
+        {skipped.length > 0 && (
+          <p className="a-up mb-[20px] rounded-[14px] border border-cream-line bg-cream px-[14px] py-[10px] text-[13px] leading-[20px] text-ink-2" style={delay(0.34)}>
+            <strong className="font-bold">{`${skipped.join("·")}학년은 바로 넘어갔어요.`}</strong>
+            {` 체험할 수 있는 필수과목이 아직 없는 학년이라 다음 학년이 함께 열렸어요.${
+              skippedPlayable ? " 그 학년 과목은 아래 '다른 과목 더 듣기'에서 들어 볼 수 있어요." : ""
+            }`}
+          </p>
+        )}
         <section aria-labelledby="major-now" className="a-up" style={delay(0.36)}>
           <h2 id="major-now" className="text-[15px] font-bold leading-[22px] text-ink-2">
             {graduated ? "아직 안 들은 과목" : `${openYear}학년 때는 이런 과목을 들어요`}

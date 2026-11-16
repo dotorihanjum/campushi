@@ -25,6 +25,7 @@ import {
   recordOf,
   refreshCatalog,
   savePlay,
+  skippedYears,
   yearOf,
   yearSubjects,
 } from "./model.js";
@@ -284,4 +285,37 @@ test("프로필 사진은 새로고침과 학과 데이터 갱신 후에도 유�
   assert.equal(normalize({}).profilePhoto, null);
   assert.equal(normalize({ ...state, profilePhoto: null }).profilePhoto, null);
   assert.equal(initialState.profilePhoto, null);
+});
+
+test("체험이 있는 필수과목이 없어 바로 넘어간 학년을 알 수 있다(해금 규칙은 progressOf 그대로)", () => {
+  // 컴퓨터공학과(테스트 데이터): 1학년은 체험이 있는 필수가 있어 처음에는 넘어간 학년이 없다.
+  let state = enrolled();
+  assert.deepEqual(skippedYears(progress(state)), []);
+  // 1학년 필수를 이수하면 2학년(필수 체험 없음)을 넘어 3학년까지 열린다. 1학년은 들어서 지나온 학년이라 넣지 않는다.
+  state = take(state, RAW_CSE.id, "객체지향프로그래밍", 8);
+  state = take(state, RAW_CSE.id, "미분적분학", 8);
+  assert.deepEqual(progress(state).years.map((y) => y.open), [true, true, true, false]);
+  assert.deepEqual(skippedYears(progress(state)), [2]);
+  // 3학년 필수를 이수해도 3학년은 넘어간 학년이 아니다. 4학년은 다음 학년이 없어 넣지 않는다.
+  for (const subject of ["알고리즘", "운영체제", "졸업프로젝트"]) state = take(state, RAW_CSE.id, subject, 9);
+  assert.equal(progress(state).graduated, true);
+  assert.deepEqual(skippedYears(progress(state)), [2]);
+
+  // 산업디자인학과(테스트 데이터): 드로잉을 이수하면 2·3학년이 바로 넘어가 4학년이 열리고, 졸업한 뒤에도 그대로다.
+  let design = enrolled([RAW_ID], [RAW_ID.id]);
+  assert.deepEqual(skippedYears(progress(design, RAW_ID.id)), []);
+  design = take(design, RAW_ID.id, "드로잉", 10);
+  assert.deepEqual(skippedYears(progress(design, RAW_ID.id)), [2, 3]);
+  design = take(design, RAW_ID.id, "산업디자인종합설계2", "P");
+  assert.equal(progress(design, RAW_ID.id).graduated, true);
+  assert.deepEqual(skippedYears(progress(design, RAW_ID.id)), [2, 3]);
+
+  // 1학년에도 체험이 있는 필수가 없으면 입학하자마자 1~3학년이 넘어가 4학년이 열린다.
+  const bare = { ...RAW_ID, games: {} };
+  const fresh = enrolled([bare], [bare.id]);
+  assert.equal(progress(fresh, bare.id).openYear, 4);
+  assert.deepEqual(skippedYears(progress(fresh, bare.id)), [1, 2, 3]);
+  // 선택과목에만 체험이 있어도 필수 체험이 없으면 넘어간다.
+  const electiveOnly = { ...RAW_ID, games: { 서비스디자인: "match" } };
+  assert.deepEqual(skippedYears(progress(enrolled([electiveOnly], [electiveOnly.id]), electiveOnly.id)), [1, 2, 3]);
 });

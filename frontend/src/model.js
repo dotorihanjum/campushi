@@ -260,6 +260,14 @@ export function nextStepOf(progress) {
   };
 }
 
+/**
+ * 바로 넘어간 학년: 열려 있지만 체험이 있는 필수과목이 하나도 없어, 들은 것 없이 다음 학년이 함께 열린 학년(1~3학년).
+ * progressOf의 해금 규칙(남은 필수과목이 없으면 다음 학년이 열림)을 그대로 읽기만 한다. 4학년은 다음 학년이 없어 넣지 않는다.
+ * 다음 학년이 열린 뒤 체험이 생겨 조건에서 빠진 과목(exempt)이 있는 학년은 체험이 있는 학년이므로 넣지 않는다("새 체험"으로 알린다).
+ */
+export const skippedYears = (progress) =>
+  progress.years.filter((item) => item.year < 4 && item.open && !item.courses.some((course) => course.required && !course.planned)).map((item) => item.year);
+
 // 수업 중 체험을 끝냈을 때 결과를 남긴다(완료 전까지는 마지막 결과만 둔다).
 export function savePlay(state, id, subject, game, summary, score) {
   const clean = cleanScore(score);
