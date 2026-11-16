@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CHECKED, CONDITIONS, LABS, RESTORED, addedSince, checkProblems, isLabId, labOf, labProblems, takeawayProblems } from "./index.js";
 import { CHECKS } from "./checks.js";
-import { courseKey, completeCourse, departmentsOf, gameOf, initialState, isPlanned, normalize, progressOf, savePlay } from "../model.js";
+import { courseKey, completeCourse, departmentsOf, gameOf, initialState, isPlanned, normalize, progressOf, savePlay, skippedYears } from "../model.js";
 import { isGame } from "../games.js";
 import { RAW_CSE } from "../testFixtures.js";
 
@@ -210,4 +210,12 @@ test("검증 기록(checks.js)은 앱 코드에서 불러오지 않는다(학생
     const code = readFileSync(`${src}/${file}`, "utf8");
     assert.doesNotMatch(code, /(from|import)\s*\(?\s*["'][^"']*checks(\.js)?["']/, `${file}가 checks.js를 불러온다`);
   }
+});
+
+test("새 체험이 생겨 예외(exempt)로 열려 있는 학년은 '바로 넘어간 학년'이 아니다(새 체험으로 알린다)", () => {
+  // 이론 퀴즈를 내렸던 동안 3학년까지 열린 사용자: 1·2학년에는 다시 생긴 필수 퀴즈(미분적분학·컴퓨터구조)가 있다.
+  const state = normalize(savedAt(2));
+  const progress = progressOf(state, dept(state));
+  assert.deepEqual(progress.years.map((y) => y.open), [true, true, true, false]);
+  assert.deepEqual(skippedYears(progress), []);
 });
