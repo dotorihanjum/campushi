@@ -5,6 +5,16 @@
 // 공개 규칙: 과제 문구·채점 항목은 AI가 쓰고 쓰지 않은 별도 에이전트의 검토를 통과한 것만 status: "verified"로 등록한다.
 // 웹/파이선프로그래밍(파이썬 함수 블록)과 자료구조(스택·큐) 체험은 2026-11-12 사용자 결정으로 뺐다(지난 코드는 git 기록에 있다).
 //
+// 체험 하나의 형식(labProblems가 검사한다. 형식이 틀리면 verified여도 공개하지 않고, 테스트가 실패한다):
+//   { id: "kebab-case", status: "verified" | "draft", since: 이수 조건 버전, title, task, source(근거 한 줄), learn?(배우기 단계 설명),
+//     takeaway: { summary: "이 수업은 ○○를 하는 수업이에요" 한 문장, highSchool: 고등학교 내용과의 연결,
+//                 terms: [{ name: 대학 용어, meaning: 방금 해본 것으로 풀어 쓴 뜻 }] } }
+// takeaway는 마지막 라운드를 끝낸 직후 직접 해보기 단계 안의 요약(labs/parts/LabSummary.jsx)과 기록 단계의 "배운 내용"에 쓴다.
+//
+// 검증 기록(check: 검토자, 검토 시각, 뺀 항목과 이유)은 학생 화면과 번들에 넣지 않으려고 checks.js에 따로 두고 테스트만 읽는다.
+// 이 파일에는 검증 기록이 있는 체험 id(CHECKED)만 둔다. CHECKED에 없는 체험은 verified여도 공개하지 않고,
+// CHECKED와 checks.js가 어긋나면(기록이 없거나 형식이 틀린 id가 있으면) 테스트가 실패한다(labs.test.js).
+//
 // since: 이 체험이 생긴 "이수 조건 버전". 필수과목에 체험이 생기면 다음 학년이 열리는 조건이 되는데, 이미 다음 학년이 열린
 // 사용자는 다시 잠그지 않는다(2026-11-10 사용자 결정). 저장된 기록의 조건 버전(state.conditions)이 since보다 낮으면
 // 그때 이미 열려 있던 학년의 새 조건 과목을 예외(state.exempt)로 남긴다(model.js의 normalize).
@@ -38,12 +48,68 @@ export const RESTORED = {
 // 1: 웹/파이선 체험, 2: 자료구조 체험(둘 다 2026-11-12에 뺐다), 3: 이론 퀴즈 15과목 다시 공개.
 export const CONDITIONS = 3;
 
-const verified = (lab) => (lab?.status === "verified" ? lab : null);
+// 검증 기록(checks.js)이 있는 체험 id. 체험을 공개할 때 checks.js에 기록을 넣고 그 id를 여기에도 적는다.
+export const CHECKED = [];
 
-/** 그 학과 과목의 체험 데이터(검증을 통과한 것만). 없으면 null. */
-export function labOf(departmentId, subject) {
-  const byDepartment = Object.hasOwn(LABS, departmentId) ? LABS[departmentId] : null;
-  return byDepartment && Object.hasOwn(byDepartment, subject) ? verified(byDepartment[subject]) : null;
+const filled = (value) => typeof value === "string" && value.trim() !== "";
+const DATE = /^(\d{4})-(\d{2})-(\d{2})(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2}))?$/;
+// 달력에 있는 날짜인지(2026-02-30 같은 값은 거른다).
+function realDate(value) {
+  const m = typeof value === "string" ? DATE.exec(value) : null;
+  if (!m || Number.isNaN(Date.parse(value))) return false;
+  const day = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return day.getUTCFullYear() === +m[1] && day.getUTCMonth() === +m[2] - 1 && day.getUTCDate() === +m[3];
+}
+
+/** 끝 요약(takeaway)의 형식 문제. 맞으면 빈 배열. */
+export function takeawayProblems(takeaway) {
+  if (!takeaway || typeof takeaway !== "object" || Array.isArray(takeaway)) return ["takeaway는 { summary, highSchool, terms } 객체여야 해요"];
+  const problems = [];
+  if (!filled(takeaway.summary)) problems.push("takeaway.summary(한 문장)가 비었어요");
+  if (!filled(takeaway.highSchool)) problems.push("takeaway.highSchool(고교 연결)이 비었어요");
+  if (!Array.isArray(takeaway.terms) || takeaway.terms.length === 0) problems.push("takeaway.terms(용어 이름표)가 하나 이상 있어야 해요");
+  else {
+    takeaway.terms.forEach((term, i) => {
+      if (!term || !filled(term.name) || !filled(term.meaning)) problems.push(`takeaway.terms[${i}]에 name과 meaning이 있어야 해요`);
+    });
+    const names = takeaway.terms.map((term) => term?.name?.trim());
+    if (new Set(names).size !== names.length) problems.push("takeaway.terms에 같은 이름이 두 번 있어요");
+  }
+  return problems;
+}
+
+/** 검증 기록(check)의 형식 문제. 맞으면 빈 배열. removed는 검토에서 뺀 항목과 이유이고, 뺀 것이 없으면 빈 배열이다. */
+export function checkProblems(check) {
+  if (!check || typeof check !== "object" || Array.isArray(check)) return ["check는 { reviewer, reviewedAt, removed } 객체여야 해요"];
+  const problems = [];
+  if (!filled(check.reviewer)) problems.push("check.reviewer(검토자)가 비었어요");
+  if (!realDate(check.reviewedAt)) problems.push("check.reviewedAt(검토 시각)은 2026-11-17 또는 2026-11-17T15:00:00+09:00 꼴이어야 해요");
+  if (!Array.isArray(check.removed)) problems.push("check.removed(뺀 항목과 이유)는 배열이어야 해요");
+  else
+    check.removed.forEach((entry, i) => {
+      if (!entry || !filled(entry.item) || !filled(entry.reason)) problems.push(`check.removed[${i}]에 item과 reason이 있어야 해요`);
+    });
+  return problems;
+}
+
+/** 체험 데이터의 형식 문제(화면이 쓰는 칸과 끝 요약). 맞으면 빈 배열. */
+export function labProblems(lab) {
+  if (!lab || typeof lab !== "object") return ["체험 데이터가 객체가 아니에요"];
+  const problems = [];
+  if (typeof lab.id !== "string" || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(lab.id)) problems.push("id는 소문자·숫자·하이픈(kebab-case)이어야 해요");
+  if (!Number.isInteger(lab.since) || lab.since < 1) problems.push("since(이수 조건 버전)는 1 이상의 정수여야 해요");
+  for (const field of ["title", "task", "source"]) if (!filled(lab[field])) problems.push(`${field}가 비었어요`);
+  if (lab.learn !== undefined && !filled(lab.learn)) problems.push("learn은 쓰려면 비우지 않아요");
+  return [...problems, ...takeawayProblems(lab.takeaway)];
+}
+
+// 공개하는 체험: 별도 에이전트 검토를 통과했고(verified), 검증 기록이 있고(CHECKED), 형식이 맞는 것.
+const published = (lab, checked) => (lab?.status === "verified" && checked.includes(lab.id) && labProblems(lab).length === 0 ? lab : null);
+
+/** 그 학과 과목의 체험 데이터(공개하는 것만). 없으면 null. labs·checked는 테스트에서 다른 등록부를 넣어 볼 때만 준다. */
+export function labOf(departmentId, subject, labs = LABS, checked = CHECKED) {
+  const byDepartment = Object.hasOwn(labs, departmentId) ? labs[departmentId] : null;
+  return byDepartment && Object.hasOwn(byDepartment, subject) ? published(byDepartment[subject], checked) : null;
 }
 
 /** 이수 조건 버전 from 뒤에 체험이 생긴(또는 다시 생긴) 그 학과의 과목. 체험이 실제로 있는지는 부르는 쪽이 본다. */
@@ -59,4 +125,5 @@ export function addedSince(departmentId, from) {
 
 /** 체험 결과에 남기는 체험 id("lab:<id>")인지. */
 export const isLabId = (id) =>
-  typeof id === "string" && Object.values(LABS).some((subjects) => Object.values(subjects).some((lab) => verified(lab) && id === `lab:${lab.id}`));
+  typeof id === "string" &&
+  Object.values(LABS).some((subjects) => Object.values(subjects).some((lab) => published(lab, CHECKED) && id === `lab:${lab.id}`));

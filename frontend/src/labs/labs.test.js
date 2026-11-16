@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CONDITIONS, LABS, RESTORED, addedSince, isLabId, labOf } from "./index.js";
+import { readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { CHECKED, CONDITIONS, LABS, RESTORED, addedSince, checkProblems, isLabId, labOf, labProblems, takeawayProblems } from "./index.js";
+import { CHECKS } from "./checks.js";
 import { courseKey, completeCourse, departmentsOf, gameOf, initialState, isPlanned, normalize, progressOf, savePlay } from "../model.js";
 import { isGame } from "../games.js";
 import { RAW_CSE } from "../testFixtures.js";
@@ -121,4 +124,90 @@ test("이론 퀴즈는 정답률로 성적을 받고, B- 미만이면 다음 학
   assert.equal(state.records[courseKey(RAW.id, CALC)].grade, "B+");
   assert.equal(state.notes[courseKey(RAW.id, CALC)], undefined);
   assert.equal(progressOf(state, dept(state)).years[1].open, true);
+});
+
+// 형식 검사용 시험 체험. 테스트에만 있고 등록부(LABS)·화면 번들에는 넣지 않는다.
+const TEST_LAB = {
+  id: "test-lab",
+  status: "verified",
+  since: CONDITIONS,
+  title: "시험 체험",
+  task: "시험용 과제",
+  source: "시험용 근거",
+  takeaway: {
+    summary: "이 수업은 시험용 활동을 해 보는 수업이에요.",
+    highSchool: "고등학교 수학의 함수와 이어져요.",
+    terms: [{ name: "시험 용어", meaning: "방금 해 본 활동의 이름이에요." }],
+  },
+};
+const TEST_CHECK = { reviewer: "QA 세션", reviewedAt: "2026-11-17T15:00:00+09:00", removed: [{ item: "3번 문항", reason: "답이 둘이에요" }] };
+const registry = (lab) => ({ [RAW.id]: { [WEB]: lab } });
+
+test("끝 요약(takeaway)은 { summary, highSchool, terms[] } 형식이어야 한다", () => {
+  assert.deepEqual(labProblems(TEST_LAB), []);
+  // 예전처럼 문자열 하나인 takeaway는 형식이 틀렸다.
+  assert.ok(takeawayProblems("이 수업은 ○○를 하는 수업이에요.").length > 0);
+  assert.ok(takeawayProblems(undefined).length > 0);
+  assert.ok(takeawayProblems([]).length > 0);
+  const bad = (change) => takeawayProblems({ ...TEST_LAB.takeaway, ...change });
+  assert.ok(bad({ summary: "  " }).length > 0);
+  assert.ok(bad({ highSchool: undefined }).length > 0);
+  assert.ok(bad({ terms: [] }).length > 0);
+  assert.ok(bad({ terms: "용어" }).length > 0);
+  assert.ok(bad({ terms: [{ name: "용어" }] }).length > 0);
+  assert.ok(bad({ terms: [null] }).length > 0);
+  assert.ok(bad({ terms: [{ name: "용어", meaning: "뜻" }, { name: "용어", meaning: "다른 뜻" }] }).length > 0);
+  // 체험 전체 검사에도 들어간다.
+  assert.ok(labProblems({ ...TEST_LAB, takeaway: "문자열" }).length > 0);
+  assert.ok(labProblems({ ...TEST_LAB, id: "Test Lab" }).length > 0);
+  assert.ok(labProblems({ ...TEST_LAB, title: "" }).length > 0);
+});
+
+test("검증 기록(check)은 검토자·검토 시각·뺀 항목과 이유를 갖춰야 한다", () => {
+  assert.deepEqual(checkProblems(TEST_CHECK), []);
+  assert.deepEqual(checkProblems({ ...TEST_CHECK, reviewedAt: "2026-11-17", removed: [] }), []);
+  assert.ok(checkProblems(undefined).length > 0);
+  assert.ok(checkProblems({ ...TEST_CHECK, reviewer: "" }).length > 0);
+  assert.ok(checkProblems({ ...TEST_CHECK, reviewedAt: "어제" }).length > 0);
+  assert.ok(checkProblems({ ...TEST_CHECK, reviewedAt: "2026-02-30" }).length > 0);
+  assert.ok(checkProblems({ ...TEST_CHECK, removed: undefined }).length > 0);
+  assert.ok(checkProblems({ ...TEST_CHECK, removed: [{ item: "3번 문항" }] }).length > 0);
+});
+
+test("검증 기록이 없거나 형식이 틀린 체험은 verified여도 공개하지 않는다", () => {
+  // 검증 기록이 있으면 공개한다.
+  assert.equal(labOf(RAW.id, WEB, registry(TEST_LAB), [TEST_LAB.id]), TEST_LAB);
+  // 검증 기록이 없으면 verified여도 null.
+  assert.equal(labOf(RAW.id, WEB, registry(TEST_LAB), []), null);
+  // 검토 전(verified 아님)이면 기록이 있어도 null.
+  assert.equal(labOf(RAW.id, WEB, registry({ ...TEST_LAB, status: "draft" }), [TEST_LAB.id]), null);
+  // takeaway 형식이 틀리면 null.
+  assert.equal(labOf(RAW.id, WEB, registry({ ...TEST_LAB, takeaway: "문자열" }), [TEST_LAB.id]), null);
+  // 없는 학과·과목.
+  assert.equal(labOf("khu-id", WEB, registry(TEST_LAB), [TEST_LAB.id]), null);
+  assert.equal(labOf(RAW.id, DS, registry(TEST_LAB), [TEST_LAB.id]), null);
+});
+
+test("등록부의 모든 체험은 형식이 맞고, 공개한 체험은 모두 검증 기록이 있다", () => {
+  const labs = Object.values(LABS).flatMap((subjects) => Object.values(subjects));
+  for (const lab of labs) assert.deepEqual(labProblems(lab), [], `${lab?.id}의 형식`);
+  // verified인데 검증 기록이 없으면 화면에서 조용히 빠지므로 테스트에서 먼저 막는다.
+  for (const lab of labs.filter((lab) => lab.status === "verified")) assert.ok(CHECKED.includes(lab.id), `${lab.id}의 검증 기록(CHECKED)`);
+  // CHECKED와 checks.js가 맞는다: 기록이 있고 형식이 맞는 id만, 빠짐없이.
+  assert.equal(new Set(CHECKED).size, CHECKED.length);
+  assert.deepEqual([...CHECKED].sort(), Object.keys(CHECKS).sort());
+  for (const id of CHECKED) {
+    assert.deepEqual(checkProblems(CHECKS[id]), [], `${id}의 검증 기록 형식`);
+    assert.ok(labs.some((lab) => lab.id === id), `${id}가 등록부에 있다`);
+  }
+});
+
+test("검증 기록(checks.js)은 앱 코드에서 불러오지 않는다(학생 화면·번들에 넣지 않는다)", () => {
+  const src = fileURLToPath(new URL("..", import.meta.url));
+  const files = readdirSync(src, { recursive: true }).filter((file) => /\.(js|jsx)$/.test(file) && !/\.test\.js$/.test(file));
+  assert.ok(files.length > 10);
+  for (const file of files) {
+    const code = readFileSync(`${src}/${file}`, "utf8");
+    assert.doesNotMatch(code, /(from|import)\s*\(?\s*["'][^"']*checks(\.js)?["']/, `${file}가 checks.js를 불러온다`);
+  }
 });
