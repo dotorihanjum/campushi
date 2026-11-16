@@ -189,6 +189,9 @@ export function questionsOf(game, random = Math.random) {
         random,
       ),
       explanation: item.explanation,
+      // 틀렸을 때 보여 주는 힌트. 용어 고르기는 theory.js가 배우는 단원을 넣는다(답이 보이면 비움).
+      // 빈칸 채우기의 해설은 답을 담고 있어 힌트로 쓰지 않는다.
+      hint: game.type === "pick" && typeof item.hint === "string" ? item.hint : "",
     }));
   // OX는 문항 순서를 섞는다. 공개된 문제 상당수가 X를 마지막에 두고 있어 순서대로 내면 답을 짐작하기 쉽다.
   if (game.type === "ox")
@@ -205,6 +208,8 @@ export function questionsOf(game, random = Math.random) {
       text: item.text,
       options: game.categories.map((label, number) => ({ label, correct: number === item.category })),
       explanation: "",
+      // 이론 퀴즈의 분류하기는 theory.js가 용어의 뜻을 힌트로 넣는다(칸 이름이 보이면 비움). 연습 문제 분류하기에는 없다.
+      hint: typeof item.hint === "string" ? item.hint : "",
     }));
   return [];
 }
@@ -218,6 +223,28 @@ export function isAnswer(label) {
 // picks: 문항마다 고른 보기의 번호.
 export const countCorrect = (questions, picks) =>
   questions.filter((question, i) => question.options[picks[i]]?.correct).length;
+
+// ---- 다시 고르기(2026-11-17 #20, manyfast S-FKJUTG): 빈칸 채우기·용어 고르기·분류하기는 틀리면 정답을 보여 주지 않고
+// 맞힐 때까지 다시 고른다. OX는 원준 결정 전까지 지금처럼 한 번 고르면 정답을 보여 준다.
+// tries: 문항마다 고른 보기 번호들(고른 순서대로). 점수는 지금처럼 처음 고른 답(firstPicks)으로만 센다.
+const RETRY_TYPES = ["blank", "pick", "sort"];
+export const retries = (type) => RETRY_TYPES.includes(type);
+/** 그 문항을 끝냈는지. 다시 고르기 문항은 정답을 고르면, 아니면 한 번 고르면 끝난다. */
+export function isSettled(question, picked = [], retry = false) {
+  return retry ? picked.some((number) => question.options[number]?.correct === true) : picked.length > 0;
+}
+/** index번 문항에서 number번 보기를 고른 뒤의 tries. 끝난 문항, 이미 고른 보기, 없는 보기는 그대로 둔다(연타해도 한 번만 센다). */
+export function choosePick(questions, tries, index, number, retry = false) {
+  const question = questions[index];
+  const picked = tries[index] ?? [];
+  if (!question || !Number.isInteger(number) || number < 0 || number >= question.options.length) return tries;
+  if (isSettled(question, picked, retry) || picked.includes(number)) return tries;
+  const next = Array.from({ length: Math.max(tries.length, index + 1) }, (_, i) => tries[i] ?? []);
+  next[index] = [...picked, number];
+  return next;
+}
+/** 문항마다 처음 고른 보기 번호(countCorrect에 넘긴다). */
+export const firstPicks = (tries) => tries.map((picked) => picked?.[0]);
 
 // ---- 순서 맞추기: order는 지금 놓인 순서대로 적은 단계 번호. 번호가 곧 올바른 자리다.
 export function scramble(size, random = Math.random) {
