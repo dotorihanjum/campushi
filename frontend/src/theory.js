@@ -68,6 +68,8 @@ const makers = {
       choices: [item.term, ...take(bank.terms.filter((other) => other !== item), 2, random).map((other) => other.term)],
       answer: 0,
       explanation: `‘${bank.units[item.unit]}’ 단원에서 배워요.`,
+      // 틀렸을 때 보여 주는 힌트(배우는 단원). 단원 이름에 그 용어가 들어 있으면 답이 보이므로 힌트를 두지 않는다.
+      hint: revealsUnit(item.term, bank.units) ? "" : `‘${bank.units[item.unit]}’ 단원에서 배우는 용어예요.`,
     })),
     explanation: "",
   }),

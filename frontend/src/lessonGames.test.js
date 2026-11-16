@@ -12,7 +12,12 @@ import {
   scramble,
   rightPlaces,
   moveStep,
+  retries,
+  isSettled,
+  choosePick,
+  firstPicks,
 } from "./lessonGames.js";
+import { theoryRounds } from "./theory.js";
 import { gameFor, isGame } from "./games.js";
 import { createDepartment, completeCourse, courseKey, gameOf, loadState, initialState, savePlay, STORAGE_KEY } from "./model.js";
 import { getLessonGame, ApiError } from "./api.js";
@@ -244,4 +249,90 @@ test("연습 문제를 형식에 맞게 받는다", async (t) => {
   assert.match(offline.message, /연습 문제를 불러오지 못했어요/);
   reply = () => new Response("<html>", { status: 502 });
   assert.equal((await failure()).status, 502);
+});
+
+// 문항에서 정답 보기 번호와 오답 보기 번호 하나.
+const rightOf = (question) => question.options.findIndex((o) => o.correct);
+const wrongOf = (question) => question.options.findIndex((o) => !o.correct);
+// tries 위에서 문항마다 [보기 번호...]를 차례로 고른다.
+function play(questions, plan, retry) {
+  let tries = [];
+  plan.forEach((numbers, index) => numbers.forEach((number) => (tries = choosePick(questions, tries, index, number, retry))));
+  return tries;
+}
+
+test("빈칸·용어 고르기·분류하기만 다시 고르고, OX는 지금처럼 한 번 고르면 끝난다", () => {
+  assert.deepEqual(["blank", "pick", "sort", "ox", "match", "order", "theory"].map(retries), [true, true, true, false, false, false, false]);
+  const [question] = questionsOf(BLANK, seeded(3));
+  // 다시 고르기: 틀리면 끝나지 않고, 맞혀야 끝난다.
+  assert.equal(isSettled(question, [], true), false);
+  assert.equal(isSettled(question, [wrongOf(question)], true), false);
+  assert.equal(isSettled(question, [wrongOf(question), rightOf(question)], true), true);
+  // OX: 틀려도 한 번 고르면 끝난다.
+  const [ox] = questionsOf(OX, seeded(1));
+  assert.equal(isSettled(ox, [wrongOf(ox)], false), true);
+  assert.deepEqual(choosePick([ox], [[wrongOf(ox)]], 0, rightOf(ox), false), [[wrongOf(ox)]]);
+});
+
+test("처음에 틀리고 다시 맞힌 문항은 맞힌 수에 들어가지 않는다(점수는 처음 고른 답)", () => {
+  for (const game of [BLANK, SORT]) {
+    const questions = questionsOf(game, seeded(9));
+    // 첫 문항만 바로 맞히고, 나머지는 틀렸다가 다시 맞힌다.
+    const tries = play(questions, questions.map((q, i) => (i === 0 ? [rightOf(q)] : [wrongOf(q), rightOf(q)])), true);
+    assert.ok(questions.every((q, i) => isSettled(q, tries[i], true)), `${game.type}: 모두 끝남`);
+    assert.equal(countCorrect(questions, firstPicks(tries)), 1, `${game.type}: 처음에 맞힌 1문항만`);
+    // 모두 바로 맞히면 문항 수만큼.
+    const clean = play(questions, questions.map((q) => [rightOf(q)]), true);
+    assert.equal(countCorrect(questions, firstPicks(clean)), questions.length);
+  }
+});
+
+test("같은 보기를 연타하거나 끝난 문항을 다시 눌러도 한 번만 반영한다", () => {
+  const questions = questionsOf(BLANK, seeded(4));
+  const [q] = questions;
+  const once = choosePick(questions, [], 0, wrongOf(q), true);
+  // 같은 오답을 다시 누르면 그대로(같은 객체)다.
+  assert.equal(choosePick(questions, once, 0, wrongOf(q), true), once);
+  const solved = choosePick(questions, once, 0, rightOf(q), true);
+  assert.deepEqual(solved[0], [wrongOf(q), rightOf(q)]);
+  // 맞힌 뒤 정답을 다시 누르거나 다른 보기를 눌러도 그대로다.
+  assert.equal(choosePick(questions, solved, 0, rightOf(q), true), solved);
+  assert.equal(choosePick(questions, solved, 0, (rightOf(q) + 1) % q.options.length, true), solved);
+  // 처음 정답을 연타해도 한 번.
+  const quick = choosePick(questions, [], 0, rightOf(q), true);
+  assert.equal(choosePick(questions, quick, 0, rightOf(q), true), quick);
+  assert.equal(countCorrect(questions, firstPicks(quick)), 1);
+  // 없는 문항·보기는 무시한다.
+  assert.equal(choosePick(questions, quick, 9, 0, true), quick);
+  assert.equal(choosePick(questions, quick, 1, 7, true), quick);
+  assert.equal(choosePick(questions, quick, 1, -1, true), quick);
+});
+
+test("이론 퀴즈 라운드(용어 고르기·분류하기)도 처음 고른 답으로만 세고, 용어 고르기는 정답을 드러내지 않는 힌트가 있다", () => {
+  const bank = {
+    type: "theory",
+    units: ["가방", "과일"],
+    terms: ["사과나무", "포도알", "귤껍질", "감자칩", "밤송이", "수박씨", "가방끈"].map((term, i) => ({ term, meaning: `${term}의 뜻`, unit: i % 2 })),
+    facts: [],
+    sequences: [],
+  };
+  for (let seed = 1; seed <= 5; seed++) {
+    for (const round of theoryRounds(bank, seeded(seed)).filter((r) => r.type === "pick" || r.type === "sort")) {
+      const questions = questionsOf(round, seeded(seed));
+      const tries = play(questions, questions.map((q) => [wrongOf(q), rightOf(q)]), true);
+      assert.equal(countCorrect(questions, firstPicks(tries)), 0);
+      if (round.type === "pick")
+        for (const question of questions) {
+          const answer = question.options[rightOf(question)].label;
+          // 단원 이름 ‘가방’이 들어 있는 '가방끈'은 답이 보이므로 힌트가 없다.
+          if (answer === "가방끈") assert.equal(question.hint, "");
+          else {
+            assert.match(question.hint, /단원에서 배우는 용어예요/);
+            assert.ok(!question.hint.includes(answer));
+          }
+        }
+    }
+  }
+  // 빈칸 채우기의 해설은 답을 담고 있어 힌트로 쓰지 않는다.
+  assert.ok(questionsOf(BLANK).every((q) => q.hint === ""));
 });

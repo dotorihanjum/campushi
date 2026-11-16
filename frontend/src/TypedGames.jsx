@@ -1,13 +1,23 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { OrderTemplate } from "./Templates.jsx";
 import {
   BLANK,
   answerOf,
+  choosePick,
   countCorrect,
+  firstPicks,
   isAnswer,
+  isSettled,
   questionsOf,
+  retries,
   shuffle,
 } from "./lessonGames.js";
+
+// 받침이 있는 한글로 끝나면 "은", 그 밖에는 "는".
+function josa(label) {
+  const code = label.trim().charCodeAt(label.trim().length - 1);
+  return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0 ? "은" : "는";
+}
 import { ROUNDS, roundTitles, theoryRounds } from "./theory.js";
 
 // 미리 만들어 둔 연습 문제의 유형별 화면. 문제(game)는 Games.jsx가 받아서 넘겨준다.
@@ -28,27 +38,51 @@ function Closing({ children, explanation, onRestart, after }) {
   );
 }
 
-// 빈칸 채우기, OX, 분류하기: 한 문항씩 보기 하나를 고르고 바로 정답과 해설을 본다.
+// 빈칸 채우기, 용어 고르기, 분류하기, OX: 한 문항씩 보기를 고른다.
+// 빈칸·용어 고르기·분류하기는 틀리면 정답을 보여 주지 않고 "다시 골라 보세요"와 힌트를 보여 주며, 맞혀야 다음 문제로 간다.
+// OX는 한 번 고르면 바로 정답과 해설을 본다(원준 결정 전까지 그대로). 점수는 모두 처음 고른 답으로만 센다(lessonGames.js의 firstPicks).
 function Questions({ game, onComplete, intro, unit, stack, renderText, after }) {
+  const retry = retries(game.type);
   const [questions, setQuestions] = useState(() => questionsOf(game));
-  const [picks, setPicks] = useState([]);
+  const [tries, setTries] = useState([]);
   const [index, setIndex] = useState(0);
+  // 화면이 다시 그려지기 전에 같은 보기를 연타해도 한 번만 반영하도록, 고른 기록과 결과 보고 여부를 바로 적어 둔다.
+  const latest = useRef(tries);
+  const reported = useRef(false);
+  const choices = useRef(null);
+  const moved = useRef(false);
   const question = questions[index];
-  const pick = picks[index];
-  const answered = pick !== undefined;
+  const picked = tries[index] ?? [];
+  const settled = !!question && isSettled(question, picked, retry);
+  const last = picked.at(-1);
+  // 다음 문제로 넘어가면 첫 보기에 초점을 둔다("다음 문제" 버튼이 사라져도 키보드로 이어서 고를 수 있게).
+  useEffect(() => {
+    if (!moved.current) return;
+    choices.current?.querySelector("button")?.focus();
+  }, [index]);
 
   function choose(number) {
-    if (answered) return;
-    const next = [...picks, number];
-    setPicks(next);
-    if (next.length === questions.length) {
-      const correct = countCorrect(questions, next);
+    const next = choosePick(questions, latest.current, index, number, retry);
+    if (next === latest.current) return;
+    latest.current = next;
+    setTries(next);
+    // 마지막 문항을 끝내면 처음 고른 답으로 채점해 한 번만 알린다.
+    if (!reported.current && questions.every((q, i) => isSettled(q, next[i], retry))) {
+      reported.current = true;
+      const correct = countCorrect(questions, firstPicks(next));
       onComplete(`${questions.length}${unit} 중 ${correct}개 정답`, { correct, total: questions.length });
     }
   }
+  function goNext() {
+    moved.current = true;
+    setIndex(index + 1);
+  }
   function restart() {
     setQuestions(questionsOf(game));
-    setPicks([]);
+    latest.current = [];
+    reported.current = false;
+    moved.current = false;
+    setTries([]);
     setIndex(0);
   }
 
@@ -56,37 +90,57 @@ function Questions({ game, onComplete, intro, unit, stack, renderText, after }) 
     return (
       <Closing explanation={game.explanation} onRestart={restart} after={after}>
         {questions.length}
-        {unit} 중 {countCorrect(questions, picks)}개를 맞혔어요.
+        {unit} 중 {countCorrect(questions, firstPicks(tries))}개를 맞혔어요.
       </Closing>
     );
+  // 보기의 모양과 글자 표시: 맞힌 정답(✓ 정답), 틀리게 고른 보기(✕ 아니에요), 끝난 문항의 나머지(흐리게).
+  // 색만으로 구분하지 않도록 글자를 붙인다. OX는 예전 모양 그대로 둔다(끝나면 정답 보기를 색으로, 해설 문장에 정답을 적는다).
+  const look = (option, number) => {
+    if (option.correct && settled) return { className: "is-right", mark: retry ? "✓ 정답" : "" };
+    if (picked.includes(number)) return { className: "is-wrong", mark: retry ? "✕ 아니에요" : "" };
+    return { className: settled ? "is-rest" : "", mark: "" };
+  };
+  const firstRight = question.options[picked[0]]?.correct === true;
+  let feedback = "";
+  if (settled && !retry) feedback = `${question.options[last].correct ? "맞아요." : `아쉬워요. 정답은 ${isAnswer(answerOf(question))}.`} ${question.explanation}`;
+  else if (settled) feedback = `맞았어요. ${question.explanation}${firstRight ? "" : " 처음 고른 답으로 점수를 세서, 이 문제는 맞힌 수에 들어가지 않아요."}`;
   return (
     <>
       <p className="body-copy">{intro}</p>
       <p className="game-progress">
         {index + 1} / {questions.length}
       </p>
-      <p className="quiz-text">{renderText(question, answered)}</p>
-      <div className={`game-choices ${stack ? "stack" : ""}`} role="group" aria-label="보기">
-        {question.options.map((option, number) => (
-          <button
-            key={option.label}
-            aria-disabled={answered}
-            aria-pressed={pick === number}
-            className={
-              !answered ? "" : option.correct ? "is-right" : pick === number ? "is-wrong" : "is-rest"
-            }
-            onClick={() => choose(number)}
-          >
-            {option.label}
-          </button>
-        ))}
+      <p className="quiz-text">{renderText(question, settled)}</p>
+      <div ref={choices} className={`game-choices ${stack ? "stack" : ""}`} role="group" aria-label="보기">
+        {question.options.map((option, number) => {
+          const { className, mark } = look(option, number);
+          return (
+            <button
+              key={option.label}
+              aria-disabled={settled || picked.includes(number)}
+              aria-pressed={picked.includes(number)}
+              className={className}
+              onClick={() => choose(number)}
+            >
+              {option.label}
+              {mark && <span className={`ml-[8px] whitespace-nowrap text-[12px] font-bold ${className === "is-wrong" ? "text-[#b42318]" : ""}`}>{mark}</span>}
+            </button>
+          );
+        })}
       </div>
-      <p className="game-feedback" role="status">
-        {answered &&
-          `${question.options[pick].correct ? "맞아요." : `아쉬워요. 정답은 ${isAnswer(answerOf(question))}.`} ${question.explanation}`}
-      </p>
-      {answered && (
-        <button className="button" onClick={() => setIndex(index + 1)}>
+      <div className="game-feedback" role="status">
+        {feedback && <p>{feedback.trim()}</p>}
+        {retry && !settled && picked.length > 0 && (
+          <div className="mt-[2px] rounded-[12px] border border-[#e5484d] bg-[#fff1f1] px-[12px] py-[10px] text-[#8f1d1d]">
+            <p>
+              <strong>다시 골라 보세요.</strong> {`고른 ‘${question.options[last].label}’${josa(question.options[last].label)} 답이 아니에요.`}
+            </p>
+            {question.hint && <p>{`힌트: ${question.hint}`}</p>}
+          </div>
+        )}
+      </div>
+      {settled && (
+        <button className="button" onClick={goNext}>
           {index === questions.length - 1 ? "결과 보기" : "다음 문제"}
         </button>
       )}
