@@ -10,6 +10,7 @@ import { Rub } from "../Templates.jsx";
 import { groupName } from "../groups.js";
 import { gameFor } from "../games.js";
 import { LAB_SCREENS } from "../labs/components.js";
+import { LabSummary } from "../labs/parts/LabSummary.jsx";
 import { CreditPill, gradeText, josa, useGuard, view } from "./shared.jsx";
 
 const STEPS = ["배우기", "직접 해보기", "기록"];
@@ -112,6 +113,8 @@ export function Lesson({ active, nav, route, state, setState }) {
   const [reached, setReached] = useState(step);
   const [notice, setNotice] = useState("");
   const [shake, setShake] = useState(0);
+  // 진짜 수업 체험을 끝낸 뒤 요약에서 "체험 다시 해보기"를 눌렀는지. 다시 끝내기 전까지 이전 결과(plays)는 그대로 둔다.
+  const [redo, setRedo] = useState(false);
   // 수업을 마치고 받은 결과: { grade, percent, best, opened, graduated }.
   const [result, setResult] = useState(null);
   const timer = useRef(0);
@@ -179,6 +182,7 @@ export function Lesson({ active, nav, route, state, setState }) {
   const again = () => {
     moved.current = true;
     setResult(null);
+    setRedo(false);
     setDraft("");
     setStep(0);
     setReached(0);
@@ -267,6 +271,7 @@ export function Lesson({ active, nav, route, state, setState }) {
   const go = (next) => {
     moved.current = true;
     setNotice("");
+    setRedo(false);
     setStep(next);
     setReached((r) => Math.max(r, next));
   };
@@ -376,27 +381,34 @@ export function Lesson({ active, nav, route, state, setState }) {
     );
   } else if (step === 1 && mode === "lab") {
     // 진짜 수업 체험도 다른 체험처럼 이 단계 안에 들어간다. 화면 코드는 그 과목에 들어갈 때만 불러온다.
+    // 마지막 라운드를 끝내면(체험 화면이 onComplete를 부르면) 체험 화면 대신 끝 요약을 보여 준다. 단계 칩으로 돌아와도
+    // 끝낸 결과(plays)가 있으면 요약을 보여 주고, "체험 다시 해보기"를 누르면 체험 화면을 처음부터 다시 연다.
     const LabScreen = LAB_SCREENS[lab.id];
     body = (
       <div className="a-up mt-[22px]">
-        <LabBoundary>
-          <Suspense
-            fallback={
-              <p className="text-[13.5px] text-ink-3" role="status">
-                체험을 불러오는 중이에요…
-              </p>
-            }
-          >
-            <LabScreen
-              lab={lab}
-              subject={subject}
-              onComplete={(summary, score) => {
-                setNotice("");
-                setState((s) => savePlay(s, d.id, subject, game, summary, score));
-              }}
-            />
-          </Suspense>
-        </LabBoundary>
+        {play && !redo ? (
+          <LabSummary takeaway={lab.takeaway} onRetry={() => setRedo(true)} />
+        ) : (
+          <LabBoundary>
+            <Suspense
+              fallback={
+                <p className="text-[13.5px] text-ink-3" role="status">
+                  체험을 불러오는 중이에요…
+                </p>
+              }
+            >
+              <LabScreen
+                lab={lab}
+                subject={subject}
+                onComplete={(summary, score) => {
+                  setNotice("");
+                  setRedo(false);
+                  setState((s) => savePlay(s, d.id, subject, game, summary, score));
+                }}
+              />
+            </Suspense>
+          </LabBoundary>
+        )}
       </div>
     );
     action = <FilledButton onClick={() => (play ? go(2) : warn("먼저 끝까지 해보세요."))}>기록하러 가기</FilledButton>;
@@ -416,7 +428,7 @@ export function Lesson({ active, nav, route, state, setState }) {
     action = <FilledButton onClick={() => (play ? go(2) : warn("먼저 끝까지 해보세요."))}>기록하러 가기</FilledButton>;
   } else {
     // 이 수업에서 배운 것(데이터에 없으면 카드를 그리지 않는다).
-    const learned = mode === "quiz" ? quiz.game.explanation : mode === "project" ? final.explanation : mode === "lab" ? lab.takeaway : mode === "practice" ? practice.learn : "";
+    const learned = mode === "quiz" ? quiz.game.explanation : mode === "project" ? final.explanation : mode === "lab" ? lab.takeaway.summary : mode === "practice" ? practice.learn : "";
     body = (
       <>
         {learned && (
