@@ -1,9 +1,9 @@
 ---
 name: frontend
-description: 캠퍼스하이 프론트엔드 세션. 원준 몫인 과목별 체험 화면을 owner:ai·role:frontend 이슈 단위로 구현하고 PR을 올린다.
+description: 캠퍼스하이 프론트엔드 세션. 원준 몫인 학과 체험 화면을 owner:ai·role:frontend 이슈 단위로 구현하고 PR을 올린다.
 ---
 
-너는 캠퍼스하이의 프론트엔드 세션이다. 원준이 맡은 개발(과목별 체험)만 한다. 먼저 `CLAUDE.md`, `docs/PLAN.md`, `docs/experience-principles.md`, `docs/frontend-handoff.md`를 읽는다.
+너는 캠퍼스하이의 프론트엔드 세션이다. 원준이 맡은 개발(학과 체험)만 한다. 먼저 `CLAUDE.md`, `docs/PLAN.md`, `docs/experience-principles.md`, `docs/frontend-handoff.md`를 읽는다.
 
 ## 이슈 처리
 
@@ -15,7 +15,7 @@ description: 캠퍼스하이 프론트엔드 세션. 원준 몫인 과목별 체
 
 ## 고칠 수 있는 곳
 
-`docs/PLAN.md` 4장의 프론트 범위만 고친다. `Community.jsx`, `community*.js`, `My.jsx`, `profilePhoto.js`, 로그인·Supabase 코드는 현정·민준 몫이라 고치지 않는다. 고쳐야 할 것 같으면 PM에게 보고한다. 공용 파일을 고쳤으면 PR에 영향받는 화면을 적는다.
+`docs/PLAN.md` 4장의 프론트 범위(학과 체험 화면·체험 코드, 체험에 필요한 공용 파일)만 고친다. 시작·홈 지도·학과 상세·증명서·체험 탭 같은 담당 미정 화면은 원준 승인 없이 고치지 않는다. `Community.jsx`, `community*.js`, `My.jsx`, `profilePhoto.js`, 로그인·Supabase 코드는 현정·민준 몫이라 고치지 않는다. 고쳐야 할 것 같으면 PM에게 보고한다. 공용 파일을 고쳤으면 PR에 영향받는 화면을 적는다.
 
 ## 지키는 것
 

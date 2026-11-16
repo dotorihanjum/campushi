@@ -24,12 +24,13 @@ AI 세션 여러 개가 역할을 나눠 일할 때 모두가 따르는 기준�
 
 ## 2. 사람과 AI의 몫
 
-| 누구 | 맡은 일 |
-| --- | --- |
-| 원준 | PM·리뷰·최종 승인. 개발은 **과목별 체험**(AI 세션이 대신 작업) |
-| 현정·민준 | 로그인, 커뮤니티, 마이페이지 |
-| 상연 | 기획(체험 기획 포함) |
-| 도희 | 디자인 |
+| 누구 | GitHub | 맡은 일 |
+| --- | --- | --- |
+| 원준 | `dotorihanjum` | PM·리뷰·최종 승인. 개발은 **학과 체험**만(AI 세션이 대신 작업) |
+| 현정 | `hjdd0309` | 로그인, 커뮤니티, 마이페이지 |
+| 민준 | `justpastmarch` | 로그인, 커뮤니티, 마이페이지 |
+| 상연 | `sshang216` | 기획(체험 기획 포함) |
+| 도희 | 없음(GitHub 미참여) | 디자인. 이슈는 담당자 지정 대신 본문에 "디자인: 도희"로 적고 PM이 원준에게 전달을 부탁한다 |
 
 - AI 세션은 **원준 몫 개발**과 기획·디자인·QA 보조만 한다. 사람 팀원 몫의 이슈는 만들고 GitHub 담당자로 배정하되, AI 세션이 그 코드를 고치지 않는다.
 - 상연·도희의 결정과 AI 기획·디자인 세션의 제안이 다르면 사람 결정을 따른다.
@@ -46,11 +47,11 @@ AI 세션 여러 개가 역할을 나눠 일할 때 모두가 따르는 기준�
 
 ## 4. 역할별로 고칠 수 있는 곳
 
-**프론트**
-- 체험 화면: `frontend/src/screens/Major.jsx`, `Courses.jsx`, `Lesson.jsx`
+**프론트**(원준이 맡은 **학과 체험**만, 2026-11-16 원준 확인)
+- 학과 체험 화면: `frontend/src/screens/Major.jsx`, `Courses.jsx`, `Lesson.jsx`
 - 체험 코드: `frontend/src/labs/**`, `Templates.jsx`, `TypedGames.jsx`, `Games.jsx`, `experiences.js`, `groups.js`, `groupData.js`, `lessonGames.js`, `theory.js`, `games.js`, `grades.js`와 각 테스트
-- 그 밖의 화면(`Start.jsx`, `Home.jsx`, `Departments.jsx`, `Certificates.jsx`, `Experiences.jsx`, `CampusMap.jsx`, `campus.js`)
-- 공용 파일(`model.js`, `shared.jsx`, `ui.jsx`, `App.jsx`, `api.js`, `assets.js`)은 고칠 수 있지만 다른 화면에 영향이 가면 PR에 적고 QA가 그 화면도 확인한다.
+- 공용 파일(`model.js`, `shared.jsx`, `ui.jsx`, `App.jsx`, `api.js`, `assets.js`)은 체험에 필요한 만큼 고칠 수 있다. 다른 화면에 영향이 가면 PR에 적고 QA가 그 화면도 확인한다.
+- **담당 미정(고치려면 원준 승인):** `Start.jsx`, `Home.jsx`, `Departments.jsx`, `Certificates.jsx`, `Experiences.jsx`, `CampusMap.jsx`, `campus.js`, `campusMapData.js`, `logos.js`. 원준이 담당을 정하면 이 목록을 고친다.
 - **고치지 않음:** `Community.jsx`, `community*.js`, `My.jsx`, `profilePhoto.js`, 로그인·Supabase 코드(현정·민준 몫)
 
 **백엔드**
@@ -93,7 +94,7 @@ AI 세션 여러 개가 역할을 나눠 일할 때 모두가 따르는 기준�
 - 규칙 문서(`CLAUDE.md`, `docs/PLAN.md`, `.claude/agents/**`) 변경
 - 정책·법률 문구(약관, 환불, AI 고지)
 - 기능 삭제, 화면 흐름(탭·화면 이동 구조) 변경
-- 사람 팀원 몫 파일을 건드림
+- 사람 팀원 몫 파일이나 담당 미정 파일(4장)을 건드림
 - 바뀐 줄이 400줄 초과(데이터 파일·테스트 제외)
 - QA가 "판단 필요"로 보고함
 
