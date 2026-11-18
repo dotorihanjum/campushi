@@ -5,12 +5,14 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
+
+from backend import accounts
 
 logger = logging.getLogger("uvicorn.error")
 DATA_DIR = Path(__file__).parent / "data"
@@ -79,6 +81,14 @@ async def validation_error(request, exc):
     field = exc.errors()[0]["loc"][-1] if exc.errors() else ""
     message = "과목을 작성해주세요." if field == "subject" else "필수 항목을 올바르게 작성해주세요."
     return JSONResponse(status_code=400, content={"detail": message})
+
+
+@app.exception_handler(accounts.AccountError)
+async def account_error(request, exc):
+    response = JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    if exc.clear_cookie:
+        accounts.clear_session_cookie(response)
+    return response
 
 
 @app.exception_handler(Exception)
@@ -171,6 +181,12 @@ def lesson_game(body: GameRequest):
     if not game:
         raise HTTPException(status_code=404, detail="이 과목의 연습 문제가 아직 없어요.")
     return {"game": game}
+
+
+@app.get("/api/me")
+def me(request: Request, store=Depends(accounts.account_store)):
+    """지금 로그인한 사용자. 로그인하지 않았거나 세션이 만료·위조됐으면 401."""
+    return {"user": accounts.current_user(store, request)}
 
 
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
