@@ -42,7 +42,7 @@ export function cleanNickname(value) {
 
 export const initialState = {
   version: 2,
-  // 입학한 학과: { 학과id: {} }.
+  // 입학한 학과: { 학과id: { enrolledAt } }. enrolledAt은 입학한 시각(ms)이고, 입학 시각을 남기기 전(2026-11-18)에 입학한 기록은 {}다.
   journeys: {},
   // 지금 보고 있는 학과와, 홈에 보여 주던(지금 체험 중인) 학과.
   current: null,
@@ -208,6 +208,12 @@ export function progressOf(state, d, { ignore } = {}) {
   };
 }
 
+/** 학과에 입학한다(입학한 시각을 남긴다). 이미 입학한 학과면 입학 시각을 덮어쓰지 않고 상태를 그대로 돌려준다. */
+export function enroll(state, id, now = Date.now()) {
+  if (state.journeys?.[id]) return state;
+  return { ...state, journeys: { ...state.journeys, [id]: { enrolledAt: now } } };
+}
+
 /**
  * 수업을 마치고 성적을 받는다. 입학한 학과의 열린 학년 과목이고, 그 과목의 체험을 끝까지 해본 결과(plays)가 있어야 한다.
  * 성적은 체험 결과의 정답률로 매기고(점수가 없는 작품 체험은 P), 다시 들으면 더 좋은 성적을 남기고 들은 횟수를 늘린다.
@@ -293,6 +299,14 @@ function cleanCreditedAt(value) {
   );
 }
 
+// Date가 나타낼 수 있는 가장 늦은 시각(ms). 이보다 크면 날짜로 읽히지 않는다.
+const MAX_TIME = 8.64e15;
+// 입학 기록 하나. 입학 시각은 날짜로 읽히는 값일 때만 남기고, 없거나 잘못되면 입학 기록만 남긴다(입학 시각을 남기기 전의 기록 {}).
+function cleanJourney(item) {
+  const at = item?.enrolledAt;
+  return Number.isFinite(at) && at > 0 && at <= MAX_TIME ? { enrolledAt: at } : {};
+}
+
 /** 저장된 값(또는 새 학과 데이터를 넣은 상태)을 지금 형식에 맞게 정리한다. 맞지 않는 기록은 버린다. */
 export function normalize(value) {
   if (!value || typeof value !== "object") return structuredClone(initialState);
@@ -312,7 +326,7 @@ export function normalize(value) {
       const kept = course ? keep(item, course) : null;
       return kept ? [[key, kept]] : [];
     }));
-  const journeys = Object.fromEntries(Object.keys(value.journeys || {}).filter((id) => built.has(id)).map((id) => [id, {}]));
+  const journeys = Object.fromEntries(Object.keys(value.journeys || {}).filter((id) => built.has(id)).map((id) => [id, cleanJourney(value.journeys[id])]));
   const records = pick(value.records, (item, { d }) =>
       journeys[d.id] && isGrade(item?.grade)
         ? {
