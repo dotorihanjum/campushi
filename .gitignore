@@ -220,6 +220,9 @@ __marimo__/
 .streamlit/secrets.toml
 
 # 캠퍼스하이
+# 로컬 개발 비밀 값(frontend/.env.local 등). 커밋하지 않는다.
+.env.local
+.env.*.local
 node_modules/
 .vite/
 frontend/dist/

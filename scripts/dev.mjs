@@ -16,6 +16,9 @@ const python = path.join(
 const requirements = path.join(root, "backend", "requirements.txt");
 const marker = path.join(root, "backend", ".venv", ".requirements");
 const setupOnly = process.argv.includes("--setup");
+// 백엔드(계정 기능)가 쓰는 환경변수. 로컬에서는 frontend/.env.local(커밋하지 않음)에 Vercel과 같은 이름으로 두고,
+// 이미 셸에 있는 값이 먼저다. 백엔드 프로세스에만 넘기고 Vite에는 넘기지 않는다(Vite는 VITE_로 시작하는 것만 브라우저에 싣는다).
+const BACKEND_ENV = ["VITE_SUPABASE_URL", "SUPABASE_SECRET_KEY", "SESSION_MAX_AGE_DAYS"];
 const children = [];
 let stopping = false;
 
@@ -27,6 +30,24 @@ function run(command, args, cwd = root) {
   });
   if (result.error || result.status !== 0)
     throw new Error(`${command} 실행에 실패했습니다.`);
+}
+// KEY=VALUE 줄만 읽는다(# 주석, 빈 줄, 따옴표로 감싼 값 지원). 파일이 없으면 빈 객체.
+function readEnvFile(file) {
+  if (!existsSync(file)) return {};
+  const values = {};
+  for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
+    const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (!match) continue;
+    const [, key, raw] = match;
+    values[key] = /^(["']).*\1$/.test(raw) ? raw.slice(1, -1) : raw;
+  }
+  return values;
+}
+function backendEnv() {
+  const local = readEnvFile(path.join(frontend, ".env.local"));
+  const env = { ...process.env };
+  for (const key of BACKEND_ENV) if (env[key] === undefined && local[key] !== undefined) env[key] = local[key];
+  return env;
 }
 function stop(code = 0) {
   if (stopping) return;
@@ -108,7 +129,7 @@ try {
         "--port",
         String(port),
       ],
-      { cwd: root, stdio: "inherit", windowsHide: true },
+      { cwd: root, stdio: "inherit", windowsHide: true, env: backendEnv() },
     );
     children.push(server);
     server.once("error", (error) => {

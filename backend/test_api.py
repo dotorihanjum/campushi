@@ -1,12 +1,18 @@
 import copy
+import hashlib
 import json
+import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
+import httpx
 from fastapi.testclient import TestClient
+from starlette.requests import Request
+from starlette.responses import Response
 
-from backend import main, theory_banks
+from backend import accounts, main, theory_banks
 
 
 class ApiTest(unittest.TestCase):
@@ -208,6 +214,223 @@ class TheoryBankTest(unittest.TestCase):
         # 너무 많이 빠져 형식을 만족하지 못하면 공개하지 않는다.
         wrong = {key: "틀림" for key in answers}
         self.assertEqual(theory_banks.apply(bank, {"answers": wrong})["status"], "rejected")
+
+
+# 계정·세션(이슈 #30). 운영 Supabase에는 붙지 않고, Supabase REST(PostgREST) 호출을 가짜 HTTP 응답으로 대신한다.
+SUPABASE_ENV = {"VITE_SUPABASE_URL": "https://test-project.supabase.co", "SUPABASE_SECRET_KEY": "sb_secret_test_only"}
+ACCOUNT = {
+    "id": "6f1c1b7e-0000-4000-8000-000000000001",
+    "provider": "kakao",
+    "provider_user_id": "kakao-12345",
+    "email": "student@example.com",
+    "role": "student",
+    "birth_year": 2009,
+    "terms_agreed_at": "2026-11-18T01:00:00+00:00",
+    "created_at": "2026-11-18T01:00:00+00:00",
+}
+
+
+class FakePostgrest:
+    """테스트용 가짜 Supabase REST. sessions의 만들기·찾기(users 함께 읽기)·지우기만 흉내 내고, 받은 요청을 남긴다."""
+
+    def __init__(self, users=(ACCOUNT,)):
+        self.users = {user["id"]: user for user in users}
+        self.sessions = {}
+        self.requests = []
+
+    def __call__(self, request):
+        self.requests.append(request)
+        if request.url.path != "/rest/v1/sessions":
+            return httpx.Response(404, json={"message": "not found"})
+        params = request.url.params
+        if request.method == "POST":
+            row = json.loads(request.content)
+            self.sessions[row["token_hash"]] = row
+            return httpx.Response(201)
+        token_hash = params.get("token_hash", "").removeprefix("eq.")
+        if request.method == "DELETE":
+            self.sessions.pop(token_hash, None)
+            return httpx.Response(204)
+        row = self.sessions.get(token_hash)
+        after = params.get("expires_at", "").removeprefix("gt.")
+        if not row or not after or parse_time(row["expires_at"]) <= parse_time(after):
+            return httpx.Response(200, json=[])
+        user = self.users[row["user_id"]]
+        fields = params["select"].split("(", 1)[1].rstrip(")").split(",")
+        return httpx.Response(200, json=[{"user": {field: user[field] for field in fields}}])
+
+
+def parse_time(text):
+    return datetime.fromisoformat(text.replace("Z", "+00:00"))
+
+
+def failing(status=None, error=None):
+    def handler(request):
+        if error:
+            raise error
+        return httpx.Response(status, json={"message": "fail"})
+
+    return handler
+
+
+class AccountTest(unittest.TestCase):
+    def setUp(self):
+        self.env = mock.patch.dict(os.environ, SUPABASE_ENV)
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        self.db = FakePostgrest()
+        self.use(self.db)
+        self.client = TestClient(main.app)
+
+    def use(self, handler):
+        main.app.dependency_overrides[accounts.account_store] = lambda: accounts.store_from_env(transport=httpx.MockTransport(handler))
+        self.addCleanup(main.app.dependency_overrides.clear)
+
+    def login(self, now=None):
+        response = Response()
+        token = accounts.create_session(accounts.store_from_env(transport=httpx.MockTransport(self.db)), response, ACCOUNT["id"], now=now)
+        return token, response
+
+    def me(self, token=None):
+        headers = {"Cookie": f"{accounts.SESSION_COOKIE}={token}"} if token is not None else {}
+        return self.client.get("/api/me", headers=headers)
+
+    def test_session_cookie_is_httponly_secure_samesite(self):
+        token, response = self.login()
+        cookie = response.headers["set-cookie"]
+        self.assertTrue(cookie.startswith(f"{accounts.SESSION_COOKIE}={token};"))
+        parts = [part.strip().lower() for part in cookie.split(";")]
+        self.assertIn("httponly", parts)
+        self.assertIn("secure", parts)
+        self.assertIn("samesite=lax", parts)
+        self.assertIn("path=/", parts)
+        self.assertIn(f"max-age={accounts.DEFAULT_SESSION_DAYS * 86400}", parts)
+        self.assertFalse(any(part.startswith("domain=") for part in parts))
+        # 쿠키에는 무작위 토큰만, DB에는 그 해시만 남는다.
+        self.assertRegex(token, r"^[A-Za-z0-9_-]{43}$")
+        self.assertNotIn(token, json.dumps(self.db.sessions))
+        self.assertEqual(list(self.db.sessions), [hashlib.sha256(token.encode()).hexdigest()])
+        self.assertEqual(self.db.sessions[accounts.hash_token(token)]["user_id"], ACCOUNT["id"])
+        # 서버 키는 apikey 헤더로만 보낸다.
+        request = self.db.requests[0]
+        self.assertEqual(request.headers["apikey"], SUPABASE_ENV["SUPABASE_SECRET_KEY"])
+        self.assertEqual(str(request.url).split("?")[0], "https://test-project.supabase.co/rest/v1/sessions")
+        # 토큰은 매번 다르다.
+        self.assertNotEqual(self.login()[0], token)
+
+    def test_session_length_comes_from_env(self):
+        with mock.patch.dict(os.environ, {"SESSION_MAX_AGE_DAYS": "7"}):
+            _, response = self.login(now=datetime(2026, 11, 18, tzinfo=timezone.utc))
+        self.assertIn("Max-Age=604800", response.headers["set-cookie"])
+        self.assertEqual(parse_time(next(iter(self.db.sessions.values()))["expires_at"]), datetime(2026, 11, 25, tzinfo=timezone.utc))
+        # 숫자가 아니거나 범위(1~365일)를 벗어나면 기본값을 쓴다.
+        for bad in ("abc", "0", "366", "-1", "1.5"):
+            with mock.patch.dict(os.environ, {"SESSION_MAX_AGE_DAYS": bad}):
+                self.assertEqual(accounts.session_days(), accounts.DEFAULT_SESSION_DAYS, bad)
+
+    def test_me_returns_public_fields_only(self):
+        token, _ = self.login()
+        response = self.me(token)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertEqual(
+            response.json(),
+            {"user": {key: ACCOUNT[key] for key in ("provider", "email", "role", "birth_year", "terms_agreed_at", "created_at")}},
+        )
+        text = response.text
+        for secret in (token, accounts.hash_token(token), ACCOUNT["id"], ACCOUNT["provider_user_id"], "expires_at"):
+            self.assertNotIn(secret, text)
+        # DB에서도 공개 필드만 읽는다.
+        query = self.db.requests[-1].url.params
+        self.assertNotIn("provider_user_id", query["select"])
+        self.assertTrue(query["expires_at"].startswith("gt."))
+
+    def test_me_without_login_is_401(self):
+        response = self.me()
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), {"detail": "로그인이 필요해요."})
+        self.assertEqual(self.db.requests, [])
+
+    def test_me_with_expired_session_is_401(self):
+        token, _ = self.login(now=datetime.now(timezone.utc) - timedelta(days=accounts.DEFAULT_SESSION_DAYS, seconds=1))
+        response = self.me(token)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), {"detail": "로그인이 만료되었어요. 다시 로그인해 주세요."})
+        # 쓸 수 없는 쿠키는 지운다(같은 속성으로 Max-Age=0).
+        cookie = response.headers["set-cookie"]
+        self.assertIn(f'{accounts.SESSION_COOKIE}=""', cookie)
+        self.assertIn("Max-Age=0", cookie)
+        self.assertIn("Secure", cookie)
+
+    def test_me_with_forged_token_is_401(self):
+        self.login()
+        forged = ["x" * 43, "not a token", "../../etc", "a" * 500, ""]
+        for token in forged:
+            response = self.me(token)
+            self.assertEqual(response.status_code, 401, token)
+            self.assertEqual(response.json()["detail"], "로그인이 만료되었어요. 다시 로그인해 주세요." if token else "로그인이 필요해요.")
+        # 형식이 맞는 위조 토큰만 DB에 물어보고(없으면 401), 형식이 틀린 것은 DB에 묻지도 않는다.
+        lookups = [request for request in self.db.requests if request.method == "GET"]
+        self.assertEqual(len(lookups), 1)
+
+    def test_end_session_deletes_row_and_cookie(self):
+        token, _ = self.login()
+        request = Request({"type": "http", "headers": [(b"cookie", f"{accounts.SESSION_COOKIE}={token}".encode())]})
+        response = Response()
+        accounts.end_session(accounts.store_from_env(transport=httpx.MockTransport(self.db)), request, response)
+        self.assertEqual(self.db.sessions, {})
+        self.assertIn("Max-Age=0", response.headers["set-cookie"])
+        self.assertEqual(self.me(token).status_code, 401)
+
+    def test_me_without_supabase_env_explains_and_old_api_still_works(self):
+        main.app.dependency_overrides.clear()
+        for missing in (["VITE_SUPABASE_URL"], ["SUPABASE_SECRET_KEY"], ["VITE_SUPABASE_URL", "SUPABASE_SECRET_KEY"]):
+            env = {key: value for key, value in os.environ.items() if key not in missing}
+            with mock.patch.dict(os.environ, env, clear=True):
+                response = self.me("x" * 43)
+                self.assertEqual(response.status_code, 503, missing)
+                self.assertEqual(response.json(), {"detail": "서버에 계정 저장소 설정이 없어 로그인 기능을 쓸 수 없어요."})
+                self.assertEqual(self.client.get("/api/health").status_code, 200)
+                self.assertEqual(self.client.get("/api/departments").status_code, 200)
+                subject = next(iter(main.lesson_games()))
+                self.assertEqual(self.client.post("/api/lesson_game", json={"subject": subject}).status_code, 200)
+        # 주소가 https가 아니면(오타 등) 설정이 없는 것과 같이 본다. 로컬 Supabase(127.0.0.1)만 http를 허용한다.
+        with mock.patch.dict(os.environ, {"VITE_SUPABASE_URL": "test-project.supabase.co"}):
+            self.assertEqual(self.me("x" * 43).status_code, 503)
+        with mock.patch.dict(os.environ, {"VITE_SUPABASE_URL": "http://127.0.0.1:54321"}):
+            self.assertEqual(accounts.store_from_env().url, "http://127.0.0.1:54321")
+
+    def test_supabase_failures_are_korean_without_internals(self):
+        token, _ = self.login()
+        cases = [
+            # 무료 플랜 일시정지·점검·장애(5xx, 540), 연결 실패, 시간 초과
+            (failing(540), 503, "계정 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요."),
+            (failing(503), 503, "계정 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요."),
+            (failing(error=httpx.ConnectError("boom")), 503, "계정 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요."),
+            (failing(error=httpx.ReadTimeout("slow")), 503, "계정 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요."),
+            # 서버 키가 틀렸거나 권한이 없음
+            (failing(401), 500, "계정 서버 설정에 문제가 있어요. 잠시 후 다시 시도해 주세요."),
+            (failing(403), 500, "계정 서버 설정에 문제가 있어요. 잠시 후 다시 시도해 주세요."),
+            # 그 밖의 예상하지 못한 응답
+            (failing(400), 502, "계정 서버의 응답을 처리하지 못했어요. 잠시 후 다시 시도해 주세요."),
+            (lambda request: httpx.Response(200, text="<html>"), 502, "계정 서버의 응답을 처리하지 못했어요. 잠시 후 다시 시도해 주세요."),
+            (lambda request: httpx.Response(200, json=[{"user": None}]), 502, "계정 서버의 응답을 처리하지 못했어요. 잠시 후 다시 시도해 주세요."),
+        ]
+        for handler, status, detail in cases:
+            self.use(handler)
+            with self.assertLogs("uvicorn.error", level="ERROR"):
+                response = self.me(token)
+            self.assertEqual(response.status_code, status, detail)
+            self.assertEqual(response.json(), {"detail": detail})
+            for leak in ("Traceback", "supabase.co", "sb_secret", "boom", "fail"):
+                self.assertNotIn(leak, response.text)
+
+    def test_secret_key_is_not_in_frontend(self):
+        # 서버 키 이름이 프론트 코드에 나오지 않는다(빌드 결과물은 PR에서 따로 확인).
+        frontend = main.Path(__file__).parent.parent / "frontend" / "src"
+        for path in frontend.rglob("*"):
+            if path.suffix in (".js", ".jsx", ".ts", ".tsx", ".css", ".html"):
+                self.assertNotIn("SUPABASE_SECRET_KEY", path.read_text(encoding="utf-8"), path)
 
 
 if __name__ == "__main__":
