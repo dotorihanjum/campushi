@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { SCREENS } from "./screens/index.js";
 import { STORAGE_KEY, loadState, refreshCatalog } from "./model.js";
 import { getDepartments } from "./api.js";
+import { openStorage, storageNotice, writeStorage } from "./storage.js";
 
 // 화면은 402×874 아트보드에 맞춰 그리고, 창 크기에 맞게 통째로 줄이거나 늘린다.
 const W = 402;
@@ -74,7 +75,11 @@ function useFit(ref) {
 }
 
 export default function App() {
-  const [state, setState] = useState(() => loadState(window.localStorage));
+  // 쿠키·사이트 데이터를 막은 브라우저에서는 localStorage를 읽기만 해도 예외가 나므로, 열지 못하면 빈 상태로 시작한다.
+  const [storage] = useState(() => openStorage(() => window.localStorage));
+  const [state, setState] = useState(() => loadState(storage));
+  // 저장 실패 안내: hidden | shown | closed. 닫은 것은 메모리에만 둔다(저장소가 막혀 있으므로).
+  const [notice, setNotice] = useState("hidden");
   const [stack, setStack] = useState(() => initialStack(state));
   const [ghosts, setGhosts] = useState([]);
   const [anim, setAnim] = useState({});
@@ -84,6 +89,12 @@ export default function App() {
   const [attempt, setAttempt] = useState(0);
   const stackRef = useRef(stack);
   stackRef.current = stack;
+  // 지금 보이는(맨 위) 화면. 저장 안내를 닫은 뒤 키보드 포커스를 이 화면으로 옮긴다.
+  const screen = useRef(null);
+  const closeNotice = () => {
+    setNotice("closed");
+    focusScreen(screen.current);
+  };
   const stage = useRef(null);
   const { scale, height, hint } = useFit(stage);
   const short = Math.max(0, H - height);
@@ -108,13 +119,11 @@ export default function App() {
   }, [attempt]);
   const catalog = useMemo(() => ({ ...load, retry: () => setAttempt((n) => n + 1) }), [load]);
 
+  // 저장 공간을 쓸 수 없으면 이번 방문 동안만 기록이 유지되므로, 화면 위쪽에 알린다(storage.js).
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      // 저장 공간을 쓸 수 없으면 이번 방문 동안만 기록이 유지된다.
-    }
-  }, [state]);
+    const saved = writeStorage(storage, STORAGE_KEY, JSON.stringify(state));
+    setNotice((n) => storageNotice(n, saved));
+  }, [storage, state]);
   useEffect(() => {
     try {
       sessionStorage.setItem(
@@ -192,58 +201,110 @@ export default function App() {
   ];
 
   return (
-    <main ref={stage} className="stage relative flex w-full items-center justify-center bg-white min-[520px]:bg-[#e9ecef]">
-      {hint && (
-        <aside
-          className="absolute top-1/2 -translate-y-1/2 text-center text-[14px] leading-[21px] text-navy"
-          style={{ width: ASIDE_W, left: `calc(25% - ${(W * scale) / 4 + ASIDE_W / 2}px)` }}
-        >
-          <svg width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden className="mx-auto mb-[12px] text-mint-deep">
-            <rect x="6" y="20" width="26" height="16" rx="3" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
-            <rect x="22" y="6" width="16" height="26" rx="3" stroke="currentColor" strokeWidth="2.2" fill="#fff" />
-            <path d="M8 15a10 10 0 0 1 10-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            <path d="m15 3 3 3-3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <p style={{ wordBreak: "keep-all" }}>휴대폰을 세로로 돌리면 화면이 더 크게 보여요.</p>
-        </aside>
-      )}
-      <div className="relative shrink-0 overflow-hidden" style={{ width: W * scale, height: height * scale }}>
-        <div
-          className="absolute left-0 top-0 overflow-hidden bg-white"
-          style={{
-            width: W,
-            height,
-            transform: `scale(${scale})`,
-            transformOrigin: "0 0",
-            "--vh": height,
-            "--tt": trimTop,
-            "--bt": trimBottom,
-            "--cut": cut,
-          }}
-        >
-          {layers.map(({ route, cls, ghost }) => {
-            const S = SCREENS[route.name];
-            return (
-              <div
-                key={route.key}
-                className={`absolute inset-0 ${cls}`}
-                style={ghost ? { zIndex: 3 } : undefined}
-                aria-hidden={route.key !== top.key}
-              >
-                <S
-                  nav={nav}
-                  route={route}
-                  state={state}
-                  setState={setState}
-                  catalog={catalog}
-                  active={!ghost && route.key === top.key}
-                />
-              </div>
-            );
-          })}
-          {busy && <div className="absolute inset-0 z-50" />}
+    <div className="stage flex flex-col">
+      <StorageNotice shown={notice === "shown"} onClose={closeNotice} />
+      <main ref={stage} className="relative flex min-h-0 w-full flex-1 items-center justify-center bg-white min-[520px]:bg-[#e9ecef]">
+        {hint && (
+          <aside
+            className="absolute top-1/2 -translate-y-1/2 text-center text-[14px] leading-[21px] text-navy"
+            style={{ width: ASIDE_W, left: `calc(25% - ${(W * scale) / 4 + ASIDE_W / 2}px)` }}
+          >
+            <svg width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden className="mx-auto mb-[12px] text-mint-deep">
+              <rect x="6" y="20" width="26" height="16" rx="3" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
+              <rect x="22" y="6" width="16" height="26" rx="3" stroke="currentColor" strokeWidth="2.2" fill="#fff" />
+              <path d="M8 15a10 10 0 0 1 10-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <path d="m15 3 3 3-3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <p style={{ wordBreak: "keep-all" }}>휴대폰을 세로로 돌리면 화면이 더 크게 보여요.</p>
+          </aside>
+        )}
+        <div className="relative shrink-0 overflow-hidden" style={{ width: W * scale, height: height * scale }}>
+          <div
+            className="absolute left-0 top-0 overflow-hidden bg-white"
+            style={{
+              width: W,
+              height,
+              transform: `scale(${scale})`,
+              transformOrigin: "0 0",
+              "--vh": height,
+              "--tt": trimTop,
+              "--bt": trimBottom,
+              "--cut": cut,
+            }}
+          >
+            {layers.map(({ route, cls, ghost }) => {
+              const S = SCREENS[route.name];
+              return (
+                <div
+                  key={route.key}
+                  ref={!ghost && route.key === top.key ? screen : undefined}
+                  className={`absolute inset-0 ${cls}`}
+                  style={ghost ? { zIndex: 3 } : undefined}
+                  aria-hidden={route.key !== top.key}
+                >
+                  <S
+                    nav={nav}
+                    route={route}
+                    state={state}
+                    setState={setState}
+                    catalog={catalog}
+                    active={!ghost && route.key === top.key}
+                  />
+                </div>
+              );
+            })}
+            {busy && <div className="absolute inset-0 z-50" />}
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
+  );
+}
+
+const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * 화면의 첫 번째 조작 가능한 요소(보이는 것)에 포커스를 둔다. 없으면 화면 영역 자체에 둔다(테두리 없이).
+ * 키보드로 닫았으면 새 포커스에도 테두리가 보이고, 마우스로 닫았으면 브라우저의 :focus-visible 규칙상 테두리가 생기지 않는다.
+ */
+function focusScreen(el) {
+  if (!el) return;
+  const first = [...el.querySelectorAll(FOCUSABLE)].find(
+    (node) => node.getClientRects().length && getComputedStyle(node).visibility !== "hidden" && !node.closest('[aria-hidden="true"], [inert]'),
+  );
+  if (first) return first.focus();
+  el.tabIndex = -1;
+  el.style.outline = "none";
+  el.focus();
+}
+
+/**
+ * 저장 실패 안내. 아트보드 위에 겹치지 않고 그 위쪽 줄에 놓아, 안내가 보이는 동안은 아트보드가 그만큼 낮아진다
+ * (휴대폰에서는 시안의 상태바 자리부터 줄어 화면 위쪽 버튼·탭바를 가리지 않는다).
+ * role="status" 영역은 늘 두어, 안내가 들어오면 화면 낭독기가 읽는다.
+ */
+function StorageNotice({ shown, onClose }) {
+  return (
+    <div role="status" className="shrink-0">
+      {shown && (
+        <div className="border-b border-cream-line bg-cream">
+          <div className="mx-auto flex max-w-[402px] items-center gap-[4px] py-[6px] pl-[16px] pr-[6px]">
+            <p className="flex-1 text-[13.5px] font-medium leading-[20px] text-navy" style={{ wordBreak: "keep-all" }}>
+              이 브라우저에서는 기록이 저장되지 않아요. 창을 닫으면 사라져요
+            </p>
+            <button
+              type="button"
+              aria-label="저장 안내 닫기"
+              onClick={onClose}
+              className="pressable flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-[10px] text-navy focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-mint-deep"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+                <path d="M2 2l10 10M12 2 2 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
