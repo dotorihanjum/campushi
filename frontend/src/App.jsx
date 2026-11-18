@@ -89,6 +89,12 @@ export default function App() {
   const [attempt, setAttempt] = useState(0);
   const stackRef = useRef(stack);
   stackRef.current = stack;
+  // 지금 보이는(맨 위) 화면. 저장 안내를 닫은 뒤 키보드 포커스를 이 화면으로 옮긴다.
+  const screen = useRef(null);
+  const closeNotice = () => {
+    setNotice("closed");
+    focusScreen(screen.current);
+  };
   const stage = useRef(null);
   const { scale, height, hint } = useFit(stage);
   const short = Math.max(0, H - height);
@@ -196,7 +202,7 @@ export default function App() {
 
   return (
     <div className="stage flex flex-col">
-      <StorageNotice shown={notice === "shown"} onClose={() => setNotice("closed")} />
+      <StorageNotice shown={notice === "shown"} onClose={closeNotice} />
       <main ref={stage} className="relative flex min-h-0 w-full flex-1 items-center justify-center bg-white min-[520px]:bg-[#e9ecef]">
         {hint && (
           <aside
@@ -231,6 +237,7 @@ export default function App() {
               return (
                 <div
                   key={route.key}
+                  ref={!ghost && route.key === top.key ? screen : undefined}
                   className={`absolute inset-0 ${cls}`}
                   style={ghost ? { zIndex: 3 } : undefined}
                   aria-hidden={route.key !== top.key}
@@ -252,6 +259,23 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * 화면의 첫 번째 조작 가능한 요소(보이는 것)에 포커스를 둔다. 없으면 화면 영역 자체에 둔다(테두리 없이).
+ * 키보드로 닫았으면 새 포커스에도 테두리가 보이고, 마우스로 닫았으면 브라우저의 :focus-visible 규칙상 테두리가 생기지 않는다.
+ */
+function focusScreen(el) {
+  if (!el) return;
+  const first = [...el.querySelectorAll(FOCUSABLE)].find(
+    (node) => node.getClientRects().length && getComputedStyle(node).visibility !== "hidden" && !node.closest('[aria-hidden="true"], [inert]'),
+  );
+  if (first) return first.focus();
+  el.tabIndex = -1;
+  el.style.outline = "none";
+  el.focus();
 }
 
 /**
