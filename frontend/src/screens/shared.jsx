@@ -151,6 +151,8 @@ export function reportText(state, d) {
   return `${d.school} ${d.name} 체험 리포트\n\n${status}\n\n${lines.join("\n\n")}`;
 }
 
+export { reportFileName } from "./reportFileName.js";
+
 export function download(name, text) {
   const url = URL.createObjectURL(new Blob(["﻿", text], { type: "text/plain;charset=utf-8" }));
   const link = document.createElement("a");

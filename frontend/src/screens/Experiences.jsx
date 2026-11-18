@@ -3,7 +3,7 @@ import { yearCharacter } from "../assets.js";
 import { delay, Screen } from "../ui.jsx";
 import { progressOf } from "../model.js";
 import { averagePoint } from "../grades.js";
-import { Chevron, CreditPill, ProgressBar, TAB_H, TAB_TOP, TabBar, all, download, latestJourney, reportText } from "./shared.jsx";
+import { Chevron, CreditPill, ProgressBar, TAB_H, TAB_TOP, TabBar, all, download, reportFileName, latestJourney, reportText } from "./shared.jsx";
 
 export function Experiences({ nav, state, setState }) {
   const departments = all(state);
@@ -85,7 +85,7 @@ export function Experiences({ nav, state, setState }) {
                         </button>
                       )}
                       {progress.taken.length > 0 && (
-                        <button className="button ghost" onClick={() => download(`${d.school}-${d.name}-체험-리포트.txt`, reportText(state, d))}>
+                        <button className="button ghost" onClick={() => download(reportFileName(d.school, d.name), reportText(state, d))}>
                           리포트 내려받기
                         </button>
                       )}
