@@ -6,7 +6,7 @@ import { delay, Screen, Dialog, Toast } from "../ui.jsx";
 import { CREDIT_COOLDOWN_DAYS, CREDIT_PER_PASS, NICKNAME_MAX, STORAGE_KEY, cleanNickname, courseKey, initialState, progressOf } from "../model.js";
 import { CAMPUS } from "../campus.js";
 import { PASS_GRADE } from "../grades.js";
-import { Chevron, INPUT, ProgressBar, TAB_H, TAB_TOP, TabBar, all, download, gradeText, josa, latestJourney, reportText } from "./shared.jsx";
+import { Chevron, INPUT, ProgressBar, TAB_H, TAB_TOP, TabBar, all, download, reportFileName, gradeText, josa, latestJourney, reportText } from "./shared.jsx";
 
 // 마이페이지 목록 한 줄(누르면 창을 열거나 화면을 옮긴다).
 function MenuRow({ label, value, onClick, tone = "text-ink-2" }) {
@@ -338,7 +338,7 @@ export function My({ nav, state, setState }) {
                         {progress.graduated ? "졸업 리포트 보기" : "체험 기록 보기"}<Chevron />
                       </button>
                       {progress.taken.length > 0 && (
-                        <button className="my-action" onClick={() => download(`${d.school}-${d.name}-체험-리포트.txt`, reportText(state, d))} aria-label={`${d.name} 리포트 내려받기`}>
+                        <button className="my-action" onClick={() => download(reportFileName(d.school, d.name), reportText(state, d))} aria-label={`${d.name} 리포트 내려받기`}>
                           리포트 받기 (.txt) <span aria-hidden>↓</span>
                         </button>
                       )}
