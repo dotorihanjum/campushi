@@ -58,7 +58,7 @@
 | `version` | 현재 `2` | 로컬 저장 형식 버전. 서버 revision과 구분 |
 | `nickname` | 문자열. 공백 정리 후 최대 12개 유니코드 코드 포인트. 빈 값은 "나의 프로필" 표시 | 사용자 프로필 |
 | `profilePhoto` | `null` 또는 JPEG data URL. 최대 200,000자 | 파일 저장소로 이전. DB에는 파일 경로 |
-| `journeys` | `{ "학과id": {} }`. 현재 입학 시각은 저장하지 않음 | 사용자별 입학 기록 |
+| `journeys` | `{ "학과id": { enrolledAt } }`. `enrolledAt`은 입학한 시각(ms, `creditedAt`과 같은 형식)이고 입학증 "일시"에 쓴다. 입학 시각을 남기기 전(2026-11-18 이전)에 입학한 기록은 `{}`이고 입학증에 날짜 없이 보인다. 날짜로 읽히지 않는 값은 `normalize`가 버리되 입학 기록은 남긴다. 이미 입학한 학과는 다시 입학해도 덮어쓰지 않는다(`model.js`의 `enroll`) | 사용자별 입학 기록(입학 시각 포함) |
 | `records` | `{ "학과id\|과목명": { grade, percent, attempts, last } }` | 과목 이수 요약. 각 시도 이력 전체는 현재 없음 |
 | `notes` | 같은 과목 키의 문자열. 최대 3,000 UTF-16 코드 단위 | 과목별 마지막 한 줄 기록 |
 | `drafts` | 같은 과목 키의 문자열. 작성 중인 기록 | 동기화 범위 결정 필요 |
@@ -82,7 +82,7 @@
 | 앱 시작, 새로고침 | `App`, `loadState`, `refreshCatalog` | 로그인 확인 후 계정 데이터 로드. 로컬 기록 가져오기는 별도 흐름 |
 | 이름·사진 저장 | `My.saveProfile` | 사진 업로드와 프로필 저장 성공 후 화면 반영. 실패 시 편집 내용 유지 |
 | 사진 선택 | `My.choosePhoto`, `prepareProfilePhoto` | 현재는 로컬 변환만 수행. 파일 업로드와 파일 교체 처리는 미구현 |
-| 입학 | `Detail.enroll` | 입학 기록 저장 성공 후 진행 |
+| 입학 | `Detail.onEnroll`(`model.js`의 `enroll`) | 입학 기록 저장 성공 후 진행 |
 | 수업 중간 결과 | `savePlay`, `Lesson`의 완료 콜백 | 서버 검증용 체험 시작·제출 방식 필요 |
 | 수업 완료 | `Lesson.finishWith`, `completeCourse` | 서버가 이수와 크레딧을 한 트랜잭션에서 처리 |
 | 기록 초안 | `Lesson`, `drafts` 갱신 | 현재 400ms 지연 저장. 서버 저장 여부와 충돌 정책 결정 필요 |

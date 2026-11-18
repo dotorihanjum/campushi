@@ -13,6 +13,7 @@ import {
   courseKey,
   createDepartment,
   departmentsOf,
+  enroll,
   gameOf,
   initialState,
   isPlanned,
@@ -183,6 +184,43 @@ test("4학년 필수(체험이 있는 것)와 졸업 과제를 이수하면 졸�
   design = take(design, RAW_ID.id, "산업디자인종합설계2", "P");
   assert.equal(recordOf(design, RAW_ID.id, "산업디자인종합설계2").grade, "P");
   assert.equal(progress(design, RAW_ID.id).graduated, true);
+});
+
+test("입학하면 입학 시각을 남기고, 이미 입학한 학과는 다시 입학해도 입학 시각을 덮어쓰지 않는다", () => {
+  const t0 = Date.UTC(2026, 10, 17, 3);
+  const fresh = { ...structuredClone(initialState), catalog: [RAW_CSE, RAW_ID] };
+  const state = enroll(fresh, RAW_CSE.id, t0);
+  assert.deepEqual(state.journeys, { [RAW_CSE.id]: { enrolledAt: t0 } });
+  assert.equal(enroll(state, RAW_CSE.id, t0 + DAY), state);
+  // 다른 학과는 따로 입학하고, 저장했다가 다시 불러와도(다음 날) 입학 시각이 그대로 남는다.
+  const both = enroll(state, RAW_ID.id, t0 + DAY);
+  const restored = normalize(JSON.parse(JSON.stringify(both)));
+  assert.deepEqual(restored.journeys, { [RAW_CSE.id]: { enrolledAt: t0 }, [RAW_ID.id]: { enrolledAt: t0 + DAY } });
+  // 입학 시각이 없는 이전 형식 기록에 다시 입학해도 지금 시각으로 채우지 않는다(입학 기록이 이미 있다).
+  const old = normalize({ ...fresh, journeys: { [RAW_CSE.id]: {} } });
+  assert.equal(enroll(old, RAW_CSE.id, t0), old);
+});
+
+test("입학 시각이 없거나 잘못된 기록도 입학 기록은 지우지 않고, 잘못된 입학 시각만 버린다", () => {
+  const t0 = Date.UTC(2026, 10, 17, 3);
+  const base = take(enrolled(), RAW_CSE.id, "객체지향프로그래밍", 9);
+  const key = courseKey(RAW_CSE.id, "객체지향프로그래밍");
+  // 입학 시각을 남기기 전의 형식 {}: 오류 없이 열리고 입학 기록과 성적이 그대로 남는다.
+  const old = normalize(JSON.parse(JSON.stringify({ ...base, journeys: { [RAW_CSE.id]: {} } })));
+  assert.deepEqual(old.journeys, { [RAW_CSE.id]: {} });
+  assert.ok(old.records[key]);
+  assert.equal(old.current, RAW_CSE.id);
+  // 잘못된 입학 시각(문자열, 날짜로 읽히지 않는 수, 0·음수, 객체, null)과 다른 필드는 버리고 입학 기록은 남긴다.
+  for (const bad of ["2026-11-17T03:00:00.000Z", "abc", NaN, Infinity, 0, -1, 8.64e15 + 1, {}, null, true]) {
+    const restored = normalize({ ...base, journeys: { [RAW_CSE.id]: { enrolledAt: bad, extra: 1 } } });
+    assert.deepEqual(restored.journeys, { [RAW_CSE.id]: {} }, String(bad));
+    assert.ok(restored.records[key], String(bad));
+  }
+  // 입학 기록 자체가 객체가 아니어도 입학한 학과로 남긴다.
+  for (const raw of [null, "x", 1, true]) assert.deepEqual(normalize({ ...base, journeys: { [RAW_CSE.id]: raw } }).journeys, { [RAW_CSE.id]: {} });
+  // 올바른 입학 시각만 남기고 다른 필드는 버린다. 학과 데이터에 없는 학과는 입학 시각이 있어도 지운다.
+  const kept = normalize({ ...base, journeys: { [RAW_CSE.id]: { enrolledAt: t0, extra: 1 }, 없는학과: { enrolledAt: t0 } } });
+  assert.deepEqual(kept.journeys, { [RAW_CSE.id]: { enrolledAt: t0 } });
 });
 
 test("저장된 기록은 지금 형식에 맞는 것만 불러오고, 이전 학기제 기록은 지운다", () => {

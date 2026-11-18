@@ -1,5 +1,5 @@
 // 입학증·입학 환영·성적표·졸업증명서·졸업 화면과 체험 리포트.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { icon, img } from "../assets.js";
 import { BackButton, Center, Confetti, delay, Header, Mask, OutlineButton, Paper, PaperFold, Screen, T, SchoolLogo } from "../ui.jsx";
 import { YEARS, courseKey, isRequired } from "../model.js";
@@ -76,19 +76,20 @@ function Statement({ y, d, children }) {
 
 export function Enrolled({ active, nav, state }) {
   const v = view(state);
-  const [now] = useState(() => new Date());
   const next = () => nav.replace("welcome", undefined, "fade");
   useGuard(!!v, nav, active);
   useAutoAdvance(next, 4200);
   if (!v) return null;
-  const { d } = v;
+  const { d, journey } = v;
+  // 입학 시각을 남기기 전에 입학한 기록에는 날짜가 없으므로, 일시 줄을 빼고 체험생 줄을 두 줄 자리의 가운데에 둔다.
+  const at = Number.isFinite(journey?.enrolledAt) ? new Date(journey.enrolledAt) : null;
   return (
     <CertificateShell onBack={nav.back} onNext={next}>
       <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint" style={delay(0.45)}>
         입학을 축하합니다!
       </T>
-      <PaperRow y={117} left="체험생" right={`${d.school} ${d.name}`} d={0.6} />
-      <PaperRow y={165} left="일시" right={stamp(now)} d={0.72} />
+      <PaperRow y={at ? 117 : 141} left="체험생" right={`${d.school} ${d.name}`} d={0.6} />
+      {at && <PaperRow y={165} left="일시" right={stamp(at)} d={0.72} />}
       <Statement y={210} d={0.9}>
         {`위 사람은 ${d.school} ${d.name}의\n진로 체험을 시작할 수 있음을 증명합니다`}
       </Statement>

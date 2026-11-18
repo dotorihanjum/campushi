@@ -1,7 +1,7 @@
 // 학과 둘러보기와 학과 상세·입학.
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { BackButton, delay, OutlineButton, Screen, T, SchoolLogo } from "../ui.jsx";
-import { isRequired, yearSubjects } from "../model.js";
+import { enroll, isRequired, yearSubjects } from "../model.js";
 import { groupName } from "../groups.js";
 import { useGuard, view } from "./shared.jsx";
 
@@ -145,6 +145,8 @@ export function Detail({ active, nav, state, setState }) {
   // 학년별 과목 목록은 길이가 정해져 있지 않아(더 보기, 긴 이름) 그려진 높이를 재서 화면 높이를 정한다.
   const list = useRef(null);
   const [listH, setListH] = useState(0);
+  // 입학을 처리한 학과 id(입학 버튼 연타 막기).
+  const entering = useRef(null);
   useLayoutEffect(() => {
     if (!list.current) return;
     const update = () => setListH(list.current?.offsetHeight || 0);
@@ -156,10 +158,13 @@ export function Detail({ active, nav, state, setState }) {
   if (!v) return null;
   const { d, journey, progress } = v;
   const finished = progress.graduated;
-  const enroll = () => {
+  const onEnroll = () => {
     setState((s) => ({ ...s, studying: d.id }));
     if (journey) return nav.reset(["home", "experience", "major"]);
-    setState((s) => ({ ...s, journeys: { ...s.journeys, [d.id]: {} } }));
+    // 연타하면 두 번째 클릭도 다시 그려지기 전의 journey(아직 입학 전)를 보므로, 이 학과의 입학은 한 번만 처리한다.
+    if (entering.current === d.id) return;
+    entering.current = d.id;
+    setState((s) => enroll(s, d.id));
     nav.push("enrolled", undefined, "rise");
   };
   const subjects = Object.values(d.years).flat();
@@ -167,7 +172,7 @@ export function Detail({ active, nav, state, setState }) {
     <Screen
       h={Math.max(600, 528 + listH + 32)}
       footer={
-        <OutlineButton onClick={enroll} className="a-up" style={delay(0.5)}>
+        <OutlineButton onClick={onEnroll}className="a-up" style={delay(0.5)}>
           {finished ? "졸업한 학과 · 이어서 체험하기" : journey ? "이어서 체험하기" : `${d.name} 입학하기`}
         </OutlineButton>
       }
