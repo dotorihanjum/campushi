@@ -333,6 +333,10 @@ function AdjacentOrder({ data, onComplete }) {
 }
 
 // 자리 옮기기(move): 화살표로 단계를 위아래로 옮기고 확인한다. 세 번 틀리면 정답을 볼 수 있다.
+// 코드로 초점을 옮기는 글(라운드 결과 문장, 문항 글)의 테두리: 키보드로 왔을 때만(:focus-visible) 민트 2px로 보인다(#61, #65, #69).
+// TypedGames.jsx도 이것을 쓴다.
+export const FOCUS_RING = "outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-[3px] focus-visible:outline-mint-deep";
+
 function MoveOrder({ data, onComplete, after }) {
   const size = data.items.length;
   const [order, setOrder] = useState(() => startOrder(size, "move"));
@@ -341,7 +345,12 @@ function MoveOrder({ data, onComplete, after }) {
   const [result, setResult] = useState(null);
   const list = useRef(null);
   const focus = useRef(null);
+  const summary = useRef(null);
   const done = result === size || result === "shown";
+  // 다 맞히거나 정답을 보면 "순서 확인하기"가 사라지므로 결과 문장에 초점을 둔다(#69, #61·#65와 같은 방식).
+  useEffect(() => {
+    if (done) summary.current?.focus();
+  }, [done]);
 
   // 단계를 옮긴 뒤에도 키보드 초점이 그 단계를 따라가게 한다.
   useLayoutEffect(() => {
@@ -416,7 +425,7 @@ function MoveOrder({ data, onComplete, after }) {
       </ol>
       {done ? (
         <div role="status">
-          <p className="body-copy">
+          <p ref={summary} tabIndex={-1} className={`body-copy rounded-[6px] ${FOCUS_RING}`}>
             <strong>{result === "shown" ? "올바른 순서예요." : `${tries}번 만에 순서를 맞혔어요.`}</strong> {data.explanation}
           </p>
           {after ?? <Restart onClick={restart}>다시 해보기 →</Restart>}
