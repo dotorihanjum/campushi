@@ -1,6 +1,7 @@
 // 마이페이지: 프로필, 나의 학과 체험, 설정, 도움말.
 import { useEffect, useRef, useState } from "react";
 import { prepareProfilePhoto } from "../profilePhoto.js";
+import { openStorage, writeProfile } from "../storage.js";
 import { yearCharacter } from "../assets.js";
 import { delay, Screen, Dialog, Toast } from "../ui.jsx";
 import { CREDIT_COOLDOWN_DAYS, CREDIT_PER_PASS, NICKNAME_MAX, STORAGE_KEY, cleanNickname, courseKey, initialState, progressOf } from "../model.js";
@@ -81,15 +82,27 @@ export function My({ nav, state, setState }) {
     e.preventDefault();
     if (photoBusy) return;
     const next = cleanNickname(name);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, nickname: next, profilePhoto: photo }));
-    } catch {
-      setProfileError("프로필을 저장하지 못했어요. 브라우저의 저장 공간과 사이트 저장 권한을 확인해 주세요.");
+    const result = writeProfile(openStorage(() => window.localStorage), STORAGE_KEY, {
+      next: { ...state, nickname: next, profilePhoto: photo },
+      current: state,
+      photoChanged: !!photo && photo !== (state.profilePhoto || null),
+    });
+    // 저장소는 쓸 수 있는데 공간이 모자라면 바꾼 프로필을 상태에 넣지 않는다. 앱은 상태 전체를 한 번에 저장하므로,
+    // 넣으면 그 뒤 입학·성적 같은 다른 기록도 계속 저장되지 않는다(storage.js의 writeProfile).
+    if (result === "photo-too-big") {
+      setProfileError("사진이 커서 저장할 수 없어요. 더 작은 사진을 고르거나 기본 캐릭터를 골라 주세요.");
       return;
     }
+    if (result === "storage-full") {
+      setProfileError(
+        `이 브라우저의 저장 공간이 모자라 프로필을 저장하지 못했어요.${state.profilePhoto ? " 사진을 기본 캐릭터로 바꾸면 공간이 생겨요." : ""}`,
+      );
+      return;
+    }
+    // 저장소를 아예 쓸 수 없으면("memory") 이번 방문 동안만 반영한다. 저장되지 않는다는 것은 App의 위쪽 안내(#29)가 알린다.
     setState((s) => ({ ...s, nickname: next, profilePhoto: photo }));
     setSheet(null);
-    say("프로필을 저장했어요.");
+    say(result === "saved" ? "프로필을 저장했어요." : "이번 방문 동안 프로필을 바꿨어요.");
   };
   const choosePhoto = async (e) => {
     const file = e.target.files?.[0];

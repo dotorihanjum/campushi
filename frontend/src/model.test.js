@@ -28,6 +28,7 @@ import {
   refreshCatalog,
   savePlay,
   skippedYears,
+  sourceNote,
   yearOf,
   yearSubjects,
 } from "./model.js";
@@ -73,6 +74,32 @@ test("형식이 틀린 학과 데이터는 쓰지 않는다", () => {
   assert.equal(createDepartment({ ...RAW_CSE, final: "이산구조" }), null);
   // 편성표에 없는 과목의 이수구분은 버린다.
   assert.equal(kindOf(createDepartment({ ...RAW_CSE, kinds: { 전공필수: ["없는과목"] } }), "없는과목"), "전공선택");
+});
+
+test("실제 학과 데이터의 출처 줄에는 교육과정 연도와 확인일이 보인다", () => {
+  const { departments } = JSON.parse(readFileSync(new URL("../../backend/data/departments.json", import.meta.url), "utf8"));
+  const [cse, id] = departments.map(createDepartment);
+  assert.equal(sourceNote(cse.source), "2026년 교육과정 · 2026-11-03 확인");
+  assert.equal(sourceNote(id.source), "2025년 교육과정 · 2026-11-03 확인");
+});
+
+test("출처 확인일이 없거나 형식이 틀려도 학과는 열리고 확인일만 빠진다", () => {
+  const withSource = (source) => createDepartment({ ...RAW_CSE, source: { ...RAW_CSE.source, ...source } });
+  const { checked_at, ...noChecked } = RAW_CSE.source;
+  const missing = createDepartment({ ...RAW_CSE, source: noChecked });
+  assert.ok(missing);
+  assert.equal(missing.source.checkedAt, null);
+  assert.equal(sourceNote(missing.source), "2026년 교육과정");
+  for (const bad of ["2026/11/03", "2026-13-01", "2026-02-30", "26-11-03", "2026-11-03T09:00:00", "", 20261103, null, {}]) {
+    const d = withSource({ checked_at: bad });
+    assert.ok(d, `학과가 열려야 해요: ${JSON.stringify(bad)}`);
+    assert.equal(d.source.checkedAt, null, JSON.stringify(bad));
+    assert.equal(sourceNote(d.source), "2026년 교육과정");
+  }
+  assert.equal(withSource({ checked_at: "2024-02-29" }).source.checkedAt, "2024-02-29");
+  // 확인일만 있으면 확인일만, 둘 다 없으면 빈 줄(문서 이름만 보인다).
+  assert.equal(sourceNote(withSource({ curriculum_year: undefined }).source), "2026-11-03 확인");
+  assert.equal(sourceNote(withSource({ curriculum_year: "2026", checked_at: undefined }).source), "");
 });
 
 test("과목마다 이수구분·학년·체험(졸업 과제, 전공 실습, 연습 문제, 구현 예정)이 정해진다", () => {
