@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { hasBatchim } from "./korean.js";
+import { FOCUS_RING, SETTLE_MS } from "./focus.js";
 import { img } from "./assets.js";
 import { T } from "./ui.jsx";
 import { moveStep, rightPlaces } from "./lessonGames.js";
@@ -220,9 +221,24 @@ function AdjacentOrder({ data, onComplete }) {
   const explain = round === 0;
   const last = round === BUBBLE_ROUNDS - 1;
   const card = (i) => data.items[state.order[i]];
+  // 키보드 초점(#74): 라운드가 끝나면 결과 문장에(Tab 한 번에 "N라운드 시작"), 새 라운드가 시작되면 첫 비교 버튼에 둔다.
+  // 처음 화면을 열 때는 옮기지 않는다(사용자가 이 화면에서 조작한 뒤에만).
+  const summary = useRef(null);
+  const choices = useRef(null);
+  const acted = useRef(false);
+  // 라운드가 나온 시각. "N라운드 시작"을 연타한 두 번째 입력이 첫 비교를 고르지 않게 잠깐 막는다(#20과 같은 SETTLE_MS).
+  const shownAt = useRef(0);
+  useEffect(() => {
+    shownAt.current = performance.now();
+    if (acted.current) choices.current?.querySelector("button")?.focus();
+  }, [round]);
+  useEffect(() => {
+    if (state.done && acted.current) summary.current?.focus();
+  }, [state.done]);
 
   function choose(swap) {
-    if (state.done) return;
+    if (state.done || performance.now() - shownAt.current < SETTLE_MS) return;
+    acted.current = true;
     const [left, right] = [card(state.at), card(state.at + 1)];
     const should = bubbleShould(state);
     const { state: next, ok } = bubbleStep(state, swap);
@@ -267,10 +283,12 @@ function AdjacentOrder({ data, onComplete }) {
     setFeedback("");
   }
   function nextRound() {
+    acted.current = true;
     setTotal({ compares: total.compares + count.compares, swaps: total.swaps + count.swaps, mistakes: total.mistakes + count.mistakes });
     startRound(round + 1);
   }
   function restart() {
+    acted.current = true;
     setTotal(emptyCount());
     startRound(0);
   }
@@ -305,13 +323,13 @@ function AdjacentOrder({ data, onComplete }) {
         {feedback}
       </p>
       {!state.done ? (
-        <div className="game-choices" role="group" aria-label="고르기">
+        <div ref={choices} className="game-choices" role="group" aria-label="고르기">
           <button onClick={() => choose(true)}>바꾸기</button>
           <button onClick={() => choose(false)}>그대로 두기</button>
         </div>
       ) : !last ? (
         <>
-          <p className="body-copy">
+          <p ref={summary} tabIndex={-1} className={`body-copy rounded-[6px] ${FOCUS_RING}`}>
             {explain
               ? `${state.pass}바퀴 동안 ${count.compares}번 비교하고 ${count.swaps}번 바꿨어요. 바꾼 횟수는 처음 배치에서 순서가 뒤집힌 쌍의 수(${minimum}개)와 같아요. 이제 설명 없이 해 볼까요?`
               : `실수 ${count.mistakes}번으로 정렬했어요.`}
@@ -322,7 +340,7 @@ function AdjacentOrder({ data, onComplete }) {
         </>
       ) : (
         <>
-          <p className="body-copy">
+          <p ref={summary} tabIndex={-1} className={`body-copy rounded-[6px] ${FOCUS_RING}`}>
             {`${BUBBLE_ROUNDS}라운드 동안 ${sum.compares}번 비교하고 ${sum.swaps}번 바꿨어요. 실수는 ${sum.mistakes}번이에요.`} {data.explanation}
           </p>
           <Restart onClick={restart}>새로 섞어서 처음부터 다시 하기 →</Restart>
@@ -333,10 +351,6 @@ function AdjacentOrder({ data, onComplete }) {
 }
 
 // 자리 옮기기(move): 화살표로 단계를 위아래로 옮기고 확인한다. 세 번 틀리면 정답을 볼 수 있다.
-// 코드로 초점을 옮기는 글(라운드 결과 문장, 문항 글)의 테두리: 키보드로 왔을 때만(:focus-visible) 민트 2px로 보인다(#61, #65, #69).
-// TypedGames.jsx도 이것을 쓴다.
-export const FOCUS_RING = "outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-[3px] focus-visible:outline-mint-deep";
-
 function MoveOrder({ data, onComplete, after }) {
   const size = data.items.length;
   const [order, setOrder] = useState(() => startOrder(size, "move"));
