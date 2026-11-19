@@ -227,6 +227,32 @@ export function enroll(state, id, now = Date.now()) {
 }
 
 /**
+ * 학과를 그만둔다(입학 취소). 그 학과의 입학 기록과 성적·체험 결과·한 줄 기록·쓰던 기록·조건 예외("학과id|과목" 키)를 지운다.
+ * 크레딧과 크레딧을 받은 시각(creditedAt)은 남긴다. 그래서 다시 입학해 7일 안에 같은 과목을 이수하면 크레딧을 다시 받지 않는다.
+ * 체험 중인(또는 보고 있는) 학과였으면 남은 학과 중 가장 최근에 입학한 학과로 바꾸고, 남은 학과가 없으면 null이다.
+ * 입학하지 않은 학과면 상태를 그대로 돌려준다.
+ */
+export function leaveDepartment(state, id) {
+  if (typeof id !== "string" || !Object.hasOwn(state.journeys || {}, id)) return state;
+  // "학과id|"로 시작하는 키만 지운다. 구분자까지 비교하므로 "khu-cse"를 지워도 "khu-cse2|…"는 남는다.
+  const prefix = courseKey(id, "");
+  const without = (map) => Object.fromEntries(Object.entries(map || {}).filter(([key]) => !key.startsWith(prefix)));
+  const { [id]: left, ...journeys } = state.journeys;
+  const latest = Object.keys(journeys).at(-1) ?? null;
+  return {
+    ...state,
+    journeys,
+    records: without(state.records),
+    plays: without(state.plays),
+    notes: without(state.notes),
+    drafts: without(state.drafts),
+    exempt: without(state.exempt),
+    studying: state.studying === id ? latest : state.studying,
+    current: state.current === id ? latest : state.current,
+  };
+}
+
+/**
  * 수업을 마치고 성적을 받는다. 입학한 학과의 열린 학년 과목이고, 그 과목의 체험을 끝까지 해본 결과(plays)가 있어야 한다.
  * 성적은 체험 결과의 정답률로 매기고(점수가 없는 작품 체험은 P), 다시 들으면 더 좋은 성적을 남기고 들은 횟수를 늘린다.
  * 한 줄 기록은 적었으면 남기고(없어도 마칠 수 있다), 쓰던 기록과 체험 결과는 지운다.
