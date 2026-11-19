@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cleanGame, questionsOf } from "./lessonGames.js";
-import { ROUNDS, revealsUnit, roundTitles, roundTypesOf, termsByUnit, theoryRounds } from "./theory.js";
+import { cleanGame, isAnswer, questionsOf } from "./lessonGames.js";
+import { ROUNDS, meaningHint, revealsUnit, roundTitles, roundTypesOf, termsByUnit, theoryRounds } from "./theory.js";
 
 // 형식 검사용 예시 은행. 서비스 데이터가 아니다.
 const BANK = cleanGame({
@@ -226,4 +226,45 @@ test("서비스의 이론 문제 은행 전체: 모든 용어가 정확히 하�
     assert.deepEqual(groups.map((g) => g.name), used, raw.course_name);
   }
   assert.equal(banks, 15);
+});
+
+test("분류하기 힌트: 뜻에 따옴표가 있으면 바깥 따옴표를 빼서 겹치지 않고, 없으면 지금 그대로다", () => {
+  assert.equal(meaningHint("참·거짓을 가릴 수 있는 문장"), "뜻은 ‘참·거짓을 가릴 수 있는 문장’이에요.");
+  assert.equal(meaningHint("항상 참인 명제"), "뜻은 ‘항상 참인 명제’예요.");
+  assert.equal(meaningHint("'p이면 q' 꼴의 명제"), "뜻은 'p이면 q' 꼴의 명제예요.");
+  assert.equal(meaningHint("'모든'·'어떤'이 붙은 명제"), "뜻은 '모든'·'어떤'이 붙은 명제예요.");
+  assert.equal(meaningHint("(A+B)'=A'B'로 부정을 푸는 법칙"), "뜻은 (A+B)'=A'B'로 부정을 푸는 법칙이에요.");
+  // 따옴표로 끝나는 뜻은 따옴표 앞 글자로 조사를 고른다.
+  assert.equal(meaningHint("기호 '법칙'"), "뜻은 기호 '법칙'이에요.");
+});
+
+test("서비스 은행 전체: 분류하기 힌트에 따옴표가 연달아 붙지 않고, 칸 이름이 들어가면 힌트를 비우는 규칙은 그대로다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const lines = readFileSync(new URL("../../backend/data/theory_banks.jsonl", import.meta.url), "utf8").split("\n").filter(Boolean);
+  let quoted = 0;
+  let banks = 0;
+  for (const line of lines) {
+    const raw = JSON.parse(line);
+    if (raw.status !== "verified") continue;
+    const bank = cleanGame({ ...raw, type: "theory" });
+    banks++;
+    for (const item of bank.terms) {
+      const hint = meaningHint(item.meaning);
+      assert.doesNotMatch(hint, /['"‘’“”]{2}/, `${raw.course_name} ${item.term}: ${hint}`);
+      assert.ok(hint.includes(item.meaning), `${raw.course_name} ${item.term}: 뜻을 그대로 쓴다`);
+      if (/['"‘’“”]/.test(item.meaning)) quoted++;
+      else assert.equal(hint, `뜻은 ${isAnswer(item.meaning)}.`, `${raw.course_name} ${item.term}: 따옴표 없는 뜻은 지금 그대로`);
+    }
+    // 실제 분류 라운드: 힌트는 meaningHint이거나(칸 이름이 들어가면) 비어 있고, 보이는 힌트에 칸 이름이 없다.
+    for (let seed = 1; seed <= 40; seed++)
+      for (const round of theoryRounds(bank, seeded(seed)).filter((r) => r.type === "sort"))
+        for (const question of questionsOf(round, seeded(seed))) {
+          const term = bank.terms.find((t) => t.term === question.text);
+          const hidden = revealsUnit(term.meaning, round.categories);
+          assert.equal(question.hint, hidden ? "" : meaningHint(term.meaning), `${raw.course_name} ${term.term}`);
+        }
+  }
+  assert.equal(banks, 15);
+  // 지금 은행에서 뜻에 따옴표(프라임 포함)가 있는 용어는 3개다(이산구조 2, 논리회로 1).
+  assert.equal(quoted, 3);
 });

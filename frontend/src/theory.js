@@ -102,7 +102,7 @@ const makers = {
     const names = chosen.map((group) => group.name);
     // 틀렸을 때 보여 주는 힌트(용어의 뜻). 뜻에 이 라운드의 칸 이름이 들어 있으면 정답 칸을 알려 주거나(10/254, 2026-11-17 점검)
     // 다른 칸으로 이끌 수 있어(1/254) 힌트를 두지 않는다.
-    const sortItem = (item, category) => ({ text: item.term, category, hint: revealsUnit(item.meaning, names) ? "" : `뜻은 ${isAnswer(item.meaning)}.` });
+    const sortItem = (item, category) => ({ text: item.term, category, hint: revealsUnit(item.meaning, names) ? "" : meaningHint(item.meaning) });
     const items = pools.flatMap((pool, category) => pool.slice(0, 2).map((item) => sortItem(item, category)));
     const rest = shuffle(
       pools.flatMap((pool, category) => pool.slice(2).map((item) => sortItem(item, category))),
@@ -122,6 +122,21 @@ const makers = {
     return { type: "order", prompt: sequence.prompt, items: sequence.steps.map((text) => ({ text })), explanation: sequence.explanation };
   },
 };
+
+// 따옴표로 쓰이는 글자(작은·큰따옴표, 수식의 프라임 ' 포함).
+const QUOTES = /['"‘’“”]/;
+/**
+ * 분류하기 힌트 문장: "뜻은 ‘…’이에요." 뜻 안에 이미 따옴표가 있으면(예: '모든'·'어떤'이 붙은 명제, (A+B)'=A'B') 바깥 따옴표가
+ * 겹쳐 보이므로 빼고 "뜻은 …이에요."로 쓴다(#62). 조사는 뜻 끝의 따옴표·마침표를 빼고 남은 마지막 글자의 받침으로 고른다.
+ * 은행의 뜻은 고치지 않는다.
+ */
+export function meaningHint(meaning) {
+  const text = String(meaning).trim();
+  if (!QUOTES.test(text)) return `뜻은 ${isAnswer(text)}.`;
+  const code = text.replace(/['"‘’“”.\s]+$/, "").slice(-1).charCodeAt(0);
+  const closed = code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0;
+  return `뜻은 ${text}${closed ? "이에요" : "예요"}.`;
+}
 
 /**
  * 배우기 단계의 "중요 단어": 은행의 용어·뜻을 단원 순서대로 묶는다(2026-11-19 원준 결정, #59).
