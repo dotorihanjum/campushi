@@ -91,6 +91,7 @@ function KeyTerms({ groups, className = "", style }) {
               <button
                 aria-expanded={open}
                 aria-controls={panel}
+                aria-label={`${group.name}, 용어 ${group.terms.length}개`}
                 onClick={() => toggle(group.unit)}
                 className="pressable flex min-h-[44px] w-full items-center justify-between gap-[10px] rounded-[12px] border border-mint bg-white px-[14px] py-[9px] text-left"
               >
