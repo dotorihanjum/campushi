@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { OrderTemplate } from "./Templates.jsx";
+import { pick } from "./korean.js";
 import {
   BLANK,
   answerOf,
@@ -16,11 +17,8 @@ import {
 // 문항이 나온 뒤 보기를 고를 수 있기까지의 시간(ms). 사람이 문항을 읽고 고르는 데는 이보다 오래 걸린다.
 const SETTLE_MS = 400;
 
-// 받침이 있는 한글로 끝나면 "은", 그 밖에는 "는".
-function josa(label) {
-  const code = label.trim().charCodeAt(label.trim().length - 1);
-  return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0 ? "은" : "는";
-}
+// "은" / "는"(korean.js, #67).
+const josa = (label) => pick(label, "은", "는");
 import { ROUNDS, roundTitles, theoryRounds } from "./theory.js";
 
 // 미리 만들어 둔 연습 문제의 유형별 화면. 문제(game)는 Games.jsx가 받아서 넘겨준다.
