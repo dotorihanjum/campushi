@@ -123,6 +123,19 @@ const makers = {
   },
 };
 
+/**
+ * 배우기 단계의 "중요 단어": 은행의 용어·뜻을 단원 순서대로 묶는다(2026-11-19 원준 결정, #59).
+ * 단원 안의 용어는 은행에 적힌 순서 그대로이고, 용어가 없는 단원은 뺀다. 문구는 은행 값만 쓴다.
+ * 반환: [{ unit: 단원 번호, name: 단원 이름, terms: [{ term, meaning }] }]
+ */
+export function termsByUnit(bank) {
+  const units = Array.isArray(bank?.units) ? bank.units : [];
+  const terms = Array.isArray(bank?.terms) ? bank.terms : [];
+  return units
+    .map((name, unit) => ({ unit, name, terms: terms.filter((item) => item.unit === unit).map(({ term, meaning }) => ({ term, meaning })) }))
+    .filter((group) => group.terms.length > 0);
+}
+
 // 이 은행으로 만들 수 있는 라운드 유형.
 export const roundTypesOf = (bank) => Object.keys(makers).filter((type) => possible[type](bank));
 

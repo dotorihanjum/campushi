@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { cleanGame, questionsOf } from "./lessonGames.js";
-import { ROUNDS, revealsUnit, roundTitles, roundTypesOf, theoryRounds } from "./theory.js";
+import { ROUNDS, revealsUnit, roundTitles, roundTypesOf, termsByUnit, theoryRounds } from "./theory.js";
 
 // 형식 검사용 예시 은행. 서비스 데이터가 아니다.
 const BANK = cleanGame({
@@ -188,4 +188,42 @@ test("분류하기에는 단원 이름만 보고 답이 보이는 용어를 내�
     const sort = theoryRounds(bank, seeded(seed)).find((round) => round.type === "sort");
     if (sort) for (const item of sort.items) assert.ok(!revealsUnit(item.text, sort.categories), item.text);
   }
+});
+
+test("배우기의 중요 단어는 단원 순서대로 묶고, 용어가 없는 단원은 빼며, 은행 값을 그대로 쓴다", () => {
+  const groups = termsByUnit(BANK);
+  assert.deepEqual(groups.map((g) => g.name), ["가 단원", "나 단원", "다 단원"]);
+  assert.deepEqual(groups[0].terms.slice(0, 2), [{ term: "용어0", meaning: "뜻0" }, { term: "용어3", meaning: "뜻3" }]);
+  // 용어가 없는 단원(라 단원)은 보이지 않는다.
+  const withEmpty = { ...BANK, units: [...BANK.units, "라 단원"] };
+  assert.deepEqual(termsByUnit(withEmpty).map((g) => g.name), ["가 단원", "나 단원", "다 단원"]);
+  // 은행이 없거나 모양이 틀리면 빈 목록이다(화면이 깨지지 않는다).
+  assert.deepEqual(termsByUnit(null), []);
+  assert.deepEqual(termsByUnit({ units: "x", terms: null }), []);
+});
+
+test("서비스의 이론 문제 은행 전체: 모든 용어가 정확히 하나의 단원 아래에 한 번씩 나온다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const lines = readFileSync(new URL("../../backend/data/theory_banks.jsonl", import.meta.url), "utf8").split("\n").filter(Boolean);
+  let banks = 0;
+  for (const line of lines) {
+    const raw = JSON.parse(line);
+    if (raw.status !== "verified") continue;
+    const bank = cleanGame({ ...raw, type: "theory" });
+    assert.ok(bank, raw.course_name);
+    banks++;
+    const groups = termsByUnit(bank);
+    const shown = groups.flatMap((g) => g.terms.map((t) => ({ ...t, name: g.name })));
+    // 개수가 같고, 은행의 용어마다 자기 단원 아래에 정확히 한 번 나온다(뜻도 은행 그대로).
+    assert.equal(shown.length, bank.terms.length, raw.course_name);
+    for (const item of bank.terms) {
+      const hits = shown.filter((t) => t.term === item.term && t.meaning === item.meaning);
+      assert.equal(hits.length, 1, `${raw.course_name}: ${item.term}`);
+      assert.equal(hits[0].name, bank.units[item.unit], `${raw.course_name}: ${item.term}의 단원`);
+    }
+    // 보이는 단원은 용어가 있는 단원 전부이고, 은행의 단원 순서를 따른다.
+    const used = bank.units.filter((_, unit) => bank.terms.some((t) => t.unit === unit));
+    assert.deepEqual(groups.map((g) => g.name), used, raw.course_name);
+  }
+  assert.equal(banks, 15);
 });

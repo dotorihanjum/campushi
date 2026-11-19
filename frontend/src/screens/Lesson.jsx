@@ -1,5 +1,5 @@
 // 수업: 배우기 → 직접 해보기 → 기록 → 결과(성적).
-import { Component, Suspense, useEffect, useRef, useState } from "react";
+import { Component, Suspense, useEffect, useId, useRef, useState } from "react";
 import { yearCharacter } from "../assets.js";
 import { delay, FilledButton, Header, Screen } from "../ui.jsx";
 import { YEARS, completeCourse, courseKey, creditWaitDays, CREDIT_COOLDOWN_DAYS, gameOf, isRequired, kindOf, labFor, progressOf, recordOf, savePlay, yearOf } from "../model.js";
@@ -9,6 +9,7 @@ import LessonGame, { useLessonGame } from "../Games.jsx";
 import { Rub } from "../Templates.jsx";
 import { groupName } from "../groups.js";
 import { gameFor } from "../games.js";
+import { termsByUnit } from "../theory.js";
 import { LAB_SCREENS } from "../labs/components.js";
 import { LabSummary } from "../labs/parts/LabSummary.jsx";
 import { CreditPill, gradeText, josa, useGuard, view } from "./shared.jsx";
@@ -58,6 +59,67 @@ function MintCard({ title, children, className = "" }) {
     <section className={`rounded-[20px] bg-mint-soft px-[18px] py-[16px] ${className}`}>
       <h2 className="text-[15px] font-bold leading-[22px] text-ink-2">{title}</h2>
       <div className="mt-[6px] text-[13.5px] leading-[22px] text-ink-3">{children}</div>
+    </section>
+  );
+}
+
+/**
+ * 이론 퀴즈 배우기의 중요 단어(2026-11-19 원준 결정, #59): 단원 이름이 먼저 보이고, 누르면 그 단원의 용어·뜻이 펼쳐진다.
+ * 용어·뜻·단원 이름은 문제 은행 값 그대로다(theory.js의 termsByUnit). 디자인 시안이 나오면 모양만 바꾼다.
+ */
+function KeyTerms({ groups, className = "", style }) {
+  const [opened, setOpened] = useState(() => new Set());
+  const base = useId();
+  const toggle = (unit) =>
+    setOpened((prev) => {
+      const next = new Set(prev);
+      if (next.has(unit)) next.delete(unit);
+      else next.add(unit);
+      return next;
+    });
+  return (
+    <section className={`rounded-[20px] bg-mint-soft px-[18px] py-[16px] ${className}`} style={style} aria-labelledby={`${base}title`}>
+      <h2 id={`${base}title`} className="text-[15px] font-bold leading-[22px] text-ink-2">
+        중요 단어
+      </h2>
+      <ul className="mt-[8px] grid gap-[8px]">
+        {groups.map((group) => {
+          const open = opened.has(group.unit);
+          const panel = `${base}unit${group.unit}`;
+          return (
+            <li key={group.unit}>
+              <button
+                aria-expanded={open}
+                aria-controls={panel}
+                onClick={() => toggle(group.unit)}
+                className="pressable flex min-h-[44px] w-full items-center justify-between gap-[10px] rounded-[12px] border border-mint bg-white px-[14px] py-[9px] text-left"
+              >
+                <span className="min-w-0 text-[14px] font-semibold leading-[20px] text-ink-2" style={{ overflowWrap: "anywhere" }}>
+                  {group.name}
+                </span>
+                <span className="flex shrink-0 items-center gap-[6px] text-[12px] leading-[18px] text-mint-deep">
+                  {`${group.terms.length}개`}
+                  <svg width="10" height="6" viewBox="0 0 10 6" className={open ? "rotate-180" : ""} aria-hidden>
+                    <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+              </button>
+              <dl id={panel} hidden={!open} className="mt-[8px] grid gap-[8px] px-[2px] pb-[4px]">
+                {group.terms.map((item, i) => (
+                  <div key={i}>
+                    <dt className="inline-flex max-w-full rounded-full bg-white px-[10px] py-[3px] text-[13px] font-bold leading-[19px] text-mint-deep" style={{ overflowWrap: "anywhere" }}>
+                      {item.term}
+                    </dt>
+                    <dd className="mt-[3px] text-[13px] leading-[20px] text-ink-3" style={{ overflowWrap: "anywhere" }}>
+                      {item.meaning}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }
@@ -309,6 +371,9 @@ export function Lesson({ active, nav, route, state, setState }) {
   if (step === 0) {
     const task = mode === "project" ? final.task : mode === "practice" ? practice.task : mode === "lab" ? lab.task : mode === "quiz" ? quizTask(quiz.game) : null;
     const learn = (mode === "practice" ? practice : mode === "project" ? final : mode === "lab" ? lab : null)?.learn;
+    // 이론 퀴즈 과목: 과목 소개(은행의 explanation)와 단원별 중요 단어를 "이 수업에서 해볼 것" 앞에 보여 준다(#59).
+    const theory = mode === "quiz" && quiz.game.type === "theory" ? quiz.game : null;
+    const groups = theory ? termsByUnit(theory) : [];
     body = (
       <>
         {mode === "loading" && (
@@ -329,8 +394,14 @@ export function Lesson({ active, nav, route, state, setState }) {
             <p style={delay(0.1)}>{learn}</p>
           </MintCard>
         )}
+        {theory?.explanation && (
+          <MintCard title="과목 소개" className="a-up mt-[22px]">
+            <p style={delay(0.08)}>{theory.explanation}</p>
+          </MintCard>
+        )}
+        {groups.length > 0 && <KeyTerms groups={groups} className="a-up mt-[12px]" style={delay(0.1)} />}
         {task && (
-          <MintCard title="이 수업에서 해볼 것" className={`a-up ${learn ? "mt-[12px]" : "mt-[22px]"}`}>
+          <MintCard title="이 수업에서 해볼 것" className={`a-up ${learn || theory ? "mt-[12px]" : "mt-[22px]"}`}>
             <p style={delay(0.12)}>{task}</p>
           </MintCard>
         )}
