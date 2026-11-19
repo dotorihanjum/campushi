@@ -19,6 +19,7 @@ import {
   isPlanned,
   isRequired,
   kindOf,
+  leaveDepartment,
   loadState,
   nextStepOf,
   normalize,
@@ -356,4 +357,91 @@ test("체험이 있는 필수과목이 없어 바로 넘어간 학년을 알 수
   // 선택과목에만 체험이 있어도 필수 체험이 없으면 넘어간다.
   const electiveOnly = { ...RAW_ID, games: { 서비스디자인: "match" } };
   assert.deepEqual(skippedYears(progress(enrolled([electiveOnly], [electiveOnly.id]), electiveOnly.id)), [1, 2, 3]);
+});
+
+test("학과를 그만두면 그 학과의 입학·성적·체험 결과·한 줄 기록·쓰던 기록·조건 예외만 지우고 크레딧과 받은 시각은 남긴다", () => {
+  // 학과 id 앞부분이 겹치는 학과("khu-cse"와 "khu-cse2")를 함께 둔다.
+  const RAW_CSE2 = { ...RAW_CSE, id: "khu-cse2", name: "컴퓨터공학과2" };
+  const t0 = Date.UTC(2026, 10, 16);
+  let state = enrolled([RAW_CSE, RAW_CSE2, RAW_ID], [RAW_CSE.id, RAW_CSE2.id, RAW_ID.id]);
+  for (const id of [RAW_CSE.id, RAW_CSE2.id]) state = take(state, id, "미분적분학", 9, 10, t0);
+  state = take(state, RAW_ID.id, "드로잉", 9, 10, t0);
+  const key = (id, subject) => courseKey(id, subject);
+  for (const id of [RAW_CSE.id, RAW_CSE2.id]) {
+    state = savePlay(state, id, "객체지향프로그래밍", gameOf(departmentsOf(state).find((d) => d.id === id), "객체지향프로그래밍"), "결과", { correct: 8, total: 10 });
+    state = {
+      ...state,
+      notes: { ...state.notes, [key(id, "미분적분학")]: "재밌었다" },
+      drafts: { ...state.drafts, [key(id, "이산구조")]: "쓰던 기록" },
+      exempt: { ...state.exempt, [key(id, "컴퓨터구조")]: true },
+    };
+  }
+  state = { ...state, studying: RAW_ID.id, current: RAW_ID.id };
+  const before = structuredClone(state);
+  const left = leaveDepartment(state, RAW_CSE.id);
+  // 입력 상태는 바꾸지 않는다.
+  assert.deepEqual(state, before);
+  assert.deepEqual(Object.keys(left.journeys), [RAW_CSE2.id, RAW_ID.id]);
+  for (const field of ["records", "plays", "notes", "drafts", "exempt"]) {
+    const keys = Object.keys(left[field]);
+    assert.ok(!keys.some((k) => k.startsWith(`${RAW_CSE.id}|`)), `${field}에 그만둔 학과 기록이 남았어요`);
+    // 다른 학과(앞부분이 겹치는 khu-cse2 포함)의 기록은 그대로다.
+    const others = Object.fromEntries(Object.entries(before[field]).filter(([k]) => !k.startsWith(`${RAW_CSE.id}|`)));
+    assert.deepEqual(left[field], others, field);
+    assert.ok(keys.some((k) => k.startsWith(`${RAW_CSE2.id}|`)), `${field}에서 khu-cse2 기록이 지워졌어요`);
+  }
+  assert.ok(left.records[key(RAW_CSE2.id, "미분적분학")]);
+  assert.ok(left.plays[key(RAW_CSE2.id, "객체지향프로그래밍")]);
+  assert.ok(left.records[key(RAW_ID.id, "드로잉")]);
+  // 크레딧과 받은 시각은 남는다. 체험 중인 학과가 아니었으므로 studying·current는 그대로다.
+  assert.equal(left.credits, before.credits);
+  assert.deepEqual(left.creditedAt, before.creditedAt);
+  assert.equal(left.studying, RAW_ID.id);
+  assert.equal(left.current, RAW_ID.id);
+  // 저장했다 불러와도 그만둔 학과는 돌아오지 않는다.
+  assert.deepEqual(Object.keys(normalize(left).journeys), [RAW_CSE2.id, RAW_ID.id]);
+});
+
+test("체험 중인 학과를 그만두면 남은 학과 중 가장 최근에 입학한 학과로 바뀌고, 남은 학과가 없으면 null이다", () => {
+  let state = enrolled([RAW_CSE, RAW_ID], [RAW_CSE.id, RAW_ID.id]);
+  state = { ...state, studying: RAW_ID.id, current: RAW_ID.id };
+  state = leaveDepartment(state, RAW_ID.id);
+  assert.equal(state.studying, RAW_CSE.id);
+  assert.equal(state.current, RAW_CSE.id);
+  state = leaveDepartment(state, RAW_CSE.id);
+  assert.deepEqual(state.journeys, {});
+  assert.equal(state.studying, null);
+  assert.equal(state.current, null);
+  // 다시 입학하고 그만둔 순서가 섞여도 가장 최근에 입학한 학과로 바뀐다.
+  let mixed = enroll(enroll(enrolled([RAW_CSE, RAW_ID], []), RAW_CSE.id), RAW_ID.id);
+  mixed = enroll(leaveDepartment(mixed, RAW_CSE.id), RAW_CSE.id);
+  assert.deepEqual(Object.keys(mixed.journeys), [RAW_ID.id, RAW_CSE.id]);
+  assert.equal(leaveDepartment({ ...mixed, studying: RAW_ID.id }, RAW_ID.id).studying, RAW_CSE.id);
+});
+
+test("입학하지 않은 학과를 그만두면 상태를 그대로 돌려준다", () => {
+  const state = enrolled();
+  for (const id of [RAW_ID.id, "khu", "khu-cse2", "", null, undefined, "__proto__", "toString"]) assert.equal(leaveDepartment(state, id), state);
+});
+
+test("그만둔 학과에 다시 입학하면 1학년부터 새로 시작하고, 7일 안에 같은 과목을 다시 이수하면 크레딧을 받지 않는다", () => {
+  const t0 = Date.UTC(2026, 10, 16);
+  let state = enrolled();
+  state = take(state, RAW_CSE.id, "미분적분학", 9, 10, t0);
+  assert.equal(state.credits, CREDIT_PER_PASS);
+  state = leaveDepartment(state, RAW_CSE.id);
+  assert.equal(state.credits, CREDIT_PER_PASS);
+  state = enroll(state, RAW_CSE.id, t0 + DAY);
+  assert.equal(state.journeys[RAW_CSE.id].enrolledAt, t0 + DAY);
+  const p = progress(state);
+  assert.equal(p.openYear, 1);
+  assert.equal(p.passedCount, 0);
+  assert.equal(p.taken.length, 0);
+  // 6일 뒤 같은 과목: 이수는 되지만 크레딧은 받지 않는다.
+  state = take(state, RAW_CSE.id, "미분적분학", 10, 10, t0 + 6 * DAY);
+  assert.equal(recordOf(state, RAW_CSE.id, "미분적분학").grade, "A+");
+  assert.equal(state.credits, CREDIT_PER_PASS);
+  // 7일이 지나면 받는다.
+  state = take(state, RAW_CSE.id, "미분적분학", 10, 10, t0 + CREDIT_COOLDOWN_DAYS * DAY);
+  assert.equal(state.credits, CREDIT_PER_PASS * 2);
 });

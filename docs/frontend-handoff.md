@@ -44,6 +44,7 @@
 2. `loadState`와 `refreshCatalog`는 `normalize`를 호출한다.
 3. 화면은 `state`와 `setState`를 받는다. `App`은 상태가 바뀌면 전체 상태를 `campushi-v2`에 저장한다.
 4. `My.saveProfile`은 먼저 같은 키에 프로필을 포함한 전체 상태를 저장한다. 성공하면 `setState`를 호출하고 편집창을 닫는다. 실패하면 편집창에 오류를 표시한다.
+5. 학과 그만두기(체험 탭 카드의 더보기, 2026-11-19 #27)는 `model.js`의 `leaveDepartment`로 그 학과의 `journeys` 항목과 `records`·`plays`·`notes`·`drafts`·`exempt`의 `"학과id|"` 키만 지우고 `credits`·`creditedAt`은 남긴다. 저장 형식(키·필드)은 바뀌지 않고, 지운 뒤 상태를 `App`이 평소처럼 통째로 저장한다.
 
 따라서 서버 연결 때 `App`의 자동 저장만 바꾸면 프로필 편집은 여전히 브라우저에 직접 저장한다. `My.saveProfile`의 저장 성공 판단도 함께 교체해야 한다. 그 밖의 공통 자동 저장 실패는 현재 화면에 알리지 않고 메모리 상태만 유지한다.
 
