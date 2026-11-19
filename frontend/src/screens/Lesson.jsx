@@ -179,7 +179,8 @@ export function Lesson({ active, nav, route, state, setState }) {
   const [shake, setShake] = useState(0);
   // 진짜 수업 체험(labs)의 직접 해보기 화면(#63).
   // labOpen: 끝낸 결과(plays)가 있어도 요약 대신 체험 화면을 보여 준다("체험 다시 해보기"를 눌렀거나, 방금 끝내 마지막 라운드 결과를 읽는 중).
-  // labDone: 이 화면에서 방금 끝냈다. 체험의 마지막 결과(맞았어요·실행 결과) 아래에 "결과 보기"를 두고, 누르면 요약으로 넘어간다.
+  // labDone: 이 화면에서 방금 끝냈다. 체험의 마지막 결과(맞았어요·실행 결과)를 둔 채 아래 주 버튼이 "결과 보기"가 되고, 누르면 요약으로 넘어간다.
+  // 그동안에는 "기록하러 가기"를 보여 주지 않는다(요약을 거쳐야 기록으로 간다, manyfast S-NBUSXR).
   // 다시 끝내기 전까지 이전 결과(plays)는 그대로 둔다.
   const [labOpen, setLabOpen] = useState(false);
   const [labDone, setLabDone] = useState(false);
@@ -476,7 +477,8 @@ export function Lesson({ active, nav, route, state, setState }) {
   } else if (step === 1 && mode === "lab") {
     // 진짜 수업 체험도 다른 체험처럼 이 단계 안에 들어간다. 화면 코드는 그 과목에 들어갈 때만 불러온다.
     // 체험 화면은 마지막 라운드를 맞히면 바로 onComplete를 부른다(결과 저장). 그 뒤에도 체험 화면(마지막 결과)을 그대로 두고
-    // 아래에 "결과 보기"를 보여 주며, 누르면 끝 요약으로 넘어간다(#63). 그래서 체험 화면에는 따로 "결과 보기"를 두지 않는다.
+    // 아래 주 버튼을 "결과 보기"로 바꾸며, 누르면 끝 요약으로 넘어간다(#63). 요약의 "기록하러 가기"로만 기록 단계에 간다.
+    // 그래서 체험 화면에는 따로 "결과 보기"나 자체 재시작 버튼을 두지 않는다(labs/index.js의 작성 규칙).
     // 단계 칩으로 돌아와도 끝낸 결과(plays)가 있으면 요약을 보여 주고, "체험 다시 해보기"를 누르면 체험 화면을 처음부터 다시 연다.
     const LabScreen = LAB_SCREENS[lab.id];
     body = (
@@ -512,23 +514,23 @@ export function Lesson({ active, nav, route, state, setState }) {
                 />
               </Suspense>
             </LabBoundary>
-            {labDone && (
-              <button
-                ref={resultButton}
-                className="button mt-[18px] w-full"
-                onClick={() => {
-                  setLabDone(false);
-                  setLabOpen(false);
-                }}
-              >
-                결과 보기
-              </button>
-            )}
           </>
         )}
       </div>
     );
-    action = <FilledButton onClick={() => (play ? go(2) : warn("먼저 끝까지 해보세요."))}>기록하러 가기</FilledButton>;
+    action = labDone ? (
+      <FilledButton
+        ref={resultButton}
+        onClick={() => {
+          setLabDone(false);
+          setLabOpen(false);
+        }}
+      >
+        결과 보기
+      </FilledButton>
+    ) : (
+      <FilledButton onClick={() => (play ? go(2) : warn("먼저 끝까지 해보세요."))}>기록하러 가기</FilledButton>
+    );
   } else if (step === 1) {
     body = (
       <div className="a-up mt-[22px]">

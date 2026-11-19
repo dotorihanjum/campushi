@@ -238,9 +238,11 @@ export function OutlineButton({ children, onClick, top = 756, className = "", st
 }
 
 /** 민트색이 꽉 찬 버튼(홈의 시작 버튼과 같은 모양). 화면 아래의 주 행동에 쓴다. */
-export function FilledButton({ children, onClick, disabled, top = 752, className = "", style }) {
+// ref: 코드로 초점을 옮길 때 쓴다(실습 "결과 보기", #63).
+export function FilledButton({ children, onClick, disabled, top = 752, className = "", style, ref }) {
   return (
     <button
+      ref={ref}
       onClick={onClick}
       disabled={disabled}
       className={`pressable absolute left-[20px] z-10 flex h-[56.5px] w-[362px] items-center justify-center rounded-[14px] bg-mint px-[16px] text-[17.5px] font-semibold text-white active:brightness-95 disabled:cursor-default disabled:opacity-40 ${className}`}
