@@ -12,7 +12,7 @@ import { gameFor } from "../games.js";
 import { termsByUnit } from "../theory.js";
 import { LAB_SCREENS } from "../labs/components.js";
 import { LabSummary } from "../labs/parts/LabSummary.jsx";
-import { FOCUS_RING } from "../focus.js";
+import { FOCUS_RING, SETTLE_MS } from "../focus.js";
 import { CreditPill, gradeText, josa, useGuard, view } from "./shared.jsx";
 
 const STEPS = ["배우기", "직접 해보기", "기록"];
@@ -186,6 +186,9 @@ export function Lesson({ active, nav, route, state, setState }) {
   const [labDone, setLabDone] = useState(false);
   const retried = useRef(false);
   const resultButton = useRef(null);
+  // "결과 보기"를 누른 시각. 같은 자리에 바로 "기록하러 가기"가 나오므로, 더블클릭·빠른 두 번 탭의 두 번째 입력이
+  // 요약을 건너뛰고 기록으로 가지 않게 SETTLE_MS 동안은 "기록하러 가기"를 무시한다(#63, #74와 같은 방식).
+  const summaryAt = useRef(0);
   // 수업을 마치고 받은 결과: { grade, percent, best, opened, graduated }.
   const [result, setResult] = useState(null);
   const timer = useRef(0);
@@ -522,6 +525,7 @@ export function Lesson({ active, nav, route, state, setState }) {
       <FilledButton
         ref={resultButton}
         onClick={() => {
+          summaryAt.current = performance.now();
           setLabDone(false);
           setLabOpen(false);
         }}
@@ -529,7 +533,15 @@ export function Lesson({ active, nav, route, state, setState }) {
         결과 보기
       </FilledButton>
     ) : (
-      <FilledButton onClick={() => (play ? go(2) : warn("먼저 끝까지 해보세요."))}>기록하러 가기</FilledButton>
+      <FilledButton
+        onClick={() => {
+          if (performance.now() - summaryAt.current < SETTLE_MS) return;
+          if (play) go(2);
+          else warn("먼저 끝까지 해보세요.");
+        }}
+      >
+        기록하러 가기
+      </FilledButton>
     );
   } else if (step === 1) {
     body = (
