@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { FOCUS_RING } from "../../focus.js";
 
 /**
  * 실습형 체험의 끝 요약. 마지막 라운드를 끝내면 직접 해보기 단계 안에서 체험 화면 대신 보여 준다(screens/Lesson.jsx).
@@ -18,7 +19,7 @@ export function LabSummary({ takeaway, onRetry }) {
   return (
     <section aria-label="체험 요약" className="scroll-mt-[12px]">
       <p className="a-up text-[13px] font-semibold leading-[20px] text-mint-deep">체험을 끝냈어요</p>
-      <h2 ref={heading} tabIndex={-1} className="a-up mt-[6px] text-[21px] font-bold leading-[31px] text-navy outline-none" style={{ overflowWrap: "anywhere" }}>
+      <h2 ref={heading} tabIndex={-1} className={`a-up mt-[6px] rounded-[6px] text-[21px] font-bold leading-[31px] text-navy ${FOCUS_RING}`} style={{ overflowWrap: "anywhere" }}>
         {summary}
       </h2>
       <section className="a-up mt-[16px] rounded-[20px] bg-mint-soft px-[18px] py-[16px]">
