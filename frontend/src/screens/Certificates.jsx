@@ -47,6 +47,21 @@ function PaperRow({ y, left, right, lineFrom = 24, lineTo = 255, d = 0 }) {
   );
 }
 
+// 세 증명서 종이 아래에 넣는 안내(manyfast F-OAIMLW·S-IDBOLP 원문). 문구를 바꾸지 않는다.
+const NOT_OFFICIAL_NOTICE = "캠퍼스하이 체험 과정 기록이며 실제 학적이 아닙니다";
+// 안내의 위치·크기(종이 273×365 안의 좌표). 디자인이 정해지면 여기만 바꾼다.
+// 도장(308~348)·서명 줄(309.5)보다 아래, 종이 아래 끝(365) 안쪽이다. 색은 흰 종이 위 대비 5.03:1인 slate.
+const NOTICE_STYLE = { top: 350, fontSize: 10, lineHeight: "13px" };
+
+/** 증명서 종이 안의 "실제 학적이 아닙니다" 안내. 종이를 이미지로 저장할 때(#25)도 같이 들어가도록 종이 안에 둔다. */
+function NotOfficialNotice() {
+  return (
+    <p className="pointer-events-none absolute inset-x-[12px] m-0 text-center text-slate" style={{ ...NOTICE_STYLE, wordBreak: "keep-all" }}>
+      {NOT_OFFICIAL_NOTICE}
+    </p>
+  );
+}
+
 function CertificateShell({ onBack, onNext, children }) {
   return (
     <Screen bg="#27d8cd">
@@ -56,6 +71,7 @@ function CertificateShell({ onBack, onNext, children }) {
         <Paper className="a-paper z-10 shadow-[0_18px_40px_rgba(0,80,76,0.18)]" style={delay(0.05)}>
           <PaperFold src={img.paperFold} />
           {children}
+          <NotOfficialNotice />
         </Paper>
       </Center>
     </Screen>
