@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { icon, img } from "../assets.js";
 import { BackButton, Center, Confetti, delay, Header, Mask, OutlineButton, Paper, PaperFold, Screen, T, SchoolLogo } from "../ui.jsx";
 import { YEARS, courseKey, isRequired } from "../model.js";
+import { isReview } from "../certificates.js";
 import { averagePoint, PASS } from "../grades.js";
 import { useCountUp, useGuard, view } from "./shared.jsx";
 
@@ -21,13 +22,15 @@ function SchoolSeal({ d, className, style }) {
   );
 }
 
-function useAutoAdvance(fn, ms) {
+// 다시 보기(off)에서는 다음 화면으로 넘어가지 않는다.
+function useAutoAdvance(fn, ms, off = false) {
   const ref = useRef(fn);
   ref.current = fn;
   useEffect(() => {
+    if (off) return;
     const t = window.setTimeout(() => ref.current(), ms);
     return () => window.clearTimeout(t);
-  }, [ms]);
+  }, [ms, off]);
 }
 
 function PaperRow({ y, left, right, lineFrom = 24, lineTo = 255, d = 0 }) {
@@ -62,11 +65,29 @@ function NotOfficialNotice() {
   );
 }
 
-function CertificateShell({ onBack, onNext, children }) {
+/**
+ * 다시 보기(체험 탭에서 연 증명서, #23)의 아래 버튼 줄. 닫으면 체험 탭 목록으로 돌아간다.
+ * 줄 안의 버튼은 같은 폭으로 나눠 가지므로, 저장·공유(#25) 버튼은 이 줄에 하나 더 넣으면 된다.
+ */
+function ReviewActions({ onClose }) {
   return (
-    <Screen bg="#27d8cd">
+    <div className="absolute left-[20px] top-[766px] flex w-[362px] gap-[8px]">
+      <button
+        onClick={onClose}
+        className="pressable flex h-[52px] min-w-0 flex-1 items-center justify-center rounded-[14px] bg-white px-[12px] text-[17px] font-semibold text-mint-deep active:bg-mint-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+      >
+        닫기
+      </button>
+    </div>
+  );
+}
+
+// review: 다시 보기면 종이 밖을 눌러도 다음 화면으로 넘어가지 않고, 아래에 닫기 버튼을 둔다.
+function CertificateShell({ onBack, onNext, review = false, children }) {
+  return (
+    <Screen bg="#27d8cd" veil={false} footer={review ? <ReviewActions onClose={onBack} /> : undefined}>
       <BackButton onClick={onBack} color="#fff" />
-      <button aria-label="다음으로" onClick={onNext} className="absolute inset-0 top-[100px] z-0 cursor-pointer" />
+      {!review && <button aria-label="다음으로" onClick={onNext} className="absolute inset-0 top-[100px] z-0 cursor-pointer" />}
       <Center>
         <Paper className="a-paper z-10 shadow-[0_18px_40px_rgba(0,80,76,0.18)]" style={delay(0.05)}>
           <PaperFold src={img.paperFold} />
@@ -90,17 +111,18 @@ function Statement({ y, d, children }) {
   );
 }
 
-export function Enrolled({ active, nav, state }) {
+export function Enrolled({ active, nav, state, route }) {
   const v = view(state);
+  const review = isReview(route?.params);
   const next = () => nav.replace("welcome", undefined, "fade");
-  useGuard(!!v, nav, active);
-  useAutoAdvance(next, 4200);
-  if (!v) return null;
+  useGuard(review ? !!v?.journey : !!v, nav, active);
+  useAutoAdvance(next, 4200, review);
+  if (!v || (review && !v.journey)) return null;
   const { d, journey } = v;
   // 입학 시각을 남기기 전에 입학한 기록에는 날짜가 없으므로, 일시 줄을 빼고 체험생 줄을 두 줄 자리의 가운데에 둔다.
   const at = Number.isFinite(journey?.enrolledAt) ? new Date(journey.enrolledAt) : null;
   return (
-    <CertificateShell onBack={nav.back} onNext={next}>
+    <CertificateShell onBack={nav.back} onNext={next} review={review}>
       <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint" style={delay(0.45)}>
         입학을 축하합니다!
       </T>
@@ -131,12 +153,13 @@ function BottomSign({ d: department, wait }) {
   );
 }
 
-export function Grades({ active, nav, state }) {
+export function Grades({ active, nav, state, route }) {
   const v = view(state);
+  const review = isReview(route?.params);
   const next = () => nav.replace("diploma", undefined, "fade");
   const ok = !!v?.progress.graduated;
   useGuard(ok, nav, active);
-  useAutoAdvance(next, 4600);
+  useAutoAdvance(next, 4600, review);
   if (!ok) return null;
   const { d, progress } = v;
   // 들은 과목을 필수부터, 학년 순서로 적는다. 종이에 다 들어가지 않으면 "외 N과목"으로 줄인다.
@@ -145,7 +168,7 @@ export function Grades({ active, nav, state }) {
   const average = averagePoint(taken.map((course) => course.record.grade));
   const perfect = taken.every((course) => course.record.grade === "A+" || course.record.grade === PASS);
   return (
-    <CertificateShell onBack={() => nav.reset(["home"])} onNext={next}>
+    <CertificateShell onBack={review ? nav.back : () => nav.reset(["home"])} onNext={next} review={review}>
       <div className="absolute inset-0 overflow-hidden rounded-[8px]">
         <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint" style={delay(0.45)}>
           성적표
@@ -187,16 +210,17 @@ export function Grades({ active, nav, state }) {
   );
 }
 
-export function Diploma({ active, nav, state }) {
+export function Diploma({ active, nav, state, route }) {
   const v = view(state);
+  const review = isReview(route?.params);
   const next = () => nav.replace("graduation", undefined, "fade");
   const ok = !!v?.progress.graduated;
   useGuard(ok, nav, active);
-  useAutoAdvance(next, 4200);
+  useAutoAdvance(next, 4200, review);
   if (!ok) return null;
   const { d } = v;
   return (
-    <CertificateShell onBack={() => nav.reset(["home"])} onNext={next}>
+    <CertificateShell onBack={review ? nav.back : () => nav.reset(["home"])} onNext={next} review={review}>
       <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint" style={delay(0.45)}>
         졸업증명서
       </T>

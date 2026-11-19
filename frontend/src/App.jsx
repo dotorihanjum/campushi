@@ -3,6 +3,7 @@ import { SCREENS } from "./screens/index.js";
 import { STORAGE_KEY, loadState, refreshCatalog } from "./model.js";
 import { getDepartments } from "./api.js";
 import { openStorage, storageNotice, writeStorage } from "./storage.js";
+import { isReview } from "./certificates.js";
 
 // 화면은 402×874 아트보드에 맞춰 그리고, 창 크기에 맞게 통째로 줄이거나 늘린다.
 const W = 402;
@@ -18,6 +19,7 @@ const STACK_KEY = "campushi-stack-v2";
 const ENTER = { push: "tr-push-in", fade: "tr-fade-in", rise: "tr-rise-in" };
 const EXIT = { push: "tr-push-out", fade: "tr-fade-out", rise: "tr-fade-out" };
 // 잠깐 보여주고 넘어가는 화면. 새로고침으로 돌아왔을 때는 그다음 화면을 보여준다.
+// 체험 탭에서 다시 보기로 연 증명서(#23)는 넘어가지 않으므로 그 화면 그대로 둔다.
 const SETTLED = { enrolled: "welcome", grades: "graduation", diploma: "graduation" };
 
 let keySeed = 1;
@@ -28,7 +30,7 @@ function initialStack(state) {
     const saved = JSON.parse(sessionStorage.getItem(STACK_KEY));
     if (Array.isArray(saved) && saved.length && saved.every((r) => r && r.name in SCREENS))
       return saved.map((r, i) =>
-        make(i === saved.length - 1 ? SETTLED[r.name] || r.name : r.name, r.params || undefined),
+        make(i === saved.length - 1 && !isReview(r.params) ? SETTLED[r.name] || r.name : r.name, r.params || undefined),
       );
   } catch {
     // 저장된 화면 기록을 읽을 수 없으면 처음부터 시작한다.
