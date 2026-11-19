@@ -251,10 +251,11 @@ export function FilledButton({ children, onClick, disabled, top = 752, className
   );
 }
 
-/** 모서리가 접힌 종이. 입학증·성적표·졸업증명서에 쓴다. */
-export function Paper({ children, className = "", style }) {
+/** 모서리가 접힌 종이. 입학증·성적표·졸업증명서에 쓴다. ref는 종이를 이미지로 저장할 때(#25) 쓴다. */
+export function Paper({ children, className = "", style, ref }) {
   return (
     <div
+      ref={ref}
       className={`absolute left-[64px] top-[254px] h-[365px] w-[273px] rounded-[8px] bg-white ${className}`}
       style={style}
     >

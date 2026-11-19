@@ -1,4 +1,5 @@
-// 체험 리포트 파일 이름. 체험 탭과 마이페이지가 같은 이름을 쓰도록 여기 하나만 둔다(shared.jsx에서 다시 내보낸다).
+// 체험 리포트·증명서 이미지 파일 이름. 체험 탭과 마이페이지가 같은 이름을 쓰도록 여기 하나만 둔다(shared.jsx에서 다시 내보낸다).
+// 증명서 이미지(#25)도 못 쓰는 문자 처리와 날짜 규칙을 같이 쓴다.
 // JSX가 없는 파일로 두어 node --test로 바로 시험한다.
 
 // 파일 이름으로 쓸 수 없는 문자(Windows 기준 / \ : * ? " < > |, 제어 문자)와 공백.
@@ -21,4 +22,12 @@ function localDate(now) {
 /** 캠퍼스하이_학교_학과_YYYY-MM-DD.txt (예: 캠퍼스하이_경희대학교_컴퓨터공학과_2026-11-18.txt). 날짜는 내려받는 기기의 로컬 날짜다. */
 export function reportFileName(school, name, now = new Date()) {
   return `${["캠퍼스하이", part(school), part(name), localDate(now)].filter(Boolean).join("_")}.txt`;
+}
+
+/**
+ * 캠퍼스하이_학교_학과_증명서종류_YYYY-MM-DD.png (예: 캠퍼스하이_경희대학교_컴퓨터공학과_졸업증명서_2026-11-19.png).
+ * 증명서종류는 입학증·성적표·졸업증명서. 날짜는 리포트와 같이 내려받는 기기의 로컬 날짜다.
+ */
+export function certificateFileName(school, name, kind, now = new Date()) {
+  return `${["캠퍼스하이", part(school), part(name), part(kind), localDate(now)].filter(Boolean).join("_")}.png`;
 }

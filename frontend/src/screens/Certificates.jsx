@@ -1,9 +1,12 @@
 // 입학증·입학 환영·성적표·졸업증명서·졸업 화면과 체험 리포트.
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { icon, img } from "../assets.js";
 import { BackButton, Center, Confetti, delay, Header, Mask, OutlineButton, Paper, PaperFold, Screen, T, SchoolLogo } from "../ui.jsx";
 import { YEARS, courseKey, isRequired } from "../model.js";
-import { isReview } from "../certificates.js";
+import { CERTIFICATES, isReview } from "../certificates.js";
+import { canShareFile, isAbort, retryBy, singleFlight } from "../certificateSave.js";
+import { downloadFile, renderCertificate } from "../certificateImage.js";
+import { certificateFileName } from "./reportFileName.js";
 import { averagePoint, PASS } from "../grades.js";
 import { useCountUp, useGuard, view } from "./shared.jsx";
 
@@ -65,31 +68,164 @@ function NotOfficialNotice() {
   );
 }
 
-/**
- * 다시 보기(체험 탭에서 연 증명서, #23)의 아래 버튼 줄. 닫으면 체험 탭 목록으로 돌아간다.
- * 줄 안의 버튼은 같은 폭으로 나눠 가지므로, 저장·공유(#25) 버튼은 이 줄에 하나 더 넣으면 된다.
- */
-function ReviewActions({ onClose }) {
+// 증명서 화면 이름 → 파일 이름·버튼에 쓰는 증명서 이름(입학증·성적표·졸업증명서).
+const KIND = Object.fromEntries(CERTIFICATES.map((c) => [c.screen, c.name]));
+
+// 다시 보기 버튼 모양. 민트 배경 위의 흰 버튼이고, 키보드 포커스는 진한 남색 테두리로 보인다(흰 테두리는 민트 위에서 잘 안 보인다).
+const ACTION =
+  "pressable flex h-[52px] min-w-0 flex-1 items-center justify-center gap-[6px] rounded-[14px] bg-white px-[8px] text-[16px] font-semibold text-mint-deep active:bg-mint-soft aria-disabled:cursor-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy";
+
+function Spinner() {
   return (
-    <div className="absolute left-[20px] top-[766px] flex w-[362px] gap-[8px]">
-      <button
-        onClick={onClose}
-        className="pressable flex h-[52px] min-w-0 flex-1 items-center justify-center rounded-[14px] bg-white px-[12px] text-[17px] font-semibold text-mint-deep active:bg-mint-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-      >
-        닫기
-      </button>
-    </div>
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden className="shrink-0 animate-spin">
+      <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeOpacity="0.25" strokeWidth="2.2" />
+      <path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
   );
 }
 
-// review: 다시 보기면 종이 밖을 눌러도 다음 화면으로 넘어가지 않고, 아래에 닫기 버튼을 둔다.
-function CertificateShell({ onBack, onNext, review = false, children }) {
+// 공유 창으로 파일을 보낼 수 있는지 물어볼 때 쓰는 빈 PNG. 이미지를 다 만들기 전에 공유하기 버튼을 보일지 정한다.
+const SAMPLE = typeof File === "function" ? new File([""], "campushi.png", { type: "image/png" }) : null;
+
+/**
+ * 다시 보기(체험 탭에서 연 증명서, #23)의 아래 버튼 줄: 닫기 · 저장하기 · 공유하기(#25). 닫으면 체험 탭 목록으로 돌아간다.
+ * 화면이 열리면 증명서 이미지를 미리 만들어 둔다. 사파리는 누른 직후에 공유 창을 열어야 해서(오래 기다리면 NotAllowedError)
+ * 누를 때 만들지 않고, 만들어 둔 파일로 바로 저장·공유한다. 만드는 동안에는 버튼에 로딩 표시가 있고 눌러도 아무 일도 하지 않는다.
+ */
+function ReviewActions({ onClose, paper, d, kind }) {
+  const name = `${d.name} ${kind}`;
+  // making: 이미지를 만드는 중, ready: 만들어 둠, error: 만들지 못함(다시 시도).
+  const [status, setStatus] = useState("making");
+  // 저장·공유를 처리하는 중인 버튼(연타 막기).
+  const [busy, setBusy] = useState(null);
+  // 저장·공유 결과와 오류 안내. 화면 읽기 프로그램에도 읽히도록 role="status"에 둔다.
+  const [message, setMessage] = useState("");
+  const file = useRef(null);
+  const lock = useRef(false);
+  // 실패했을 때 다시 시도하는 방법(retryBy): 그 자리에서 다시 그리기(render) 또는 페이지 새로 부르기(reload).
+  const [retryWith, setRetryWith] = useState("render");
+  const shareable = useMemo(() => canShareFile(globalThis.navigator, SAMPLE), []);
+  // 연타·StrictMode의 두 번 실행에도 이미지는 하나만 만든다. 실패하면 다음 호출이 다시 만든다.
+  const make = useMemo(
+    () => singleFlight(() => renderCertificate(paper.current, certificateFileName(d.school, d.name, kind))),
+    [paper, d.school, d.name, kind],
+  );
+  const prepare = useCallback(() => {
+    let alive = true;
+    setStatus("making");
+    make().then(
+      (made) => {
+        file.current = made;
+        if (alive) setStatus("ready");
+      },
+      (error) => {
+        console.error("증명서 이미지를 만들지 못했어요.", error);
+        if (!alive) return;
+        const how = retryBy(error);
+        setRetryWith(how);
+        setStatus("error");
+        setMessage(
+          how === "reload"
+            ? "증명서 이미지를 만들지 못했어요. 인터넷 연결을 확인하고 다시 시도를 눌러 주세요."
+            : "증명서 이미지를 만들지 못했어요. 다시 시도를 눌러 주세요.",
+        );
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, [make]);
+  useEffect(prepare, [prepare]);
+  const retry = () => {
+    // 다시 보기 화면은 새로고침해도 같은 증명서로 돌아온다(App.jsx의 SETTLED 예외).
+    if (retryWith === "reload") return window.location.reload();
+    setMessage("");
+    prepare();
+  };
+  // 파일 이름의 날짜는 미리 만든 날이 아니라 누른 날(기기 로컬 날짜)로 붙인다.
+  const named = () => new File([file.current], certificateFileName(d.school, d.name, kind), { type: "image/png" });
+  const run = (which, act) => {
+    if (status !== "ready" || lock.current) return;
+    lock.current = true;
+    setBusy(which);
+    setMessage("");
+    Promise.resolve(act()).finally(() =>
+      window.setTimeout(() => {
+        lock.current = false;
+        setBusy(null);
+      }, 600),
+    );
+  };
+  const save = () =>
+    run("save", () => {
+      downloadFile(named());
+      setMessage("증명서 이미지를 저장했어요.");
+    });
+  // share는 누른 그 자리에서 바로 부른다(사이에 기다리는 작업이 있으면 사파리가 막는다).
+  const share = () =>
+    run("share", () => {
+      let sent;
+      try {
+        sent = navigator.share({ files: [named()], title: `캠퍼스하이 ${name}` });
+      } catch (error) {
+        sent = Promise.reject(error);
+      }
+      return Promise.resolve(sent).then(
+        () => setMessage("증명서 이미지를 공유했어요."),
+        (error) => {
+          // 사용자가 공유 창을 닫은 것은 오류가 아니다.
+          if (isAbort(error)) return;
+          console.error("증명서 이미지를 공유하지 못했어요.", error);
+          setMessage("공유하지 못했어요. 저장하기로 내려받은 뒤 공유해 주세요.");
+        },
+      );
+    });
+  const waiting = (which) => status === "making" || busy === which;
+  const action = (which, label, onClick) => (
+    <button
+      onClick={onClick}
+      aria-label={`${name} ${label}`}
+      aria-busy={waiting(which) || undefined}
+      aria-disabled={status !== "ready" || !!busy || undefined}
+      className={ACTION}
+    >
+      {waiting(which) && <Spinner />}
+      {label}
+    </button>
+  );
   return (
-    <Screen bg="#27d8cd" veil={false} footer={review ? <ReviewActions onClose={onBack} /> : undefined}>
+    <>
+      <p role="status" className="absolute inset-x-[20px] top-[718px] m-0 text-center text-[13.5px] font-semibold leading-[20px] text-navy" style={{ wordBreak: "keep-all" }}>
+        {message}
+      </p>
+      <div className="absolute left-[20px] top-[766px] flex w-[362px] gap-[8px]">
+        <button onClick={onClose} className={ACTION}>
+          닫기
+        </button>
+        {status === "error" ? (
+          <button onClick={retry} aria-label={`${name} 이미지 다시 만들기`} className={ACTION}>
+            다시 시도
+          </button>
+        ) : (
+          <>
+            {action("save", "저장하기", save)}
+            {shareable && action("share", "공유하기", share)}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+// review: 다시 보기면 종이 밖을 눌러도 다음 화면으로 넘어가지 않고, 아래에 닫기·저장하기·공유하기 버튼을 둔다.
+function CertificateShell({ onBack, onNext, review = false, d, kind, children }) {
+  const paper = useRef(null);
+  return (
+    <Screen bg="#27d8cd" veil={false} footer={review ? <ReviewActions onClose={onBack} paper={paper} d={d} kind={KIND[kind]} /> : undefined}>
       <BackButton onClick={onBack} color="#fff" />
       {!review && <button aria-label="다음으로" onClick={onNext} className="absolute inset-0 top-[100px] z-0 cursor-pointer" />}
       <Center>
-        <Paper className="a-paper z-10 shadow-[0_18px_40px_rgba(0,80,76,0.18)]" style={delay(0.05)}>
+        <Paper ref={paper} className="a-paper z-10 shadow-[0_18px_40px_rgba(0,80,76,0.18)]" style={delay(0.05)}>
           <PaperFold src={img.paperFold} />
           {children}
           <NotOfficialNotice />
@@ -122,7 +258,7 @@ export function Enrolled({ active, nav, state, route }) {
   // 입학 시각을 남기기 전에 입학한 기록에는 날짜가 없으므로, 일시 줄을 빼고 체험생 줄을 두 줄 자리의 가운데에 둔다.
   const at = Number.isFinite(journey?.enrolledAt) ? new Date(journey.enrolledAt) : null;
   return (
-    <CertificateShell onBack={nav.back} onNext={next} review={review}>
+    <CertificateShell onBack={nav.back} onNext={next} review={review} d={d} kind="enrolled">
       <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint" style={delay(0.45)}>
         입학을 축하합니다!
       </T>
@@ -168,7 +304,7 @@ export function Grades({ active, nav, state, route }) {
   const average = averagePoint(taken.map((course) => course.record.grade));
   const perfect = taken.every((course) => course.record.grade === "A+" || course.record.grade === PASS);
   return (
-    <CertificateShell onBack={review ? nav.back : () => nav.reset(["home"])} onNext={next} review={review}>
+    <CertificateShell onBack={review ? nav.back : () => nav.reset(["home"])} onNext={next} review={review} d={d} kind="grades">
       <div className="absolute inset-0 overflow-hidden rounded-[8px]">
         <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint" style={delay(0.45)}>
           성적표
@@ -220,7 +356,7 @@ export function Diploma({ active, nav, state, route }) {
   if (!ok) return null;
   const { d } = v;
   return (
-    <CertificateShell onBack={review ? nav.back : () => nav.reset(["home"])} onNext={next} review={review}>
+    <CertificateShell onBack={review ? nav.back : () => nav.reset(["home"])} onNext={next} review={review} d={d} kind="diploma">
       <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint" style={delay(0.45)}>
         졸업증명서
       </T>
