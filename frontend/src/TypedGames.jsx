@@ -26,10 +26,20 @@ import { ROUNDS, roundTitles, theoryRounds } from "./theory.js";
 // 미리 만들어 둔 연습 문제의 유형별 화면. 문제(game)는 Games.jsx가 받아서 넘겨준다.
 // after: 이론 퀴즈의 라운드로 쓸 때, 다 푼 뒤 "다시 해보기" 대신 보여줄 것(다음 라운드 버튼 등).
 
-function Closing({ children, explanation, onRestart, after }) {
+// focus: 키보드로 "결과 보기"를 눌러 넘어왔을 때 결과 문장(맞힌 수)에 초점을 둔다(#61). 버튼이 사라져도 초점이 화면 맨 위로
+// 떨어지지 않고, 낭독기가 맞힌 수를 읽고, Tab 한 번에 "다음 라운드"로 간다. 초점 테두리는 키보드로 왔을 때만 보인다(:focus-visible).
+function Closing({ children, explanation, onRestart, after, focus = false }) {
+  const summary = useRef(null);
+  useEffect(() => {
+    if (focus) summary.current?.focus();
+  }, [focus]);
   return (
     <div role="status">
-      <p className="body-copy">
+      <p
+        ref={summary}
+        tabIndex={focus ? -1 : undefined}
+        className="body-copy rounded-[6px] outline-none focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-mint-deep"
+      >
         <strong>{children}</strong> {explanation}
       </p>
       {after ?? (
@@ -96,7 +106,7 @@ function Questions({ game, onComplete, intro, unit, stack, renderText, after }) 
 
   if (!question)
     return (
-      <Closing explanation={game.explanation} onRestart={restart} after={after}>
+      <Closing explanation={game.explanation} onRestart={restart} after={after} focus={moved.current}>
         {questions.length}
         {unit} 중 {countCorrect(questions, firstPicks(tries))}개를 맞혔어요.
       </Closing>
