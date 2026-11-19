@@ -1,7 +1,7 @@
 // 학과 둘러보기와 학과 상세·입학.
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { BackButton, delay, OutlineButton, Screen, T, SchoolLogo } from "../ui.jsx";
-import { enroll, isRequired, yearSubjects } from "../model.js";
+import { enroll, isRequired, sourceNote, yearSubjects } from "../model.js";
 import { groupName } from "../groups.js";
 import { useGuard, view } from "./shared.jsx";
 
@@ -228,6 +228,13 @@ export function Detail({ active, nav, state, setState }) {
             </a>
           ) : (
             d.source.title
+          )}
+          {/* "2026 / 년"처럼 중간에서 줄이 나뉘지 않게 한 덩어리로 둔다(아트보드 폭 362px 안에 들어가는 길이). */}
+          {sourceNote(d.source) && (
+            <>
+              {" "}
+              <span className="whitespace-nowrap">{`(${sourceNote(d.source)})`}</span>
+            </>
           )}
           {". 필수는 편성표의 전공기초·전공필수예요. 4학년에는 졸업 과제를 해요."}
         </p>
