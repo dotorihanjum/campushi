@@ -1,5 +1,6 @@
 // 여러 화면이 같이 쓰는 부품과 도우미(탭바, 과목 카드, 학년 칩, 증명서 틀, 메뉴 줄 등). 한 화면만 쓰는 것은 그 화면 파일에 둔다.
 import { useEffect, useState } from "react";
+import { hasBatchim } from "../korean.js";
 import { icon } from "../assets.js";
 import { Mask } from "../ui.jsx";
 import { departmentsOf, courseKey, progressOf } from "../model.js";
@@ -34,12 +35,7 @@ export function useGuard(ok, nav, active) {
   }, [ok, nav, active]);
 }
 
-// 마지막 글자에 받침이 있는지. 숫자는 읽는 소리로 본다(영·일·삼·육·칠·팔은 받침이 있다).
-const hasBatchim = (word) => {
-  if (/[0-9]$/.test(word)) return "013678".includes(word[word.length - 1]);
-  const code = word.charCodeAt(word.length - 1);
-  return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0;
-};
+// 조사: 받침은 korean.js의 hasBatchim 한 곳에서 본다(#67).
 export const josa = (word, withBatchim, without) => word + (hasBatchim(word) ? withBatchim : without);
 
 export function useCountUp(target, ms = 1100, startDelay = 400) {

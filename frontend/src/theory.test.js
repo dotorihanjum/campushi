@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { cleanGame, isAnswer, questionsOf } from "./lessonGames.js";
+import { copula } from "./korean.js";
 import { ROUNDS, meaningHint, revealsUnit, roundTitles, roundTypesOf, termsByUnit, theoryRounds } from "./theory.js";
 
 // 형식 검사용 예시 은행. 서비스 데이터가 아니다.
@@ -267,4 +268,29 @@ test("서비스 은행 전체: 분류하기 힌트에 따옴표가 연달아 붙
   assert.equal(banks, 15);
   // 지금 은행에서 뜻에 따옴표(프라임 포함)가 있는 용어는 3개다(이산구조 2, 논리회로 1).
   assert.equal(quoted, 3);
+});
+
+test("서비스 은행 전체: 한글로 끝나는 말의 조사는 그대로이고, 0으로 끝나는 뜻 3개는 '이에요'다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const lines = readFileSync(new URL("../../backend/data/theory_banks.jsonl", import.meta.url), "utf8").split("\n").filter(Boolean);
+  // 고치기 전 규칙(받침 있는 한글로 끝날 때만 "이에요").
+  const before = (text) => {
+    const code = text.trim().charCodeAt(text.trim().length - 1);
+    return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0 ? "이에요" : "예요";
+  };
+  const digits = [];
+  for (const line of lines) {
+    const raw = JSON.parse(line);
+    if (raw.status !== "verified") continue;
+    const bank = cleanGame({ ...raw, type: "theory" });
+    for (const text of [...bank.terms.flatMap((t) => [t.term, t.meaning]), ...bank.units]) {
+      if (/[가-힣]$/.test(text.trim())) assert.equal(copula(text), before(text), `${raw.course_name}: ${text}`);
+      if (/[0-9]$/.test(text.trim())) digits.push(text);
+    }
+    for (const t of bank.terms.filter((item) => /0$/.test(item.meaning.trim()))) {
+      assert.match(meaningHint(t.meaning), /이에요\.$/, `${raw.course_name}: ${t.meaning}`);
+      assert.match(isAnswer(t.meaning), /’이에요$/);
+    }
+  }
+  assert.deepEqual(digits.sort(), ["det(A−λI)=0", "닫힌 경로를 돌면 전압의 합은 0", "한 마디에 드나드는 전류의 합은 0"].sort());
 });

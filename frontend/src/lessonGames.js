@@ -1,5 +1,6 @@
 // 미리 만들어 둔 유형별 연습 문제의 형식 검사와 채점. 화면은 TypedGames.jsx에 있다.
 // 고정 문제는 backend/data/lesson_games.jsonl, 이론 문제 은행은 backend/data/theory_banks.jsonl에 넣는다. 형식과 상한은 backend/SOURCE.md에 있다(여기 검사와 같아야 한다).
+import { copula } from "./korean.js";
 
 export const BLANK = "___";
 
@@ -214,12 +215,8 @@ export function questionsOf(game, random = Math.random) {
   return [];
 }
 export const answerOf = (question) => question.options.find((option) => option.correct).label;
-// 받침이 있는 한글로 끝나면 "이에요", 그 밖에는 "예요"를 붙인다.
-export function isAnswer(label) {
-  const code = label.trim().charCodeAt(label.trim().length - 1);
-  const closed = code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0;
-  return `‘${label}’${closed ? "이에요" : "예요"}`;
-}
+// 정답 문장의 "‘…’이에요/예요". 조사는 korean.js의 copula로 고른다(숫자는 읽는 소리, #67).
+export const isAnswer = (label) => `‘${label}’${copula(label)}`;
 // picks: 문항마다 고른 보기의 번호.
 export const countCorrect = (questions, picks) =>
   questions.filter((question, i) => question.options[picks[i]]?.correct).length;

@@ -1,6 +1,7 @@
 // 이론 수업 퀴즈: 과목의 문제 은행(lessonGames.js의 theory 형식)에서 체험할 때마다 라운드 3개를 새로 뽑는다.
 // 라운드마다 유형이 다르고, 문항도 은행에서 무작위로 고른다. 화면은 TypedGames.jsx의 Theory다.
 import { isAnswer, shuffle } from "./lessonGames.js";
+import { copula } from "./korean.js";
 
 export const ROUNDS = 3;
 export const roundTitles = {
@@ -127,15 +128,13 @@ const makers = {
 const QUOTES = /['"‘’“”]/;
 /**
  * 분류하기 힌트 문장: "뜻은 ‘…’이에요." 뜻 안에 이미 따옴표가 있으면(예: '모든'·'어떤'이 붙은 명제, (A+B)'=A'B') 바깥 따옴표가
- * 겹쳐 보이므로 빼고 "뜻은 …이에요."로 쓴다(#62). 조사는 뜻 끝의 따옴표·마침표를 빼고 남은 마지막 글자의 받침으로 고른다.
+ * 겹쳐 보이므로 빼고 "뜻은 …이에요."로 쓴다(#62). 조사는 korean.js의 copula로 고른다(끝의 따옴표·마침표는 건너뛰고, 숫자는 읽는 소리, #67).
  * 은행의 뜻은 고치지 않는다.
  */
 export function meaningHint(meaning) {
   const text = String(meaning).trim();
   if (!QUOTES.test(text)) return `뜻은 ${isAnswer(text)}.`;
-  const code = text.replace(/['"‘’“”.\s]+$/, "").slice(-1).charCodeAt(0);
-  const closed = code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0;
-  return `뜻은 ${text}${closed ? "이에요" : "예요"}.`;
+  return `뜻은 ${text}${copula(text)}.`;
 }
 
 /**

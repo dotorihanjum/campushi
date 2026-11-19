@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { hasBatchim } from "./korean.js";
 import { img } from "./assets.js";
 import { T } from "./ui.jsx";
 import { moveStep, rightPlaces } from "./lessonGames.js";
@@ -23,13 +24,6 @@ const PLAN_FIELDS = ["topic", "reason", "method"];
 // 점수는 { correct, total }(처음 고른 답 기준으로 맞힌 수)이고 성적은 grades.js가 매긴다. 점수를 매길 수 없는 체험은 "P"다.
 
 const sceneImages = { sand: img.sceneSand, paint: img.scenePaint };
-// 마지막 글자에 받침이 있는지. 숫자는 읽는 소리로 본다(영·일·삼·육·칠·팔은 받침이 있다).
-const hasBatchim = (word) => {
-  const last = word[word.length - 1];
-  if (/[0-9]/.test(last)) return "013678".includes(last);
-  const code = word.charCodeAt(word.length - 1);
-  return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0;
-};
 // "8 > 3이라서", "9 > 4라서"
 const because = (word) => `${word}${hasBatchim(word) ? "이라서" : "라서"}`;
 
