@@ -78,6 +78,16 @@ export const initialState = {
 const text = (value, limit = 200) => (typeof value === "string" && value.trim() && value.length <= limit ? value : null);
 const subjectList = (value) => (Array.isArray(value) ? [...new Set(value.filter((s) => text(s)))] : []);
 export const courseKey = (id, subject) => `${id}|${subject}`;
+// 실제로 있는 날짜의 "YYYY-MM-DD"만 그대로 돌려준다. 아니면 null.
+const isoDate = (value) => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : null;
+};
+
+/** 학과 출처의 교육과정 연도·확인일 한 줄("2026년 교육과정 · 2026-11-03 확인"). 둘 다 없으면 "". */
+export const sourceNote = (source) =>
+  [source?.year ? `${source.year}년 교육과정` : "", source?.checkedAt ? `${source.checkedAt} 확인` : ""].filter(Boolean).join(" · ");
 
 /** 서버의 학과 데이터를 화면에서 쓰는 학과로 만든다. 형식이 틀리면 null. */
 export function createDepartment(raw) {
@@ -116,6 +126,8 @@ export function createDepartment(raw) {
       title: text(raw.source?.title) || "",
       url: url && /^https:\/\//.test(url) ? url : "",
       year: Number.isInteger(raw.source?.curriculum_year) ? raw.source.curriculum_year : null,
+      // 출처 문서를 확인한 날. 없거나 형식이 틀리면 null(학과는 그대로 연다).
+      checkedAt: isoDate(raw.source?.checked_at),
     },
     // 공식 편성표의 학년별 과목.
     years,
