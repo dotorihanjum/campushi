@@ -12,6 +12,7 @@ import { gameFor } from "../games.js";
 import { termsByUnit } from "../theory.js";
 import { LAB_SCREENS } from "../labs/components.js";
 import { LabSummary } from "../labs/parts/LabSummary.jsx";
+import { FOCUS_RING } from "../focus.js";
 import { CreditPill, gradeText, josa, useGuard, view } from "./shared.jsx";
 
 const STEPS = ["배우기", "직접 해보기", "기록"];
@@ -176,8 +177,14 @@ export function Lesson({ active, nav, route, state, setState }) {
   const [reached, setReached] = useState(step);
   const [notice, setNotice] = useState("");
   const [shake, setShake] = useState(0);
-  // 진짜 수업 체험을 끝낸 뒤 요약에서 "체험 다시 해보기"를 눌렀는지. 다시 끝내기 전까지 이전 결과(plays)는 그대로 둔다.
-  const [redo, setRedo] = useState(false);
+  // 진짜 수업 체험(labs)의 직접 해보기 화면(#63).
+  // labOpen: 끝낸 결과(plays)가 있어도 요약 대신 체험 화면을 보여 준다("체험 다시 해보기"를 눌렀거나, 방금 끝내 마지막 라운드 결과를 읽는 중).
+  // labDone: 이 화면에서 방금 끝냈다. 체험의 마지막 결과(맞았어요·실행 결과) 아래에 "결과 보기"를 두고, 누르면 요약으로 넘어간다.
+  // 다시 끝내기 전까지 이전 결과(plays)는 그대로 둔다.
+  const [labOpen, setLabOpen] = useState(false);
+  const [labDone, setLabDone] = useState(false);
+  const retried = useRef(false);
+  const resultButton = useRef(null);
   // 수업을 마치고 받은 결과: { grade, percent, best, opened, graduated }.
   const [result, setResult] = useState(null);
   const timer = useRef(0);
@@ -192,6 +199,19 @@ export function Lesson({ active, nav, route, state, setState }) {
     if (scroller.current) scroller.current.scrollTop = 0;
     heading.current?.focus({ preventScroll: true });
   }, [step, result]);
+  // "체험 다시 해보기"를 누르면 다시 열린 체험의 시작(맨 위 체험 제목)에 초점을 둔다(#63).
+  useEffect(() => {
+    if (!labOpen || !retried.current) return;
+    retried.current = false;
+    if (scroller.current) scroller.current.scrollTop = 0;
+    heading.current?.focus({ preventScroll: true });
+  }, [labOpen]);
+  // 체험을 끝냈을 때 그 화면의 버튼이 사라져 초점을 잃었으면 "결과 보기"에 둔다(체험이 초점을 갖고 있으면 그대로 둔다).
+  useEffect(() => {
+    if (!labDone) return;
+    const now = document.activeElement;
+    if (!now || now === document.body || !scroller.current?.contains(now)) resultButton.current?.focus({ preventScroll: true });
+  }, [labDone]);
   if (!ok) return null;
 
   const { d, final } = v;
@@ -245,7 +265,8 @@ export function Lesson({ active, nav, route, state, setState }) {
   const again = () => {
     moved.current = true;
     setResult(null);
-    setRedo(false);
+    setLabOpen(false);
+    setLabDone(false);
     setDraft("");
     setStep(0);
     setReached(0);
@@ -273,7 +294,7 @@ export function Lesson({ active, nav, route, state, setState }) {
       >
         {header}
         <div ref={scroller} className="flow no-scrollbar absolute bottom-[174px] left-0 top-[100px] w-full overflow-y-auto px-[20px] pt-[18px]">
-          <h1 ref={heading} tabIndex={-1} className="a-up text-[26px] font-bold leading-[36px] text-navy outline-none">
+          <h1 ref={heading} tabIndex={-1} className={`a-up rounded-[6px] text-[26px] font-bold leading-[36px] text-navy ${FOCUS_RING}`}>
             {`${subject} 성적`}
           </h1>
           <p className="a-pop mt-[18px] text-[56px] font-extrabold leading-[64px] text-mint-deep" style={delay(0.1)} aria-label={`이번 성적 ${result.grade}`}>
@@ -334,7 +355,8 @@ export function Lesson({ active, nav, route, state, setState }) {
   const go = (next) => {
     moved.current = true;
     setNotice("");
-    setRedo(false);
+    setLabOpen(false);
+    setLabDone(false);
     setStep(next);
     setReached((r) => Math.max(r, next));
   };
@@ -453,33 +475,56 @@ export function Lesson({ active, nav, route, state, setState }) {
     );
   } else if (step === 1 && mode === "lab") {
     // 진짜 수업 체험도 다른 체험처럼 이 단계 안에 들어간다. 화면 코드는 그 과목에 들어갈 때만 불러온다.
-    // 마지막 라운드를 끝내면(체험 화면이 onComplete를 부르면) 체험 화면 대신 끝 요약을 보여 준다. 단계 칩으로 돌아와도
-    // 끝낸 결과(plays)가 있으면 요약을 보여 주고, "체험 다시 해보기"를 누르면 체험 화면을 처음부터 다시 연다.
+    // 체험 화면은 마지막 라운드를 맞히면 바로 onComplete를 부른다(결과 저장). 그 뒤에도 체험 화면(마지막 결과)을 그대로 두고
+    // 아래에 "결과 보기"를 보여 주며, 누르면 끝 요약으로 넘어간다(#63). 그래서 체험 화면에는 따로 "결과 보기"를 두지 않는다.
+    // 단계 칩으로 돌아와도 끝낸 결과(plays)가 있으면 요약을 보여 주고, "체험 다시 해보기"를 누르면 체험 화면을 처음부터 다시 연다.
     const LabScreen = LAB_SCREENS[lab.id];
     body = (
       <div className="a-up mt-[22px]">
-        {play && !redo ? (
-          <LabSummary takeaway={lab.takeaway} onRetry={() => setRedo(true)} />
+        {play && !labOpen ? (
+          <LabSummary
+            takeaway={lab.takeaway}
+            onRetry={() => {
+              retried.current = true;
+              setLabDone(false);
+              setLabOpen(true);
+            }}
+          />
         ) : (
-          <LabBoundary>
-            <Suspense
-              fallback={
-                <p className="text-[13.5px] text-ink-3" role="status">
-                  체험을 불러오는 중이에요…
-                </p>
-              }
-            >
-              <LabScreen
-                lab={lab}
-                subject={subject}
-                onComplete={(summary, score) => {
-                  setNotice("");
-                  setRedo(false);
-                  setState((s) => savePlay(s, d.id, subject, game, summary, score));
+          <>
+            <LabBoundary>
+              <Suspense
+                fallback={
+                  <p className="text-[13.5px] text-ink-3" role="status">
+                    체험을 불러오는 중이에요…
+                  </p>
+                }
+              >
+                <LabScreen
+                  lab={lab}
+                  subject={subject}
+                  onComplete={(summary, score) => {
+                    setNotice("");
+                    setLabOpen(true);
+                    setLabDone(true);
+                    setState((s) => savePlay(s, d.id, subject, game, summary, score));
+                  }}
+                />
+              </Suspense>
+            </LabBoundary>
+            {labDone && (
+              <button
+                ref={resultButton}
+                className="button mt-[18px] w-full"
+                onClick={() => {
+                  setLabDone(false);
+                  setLabOpen(false);
                 }}
-              />
-            </Suspense>
-          </LabBoundary>
+              >
+                결과 보기
+              </button>
+            )}
+          </>
         )}
       </div>
     );
@@ -555,7 +600,7 @@ export function Lesson({ active, nav, route, state, setState }) {
         style={{ bottom: "calc(130px - var(--bt) * 1px)", maskImage: FADE_END, WebkitMaskImage: FADE_END }}
       >
         <div key={step}>
-          <h1 ref={heading} tabIndex={-1} className="a-up text-[26px] font-bold leading-[36px] text-navy outline-none">
+          <h1 ref={heading} tabIndex={-1} className={`a-up rounded-[6px] text-[26px] font-bold leading-[36px] text-navy ${FOCUS_RING}`}>
             {headline}
           </h1>
           <p className="a-up mt-[6px] text-[14px] leading-[22px] text-gray" style={delay(0.06)}>
