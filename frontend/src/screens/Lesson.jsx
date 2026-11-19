@@ -20,7 +20,7 @@ const STEPS = ["배우기", "직접 해보기", "기록"];
 const FADE_END = "linear-gradient(to bottom, #000 calc(100% - 20px), transparent)";
 
 /** 수업 단계 칩. 지나온 단계는 ✓를 붙이고 눌러서 다시 볼 수 있다. */
-function StepChips({ step, reached, onGo }) {
+function StepChips({ step, reached, onGo, last = STEPS.length - 1 }) {
   return (
     <ol className="absolute left-[20px] top-[100px] flex gap-[8px]" aria-label="수업 단계">
       {STEPS.map((label, i) => {
@@ -30,7 +30,7 @@ function StepChips({ step, reached, onGo }) {
           <li key={label}>
             <button
               onClick={() => onGo(i)}
-              disabled={current || i > reached}
+              disabled={current || i > reached || i > last}
               aria-current={current ? "step" : undefined}
               className={`pressable flex h-[34px] items-center gap-[4px] rounded-full border px-[13px] text-[13.5px] font-semibold transition-colors ${
                 current
@@ -173,7 +173,10 @@ export function Lesson({ active, nav, route, state, setState }) {
   const quiz = useLessonGame(typed || warmup ? subject : null);
   const [draft, setDraft] = useState(() => (ok ? (state.drafts[key] ?? "") : ""));
   // 체험이나 기록을 이미 시작한 수업은 기록 단계부터 이어간다.
-  const [step, setStep] = useState(() => (ok && (state.plays[key] || state.drafts[key]) ? 2 : 0));
+  // 진짜 수업 체험(labs)은 끝낸 결과만 있고 기록을 쓰기 시작하지 않았으면 직접 해보기 단계(끝 요약)부터 연다. 요약은 건너뛸 수 없다(#63).
+  const [step, setStep] = useState(() =>
+    !ok ? 0 : lab && state.plays[key] && !state.drafts[key] ? 1 : state.plays[key] || state.drafts[key] ? 2 : 0,
+  );
   const [reached, setReached] = useState(step);
   const [notice, setNotice] = useState("");
   const [shake, setShake] = useState(0);
@@ -606,7 +609,8 @@ export function Lesson({ active, nav, route, state, setState }) {
       }
     >
       {header}
-      <StepChips step={step} reached={reached} onGo={go} />
+      {/* 실습의 마지막 결과를 보는 중("결과 보기" 전)에는 기록 칩도 막는다. 요약을 거쳐야 기록으로 간다(#63). */}
+      <StepChips step={step} reached={reached} onGo={go} last={mode === "lab" && labDone ? 1 : STEPS.length - 1} />
       <div
         ref={scroller}
         className="flow no-scrollbar absolute left-0 top-[146px] w-full overflow-y-auto px-[20px] pb-[20px] pt-[18px]"
