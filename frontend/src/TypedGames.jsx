@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { OrderTemplate } from "./Templates.jsx";
+import { FOCUS_RING, OrderTemplate } from "./Templates.jsx";
 import { pick } from "./korean.js";
 import {
   BLANK,
@@ -24,8 +24,7 @@ import { ROUNDS, roundTitles, theoryRounds } from "./theory.js";
 // 미리 만들어 둔 연습 문제의 유형별 화면. 문제(game)는 Games.jsx가 받아서 넘겨준다.
 // after: 이론 퀴즈의 라운드로 쓸 때, 다 푼 뒤 "다시 해보기" 대신 보여줄 것(다음 라운드 버튼 등).
 
-// 코드로 초점을 옮기는 글(문항 글, 라운드 결과 문장)의 테두리: 키보드로 왔을 때만(:focus-visible) 민트 2px로 보인다(#61, #65).
-const FOCUS_RING = "outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-[3px] focus-visible:outline-mint-deep";
+// 코드로 초점을 옮기는 글의 테두리(FOCUS_RING)는 Templates.jsx에 있다(#61, #65, #69).
 
 // focus: 키보드로 "결과 보기"를 눌러 넘어왔을 때 결과 문장(맞힌 수)에 초점을 둔다(#61). 버튼이 사라져도 초점이 화면 맨 위로
 // 떨어지지 않고, 낭독기가 맞힌 수를 읽고, Tab 한 번에 "다음 라운드"로 간다. 초점 테두리는 키보드로 왔을 때만 보인다(:focus-visible).
