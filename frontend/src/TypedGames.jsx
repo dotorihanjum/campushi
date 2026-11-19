@@ -38,7 +38,7 @@ function Closing({ children, explanation, onRestart, after, focus = false }) {
       <p
         ref={summary}
         tabIndex={focus ? -1 : undefined}
-        className="body-copy rounded-[6px] outline-none focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-mint-deep"
+        className="body-copy rounded-[6px] outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-[3px] focus-visible:outline-mint-deep"
       >
         <strong>{children}</strong> {explanation}
       </p>
