@@ -80,10 +80,17 @@ export function My({ nav, state, setState, auth }) {
     setProfileError("");
     setSheet("profile");
   };
-  const saveProfile = (e) => {
+  const saveProfile = async (e) => {
     e.preventDefault();
     if (photoBusy) return;
     const next = cleanNickname(name);
+    if (auth.user) {
+      setPhotoBusy(true); setProfileError("");
+      try { await auth.records.saveProfile(next, photo); setSheet(null); say("프로필을 계정에 저장했어요."); }
+      catch (error) { setProfileError(error.message); }
+      finally { setPhotoBusy(false); }
+      return;
+    }
     const result = writeProfile(openStorage(() => window.localStorage), STORAGE_KEY, {
       next: { ...state, nickname: next, profilePhoto: photo },
       current: state,
@@ -165,7 +172,7 @@ export function My({ nav, state, setState, auth }) {
             </button>
           </div>
           <p className="my-photo-help">{photo ? "사진 가운데를 정사각형으로 맞춰 보여드려요." : "기본 캐릭터는 학년이 올라가면 함께 바뀌어요."}</p>
-          <p className="my-photo-help">JPG·PNG·WebP, 최대 10MB · 이 브라우저에만 저장돼요.</p>
+          <p className="my-photo-help">JPG·PNG·WebP, 최대 10MB · {auth.user ? "계정에 저장돼요." : "이 브라우저에만 저장돼요."}</p>
           {photoBusy && <p role="status" className="my-photo-help">사진을 준비하고 있어요…</p>}
           {profileError && <p role="alert" className="my-profile-error">{profileError}</p>}
           <label htmlFor="nickname" className="block">
@@ -194,7 +201,7 @@ export function My({ nav, state, setState, auth }) {
     ),
     storage: (
       <Dialog title="기록은 어디에 저장되나요?" onClose={close} actions={closeButton}>
-        체험 기록, 한 줄 기록, 크레딧, 이름, 프로필 사진은 지금 쓰는 이 브라우저에만 저장돼요. 다른 기기나 브라우저에서는 보이지 않고, 브라우저의 사이트 데이터를 지우면 함께 사라져요. 남겨 두고 싶은 기록은 체험 기록의 &lsquo;리포트 내려받기&rsquo;로 저장해 주세요.
+        {auth.user ? "프로필과 체험 기록은 계정 서버에 저장돼요. 다른 기기에서 같은 계정으로 로그인하면 이어볼 수 있어요. 연결이 끊기면 이 기기에 보관했다가 다시 보내요. 크레딧은 서버에서 확인한 잔액을 표시해요." : "체험 기록, 한 줄 기록, 크레딧, 이름, 프로필 사진은 이 브라우저에만 저장돼요. 로그인하면 기존 체험 기록을 계정으로 가져올 수 있어요. 기존 크레딧은 옮겨지지 않아요."}
       </Dialog>
     ),
     help: (
@@ -240,7 +247,7 @@ export function My({ nav, state, setState, auth }) {
               className="button danger"
               onClick={() => {
                 // 학과 데이터는 남겨 두어 처음부터 다시 시작해도 바로 학과를 볼 수 있게 한다.
-                setState((s) => ({ ...structuredClone(initialState), catalog: s.catalog, creditedAt: s.creditedAt || {} }));
+                setState((s) => ({ ...structuredClone(initialState), catalog: s.catalog, creditedAt: s.creditedAt || {} }), { reset: true });
                 nav.reset(["splash"]);
               }}
             >
@@ -371,7 +378,7 @@ export function My({ nav, state, setState, auth }) {
               <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4" />
               <path d="M8 7v4M8 4.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
-            <span>기록은 이 브라우저에만 저장돼요</span><Chevron />
+            <span>{auth.user ? "기록을 계정에 저장해요" : "기록은 이 브라우저에만 저장돼요"}</span><Chevron />
           </button>
         </section>
 

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from backend import accounts
 from backend.login import signing_key, same_origin
-from backend.record_rules import empty_state, imported
+from backend.record_rules import empty_state, imported, apply_operation
 
 router=APIRouter(prefix='/api/me/records')
 
@@ -15,6 +15,12 @@ class ImportRequest(BaseModel):
     operation_id: UUID
     scope: str=Field(min_length=64,max_length=64)
     state: dict
+
+class OperationRequest(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    operation_id: UUID
+    scope: str=Field(min_length=64,max_length=64)
+    changes: list[dict]=Field(min_length=1,max_length=20)
 
 def owner(store,request):
     user=accounts.current_user(store,request,internal=True)
@@ -30,8 +36,8 @@ def public_document(doc,scope):
 def commit(store,user_id,operation_id,change):
     doc=document(store,user_id)
     for _ in range(5):
-        state=change({**empty_state(),**doc['state']})
-        saved=store.call('POST','rpc/commit_account_records',body={'p_user_id':user_id,'p_revision':doc['revision'],'p_operation_id':str(operation_id),'p_state':state}).json()
+        state,awards=change({**empty_state(),**doc['state']})
+        saved=store.call('POST','rpc/commit_account_records',body={'p_user_id':user_id,'p_revision':doc['revision'],'p_operation_id':str(operation_id),'p_state':state,'p_awards':awards}).json()
         if saved['status']!='conflict': return saved
         doc=saved
     raise HTTPException(409,'다른 기기에서 기록을 저장 중이에요. 잠시 후 다시 시도해 주세요.')
@@ -49,5 +55,22 @@ def import_records(body:ImportRequest,request:Request,store=Depends(accounts.acc
     from backend.main import department_list
     raw=body.state
     if any(not isinstance(raw.get(key,{}),dict) for key in ('journeys','records','notes')): raise HTTPException(400,'가져올 기록을 확인해 주세요.')
-    saved=commit(store,user_id,body.operation_id,lambda state: imported(state,raw,department_list()['departments'],int(time.time()*1000)))
+    saved=commit(store,user_id,body.operation_id,lambda state: (imported(state,raw,department_list()['departments'],int(time.time()*1000)),[]))
     return public_document(saved,scope)
+
+@router.post('/operations')
+def save_operations(body:OperationRequest,request:Request,store=Depends(accounts.account_store)):
+    same_origin(request)
+    user_id,scope=owner(store,request)
+    if not hmac.compare_digest(scope,body.scope): raise HTTPException(409,'로그인한 계정이 바뀌었어요. 다시 확인해 주세요.')
+    # Check replay before running rules (e.g. a repeated profile update has an old expected revision).
+    replay=store.call('GET','record_operations',params={'user_id':'eq.'+user_id,'operation_id':'eq.'+str(body.operation_id),'select':'operation_id','limit':'1'}).json()
+    if replay: return public_document(document(store,user_id),scope)
+    from backend.main import department_list
+    now=int(time.time()*1000); catalog=department_list()['departments']
+    def change(state):
+        awards=[]
+        for op in body.changes:
+            state,new_awards=apply_operation(state,op,catalog,now); awards.extend(new_awards)
+        return state,awards
+    return public_document(commit(store,user_id,body.operation_id,change),scope)

@@ -99,3 +99,56 @@ def imported(state,raw,catalog,now):
         result['profilePhoto']=photo(raw['profilePhoto'])
     result['studying']=result['studying'] or next(iter(result['journeys']),None)
     return result
+
+def apply_operation(state,op,catalog,now):
+    if not isinstance(op,dict): fail()
+    allowed={
+        'enroll':{'kind','department','enrolledAt'}, 'leave':{'kind','department'},
+        'complete':{'kind','department','subject','score','note'},
+        'profile':{'kind','nickname','photo','expected'},
+        'note':{'kind','department','subject','text'}, 'draft':{'kind','department','subject','text'},
+        'reset':{'kind'}, 'preferences':{'kind','campus','studying'},
+    }
+    kind=op.get('kind')
+    if kind not in allowed or set(op)-allowed[kind]: fail()
+    result=copy.deepcopy(state); awards=[]
+    if kind=='profile':
+        if type(op.get('expected'))!=int or op['expected']!=state.get('profileRevision',0):
+            raise HTTPException(409,'다른 기기에서 프로필을 바꿨어요. 최신 프로필을 확인하고 다시 저장해 주세요.')
+        nickname=' '.join(text(op.get('nickname'),100).split())
+        if len(nickname)>12: fail('이름은 12자 이내로 작성해 주세요.')
+        result.update(nickname=nickname,profilePhoto=photo(op.get('photo')),profileRevision=state.get('profileRevision',0)+1)
+    elif kind=='enroll':
+        id=op.get('department')
+        if id not in {d['id'] for d in catalog}: fail()
+        result['journeys'].setdefault(id,{'enrolledAt':now})
+    elif kind=='leave':
+        id=op.get('department')
+        if id not in {d['id'] for d in catalog}: fail()
+        result['journeys'].pop(id,None)
+        for name in ('records','notes','drafts','exempt'):
+            result[name]={k:v for k,v in result[name].items() if not k.startswith(id+'|')}
+        if result['studying']==id: result['studying']=next(iter(result['journeys']),None)
+    elif kind=='reset':
+        result={**empty_state(),'credits':state['credits'],'creditedAt':state['creditedAt'],'profileRevision':state.get('profileRevision',0)+1}
+    elif kind=='preferences':
+        if op.get('campus')!='khu-global' or op.get('studying') is not None and op['studying'] not in state['journeys']: fail()
+        result.update(campus=op['campus'],studying=op.get('studying'))
+    else:
+        d,key=course(result,catalog,op.get('department'),op.get('subject'))
+        if kind in ('note','draft'):
+            result['notes' if kind=='note' else 'drafts'][key]=text(op.get('text'),3000)
+        else:
+            if not available(d,op['subject']): fail('아직 체험이 없는 과목이에요.')
+            got=grade(op.get('score'))
+            if got['grade']=='P' and op['subject'] in d.get('games',{}) and op['subject'] not in (d.get('practice'),d['final']): fail()
+            old=result['records'].get(key)
+            best=better(old,got) if old else got
+            result['records'][key]={**best,'attempts':(old['attempts'] if old else 0)+1,'last':got['grade'],'source':'earned'}
+            note=text(op.get('note',''),3000).strip()
+            if note: result['notes'][key]=note
+            result['drafts'].pop(key,None)
+            if passes(got['grade']) and now-result['creditedAt'].get(key,-7*86400000)>=7*86400000:
+                result['credits']+=5; result['creditedAt'][key]=now
+                awards.append({'course_key':key,'awarded_at':now})
+    return result,awards

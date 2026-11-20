@@ -15,6 +15,8 @@ class RecordStore:
     def __init__(self):
         self.docs={}; self.operations=set(); self.conflicts=0
     def call(self,method,table,params=None,body=None,prefer=None):
+        if table=='record_operations':
+            return httpx.Response(200,json=[{'operation_id':params['operation_id'][3:]}] if (params['user_id'][3:],params['operation_id'][3:]) in self.operations else [])
         if table=='account_records':
             value=self.docs.get(params['user_id'][3:]); return httpx.Response(200,json=[value] if value else [])
         if table=='rpc/commit_account_records':
@@ -66,3 +68,36 @@ class RecordTest(unittest.TestCase):
         self.assertTrue(photo(value).startswith('data:image/jpeg;base64,'))
         raw=self.guest(); raw['profilePhoto']=value
         self.assertEqual(self.import_request(raw).status_code,200)
+
+    def operation(self,changes,operation_id=None):
+        return self.client.post('/api/me/records/operations',json={'scope':self.scope,'operation_id':operation_id or str(uuid4()),'changes':changes},headers=HEADERS)
+    def test_live_pass_after_import_grants_once_and_retries_do_not_increase_attempts(self):
+        self.import_request(); op=str(uuid4())
+        changes=[{'kind':'complete','department':self.id,'subject':self.subject,'score':{'correct':10,'total':10},'note':'내 기록'}]
+        first=self.operation(changes,op); self.assertEqual(first.status_code,200,first.text)
+        self.assertEqual(first.json()['state']['credits'],5)
+        again=self.operation(changes,op).json()['state']; self.assertEqual(again['credits'],5)
+        self.assertEqual(again['records'][self.id+'|'+self.subject]['attempts'],3)
+        next_attempt=self.operation(changes).json()['state']; self.assertEqual(next_attempt['credits'],5)
+        self.assertEqual(next_attempt['records'][self.id+'|'+self.subject]['attempts'],4)
+    def test_two_devices_merge_attempts_and_keep_the_better_grade(self):
+        self.import_request()
+        for correct in (7,9):
+            result=self.operation([{'kind':'complete','department':self.id,'subject':self.subject,'score':{'correct':correct,'total':10}}])
+            self.assertEqual(result.status_code,200,result.text)
+        row=result.json()['state']['records'][self.id+'|'+self.subject]
+        self.assertEqual(row['attempts'],4); self.assertEqual(row['grade'],'A+')
+    def test_clients_cannot_assign_balance_or_arbitrary_unlocks(self):
+        r=self.operation([{'kind':'preferences','campus':'khu-global','studying':None,'credits':1000}]); self.assertEqual(r.status_code,400)
+        r=self.operation([{'kind':'complete','department':self.id,'subject':self.catalog[0]['final'],'score':'P'}]); self.assertEqual(r.status_code,400)
+        r=self.operation([{'kind':'enroll','department':self.id},{'kind':'complete','department':self.id,'subject':self.subject,'score':'P'}]); self.assertEqual(r.status_code,400)
+        self.assertEqual(self.client.get('/api/me/records').json()['state']['journeys'],{})
+    def test_profile_conflict_keeps_existing_server_profile(self):
+        first=self.operation([{'kind':'profile','nickname':'학생 A','photo':None,'expected':0}]); self.assertEqual(first.status_code,200,first.text)
+        self.assertEqual(self.operation([{'kind':'profile','nickname':'학생 B','photo':None,'expected':0}]).status_code,409)
+        self.assertEqual(self.client.get('/api/me/records').json()['state']['nickname'],'학생 A')
+    def test_leave_and_reset_keep_server_credit_history(self):
+        self.import_request(); self.operation([{'kind':'complete','department':self.id,'subject':self.subject,'score':{'correct':10,'total':10}}])
+        saved=self.operation([{'kind':'leave','department':self.id}]).json()['state']
+        self.assertEqual(saved['records'],{}); self.assertEqual(saved['credits'],5); self.assertTrue(saved['creditedAt'])
+        saved=self.operation([{'kind':'reset'}]).json()['state']; self.assertEqual(saved['credits'],5); self.assertEqual(saved['nickname'],'')

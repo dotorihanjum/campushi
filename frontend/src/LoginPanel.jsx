@@ -30,8 +30,9 @@ export function LoginPanel({ auth, portalTarget }) {
     <div className="my-section-heading"><h2>{auth.user ? "로그인한 계정" : "기록을 이어갈 준비"}</h2></div>
     {auth.loading ? <p className="my-secondary" role="status">계정을 확인하고 있어요…</p> : auth.user ? <>
       <p className="my-secondary">{auth.user.email || `${PROVIDER_NAMES[auth.user.provider]} 계정으로 로그인했어요.`}</p>
-      <p className="my-secondary" role="status">{auth.records?.phase === "loading" ? "계정 기록을 불러오고 있어요…" : "프로필과 체험 기록을 계정에 보관해요."}</p>
-      {auth.records?.error && <p role="alert" className="my-profile-error">{auth.records.error}</p>}
+      <p className="my-secondary" role="status">{auth.records?.phase === "loading" ? "계정 기록을 불러오고 있어요…" : auth.records?.phase === "saving" ? "기록을 저장하고 있어요…" : auth.records?.pending ? "연결되면 저장할게요." : "프로필과 체험 기록을 계정에 저장했어요."}</p>
+      {auth.records?.error && <><p role="alert" className="my-profile-error">{auth.records.error}</p><button className="my-action" disabled={busy} onClick={() => run(auth.records.retry)}>저장 다시 시도</button></>}
+      {auth.records?.memoryOnly && auth.records?.pending > 0 && <p role="alert" className="my-profile-error">이 브라우저에 임시 기록을 보관하지 못했어요. 저장될 때까지 창을 닫지 말아 주세요.</p>}
       {auth.records?.importAvailable && <><p className="my-secondary">이 브라우저에서 체험한 기록을 가져올 수 있어요. 크레딧은 옮겨지지 않아요. 이제부터 이수하면 쌓여요.</p><button className="my-action primary" disabled={busy} onClick={() => run(auth.records.importGuest)}>이 브라우저 기록 가져오기</button></>}
       {auth.records?.imported && <p role="status" className="my-secondary">기록을 가져왔어요. 크레딧은 옮겨지지 않아요. 이제부터 이수하면 쌓여요.</p>}
       <button className="my-action" onClick={() => run(auth.logout)} disabled={busy}>로그아웃</button>
