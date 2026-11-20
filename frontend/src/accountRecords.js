@@ -371,6 +371,24 @@ export class RecordSync {
       /* memory-only visit */
     }
   }
+  // #36 탈퇴: 서버 계정이 통째로 지워지므로 대기 중인 변경은 보내지 않는다. 다른 창이 새 변경을 더하지 못하게 먼저 잠그고,
+  // 서버가 탈퇴를 마친 뒤에만 이 계정의 기기 사본을 지운다. 실패하면 잠금을 풀고 아무것도 지우지 않는다.
+  async withdraw(deleteAccount) {
+    this.signal("lock");
+    try {
+      await deleteAccount();
+    } catch (error) {
+      this.signal("release");
+      throw error;
+    }
+    this.close();
+    try {
+      clearAccountCache(this.storage, this.doc.scope);
+    } catch {
+      /* UI is still cleared */
+    }
+    this.signal("ended");
+  }
   async logout(endSession, { discard = false } = {}) {
     this.signal("lock");
     try {

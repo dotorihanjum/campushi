@@ -67,3 +67,12 @@ backend/.venv/bin/python -m unittest backend.test_api
 기존 3개 마이그레이션 다음 `20261120000300_account_records.sql`과 `20261120000400_record_sync.sql`이 필요하다. Vercel 서버 전용 계정 키·정확한 `AUTH_BASE_URL`·이메일 발송 설정은 로그인 문서대로 준비한다. Pillow 12.3.0을 서버 의존성에 추가했다. CSP는 같은 서버 API와 data 이미지 경로를 쓰므로 바꾸지 않는다.
 
 검토용 초안: [#83 기록 이전](https://github.com/dotorihanjum/campushi/pull/83) → [#84 동기화](https://github.com/dotorihanjum/campushi/pull/84) → [#85 로그아웃](https://github.com/dotorihanjum/campushi/pull/85). 선행 로그인 #82·가입 #81 이후 순서대로 검토한다. 최종 별도 환경에서 로그아웃·재로그인 후에도 이수2과목·졸업1학과·사진·이름·크레딧5를 재확인했고 375×812 화면에서도 확인했다.
+
+## 회원 탈퇴 (#36)
+
+- `GET /api/me/withdraw`: 확인 화면용 요약. 크레딧은 `account_credit_balance`(지급 원장 합계), 학과·과목 성적·한 줄 기록·프로필 여부는 계정 문서에서 센다.
+- `POST /api/me/withdraw`: Origin·JSON 검사 후 본문 `{"confirm": true}`만 받는다(다른 필드는 400). 지울 계정은 세션 쿠키로만 정한다. `delete_account(user_id, token_hash)`가 그 세션의 주인일 때만 users 행을 지우고, cascade로 세션·로그인 수단·기록·작업·크레딧 원장이 한 트랜잭션에서 지워진다. users의 직접 DELETE 권한은 어느 역할에도 없다. 세션이 없거나 만료·이미 탈퇴(연타)면 401이고 아무것도 지우지 않는다. 성공하면 세션·인증 임시 쿠키를 모두 지운다.
+- user_id로 이어지지 않는 `auth_challenges`(무작위 해시, 최대 15분)·`auth_email_limits`(키로 해시한 메일 제한 값, 1시간)는 개인정보가 아니어서 남기되, 탈퇴할 때 만료된 행을 함께 정리한다.
+- 로그인 수단이 지워지므로 같은 소셜·이메일로 다시 오면 가입 화면으로 간다. 이전 계정에 연결되지 않는다.
+- 프론트: 마이페이지 "회원 탈퇴" → 지워지는 것 / 소멸하는 크레딧 / 남는 법정 보관 기록(1단계에는 없음) → 동의 체크 → 탈퇴. 대기 중인 변경은 보내지 않고(어차피 지워짐) 다른 창을 잠근 뒤 서버 성공 후에만 로그아웃과 같은 정리를 한다. 아직 옮기지 않은 게스트 원본은 로그아웃처럼 남긴다.
+- 검사: `backend/test_withdraw.py`, `supabase/checks/withdraw.sql`(위 SQL 검사 순서 뒤에 실행).
