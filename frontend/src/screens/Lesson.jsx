@@ -459,7 +459,9 @@ export function Lesson({ active, nav, route, state, setState }) {
               ? "끝까지 하면 통과(P)예요."
               : mode === "lab"
                 ? `직접 해보기의 과제 채점 결과로 성적을 매겨요. ${PASS_GRADE} 이상이면 이수예요.`
-                : `처음 고른 답으로 성적을 매겨요. ${PASS_GRADE} 이상이면 이수예요.`}
+                : mode === "practice" && practice.swap === "pick"
+                  ? `카드를 맞게 바꾼 수와 실수로 성적을 매겨요. ${PASS_GRADE} 이상이면 이수예요.`
+                  : `처음 고른 답으로 성적을 매겨요. ${PASS_GRADE} 이상이면 이수예요.`}
             {record ? ` 지금 성적은 ${gradeText(record)}이고, 다시 들으면 가장 좋은 성적이 남아요.` : ""}
           </p>
         )}

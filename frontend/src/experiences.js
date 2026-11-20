@@ -209,6 +209,9 @@ export const templates = {
   G: { title: "AI 가르치기", clean: cleanTrain },
 };
 
+/** 체험의 이름(수업 화면의 "전공 실습(…)"·체험 카드 머리말). 틀 이름을 쓰되, 순서 맞추기 틀의 정렬 고르기는 "정렬"이다(#92). */
+export const experienceTitle = (data) => (data?.template === "B" && data.swap === "pick" ? "정렬" : templates[data?.template]?.title || "");
+
 // 체험 데이터를 검사한다. 형식이 맞지 않으면 null이다.
 // learn(알아두기)은 수업의 "배우기"와 "기록" 단계에 보여주는 2~3줄 설명으로, 없어도 된다.
 export function cleanExperience(raw) {

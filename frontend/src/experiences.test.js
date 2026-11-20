@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   checkPicks,
   cleanExperience,
+  experienceTitle,
   experiences,
   inversions,
   isSorted,
@@ -351,4 +352,13 @@ test("배우기 예시: 세 정렬의 교환 순서가 서로 달라 방법의 �
   assert.deepEqual(swapped("selection"), [[2, 0], [3, 1]]);
   const seqs = SORT_KINDS.map((kind) => JSON.stringify(swapped(kind)));
   assert.equal(new Set(seqs).size, 3);
+});
+
+test("체험 이름: 정렬 고르기는 '정렬', 다른 체험은 틀 이름 그대로다(#92)", () => {
+  assert.equal(experienceTitle(experiences.sorting), "정렬");
+  // 같은 순서 맞추기 틀이라도 자리 옮기기(디자인 과정 등)는 "순서 맞추기"다.
+  assert.equal(experienceTitle(cleanExperience({ ...experiences.sorting, swap: "move" })), "순서 맞추기");
+  assert.equal(experienceTitle(experiences.journal), "분류하기");
+  assert.equal(experienceTitle(experiences.petClassifier), "AI 가르치기");
+  assert.equal(experienceTitle(null), "");
 });

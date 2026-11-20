@@ -3,7 +3,7 @@ import { getLessonGame } from "./api.js";
 import { lessonTypes } from "./lessonGames.js";
 import { typedComponents } from "./TypedGames.jsx";
 import { Experience } from "./Templates.jsx";
-import { templates } from "./experiences.js";
+import { experienceTitle, templates } from "./experiences.js";
 
 // 수업의 "직접 해보기" 단계에 들어가는 체험: 학과군 실습(체험 틀) 또는 미리 만들어 둔 연습 문제.
 
@@ -60,7 +60,7 @@ export function useLessonGame(subject) {
 export default function LessonGame({ game, played, onComplete }) {
   if (game?.template && templates[game.template])
     return (
-      <GameFrame title={templates[game.template].title} played={played}>
+      <GameFrame title={experienceTitle(game)} played={played}>
         <Experience data={game} onComplete={onComplete} />
       </GameFrame>
     );
