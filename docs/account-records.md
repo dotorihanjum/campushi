@@ -9,7 +9,7 @@
 - [x] #34 변경 명령·오프라인 재전송·서버 크레딧 검증
 - [x] #35 로그아웃 시 미저장 안내·기기 사본 정리 검증
 - [x] 로컬 실제 UI, 다른 저장소 환경, 자동 검사
-- [ ] 이슈별 PR 초안과 인수인계
+- [x] 이슈별 PR 초안과 인수인계
 
 ## 계약
 
@@ -65,3 +65,5 @@ backend/.venv/bin/python -m unittest backend.test_api
 이 작업은 #32 위의 #33 → #34 → #35 브랜치 스택이다. #35에는 통합 UI 검증에서 발견한 #33/#34 기록 보호 수정도 포함한다. 로그인 PR부터 순서대로 검토·병합해야 한다. main 직접 푸시와 운영 DB 적용은 하지 않았다.
 
 기존 3개 마이그레이션 다음 `20261120000300_account_records.sql`과 `20261120000400_record_sync.sql`이 필요하다. Vercel 서버 전용 계정 키·정확한 `AUTH_BASE_URL`·이메일 발송 설정은 로그인 문서대로 준비한다. Pillow 12.3.0을 서버 의존성에 추가했다. CSP는 같은 서버 API와 data 이미지 경로를 쓰므로 바꾸지 않는다.
+
+검토용 초안: [#83 기록 이전](https://github.com/dotorihanjum/campushi/pull/83) → [#84 동기화](https://github.com/dotorihanjum/campushi/pull/84) → [#85 로그아웃](https://github.com/dotorihanjum/campushi/pull/85). 선행 로그인 #82·가입 #81 이후 순서대로 검토한다. 최종 별도 환경에서 로그아웃·재로그인 후에도 이수2과목·졸업1학과·사진·이름·크레딧5를 재확인했고 375×812 화면에서도 확인했다.
