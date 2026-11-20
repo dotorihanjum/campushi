@@ -6,7 +6,7 @@ import { YEARS, completeCourse, courseKey, creditWaitDays, CREDIT_COOLDOWN_DAYS,
 import { gradeOf, passes, PASS, PASS_GRADE } from "../grades.js";
 import { isLessonType } from "../lessonGames.js";
 import LessonGame, { useLessonGame } from "../Games.jsx";
-import { Rub } from "../Templates.jsx";
+import { Rub, SortGuide } from "../Templates.jsx";
 import { groupName } from "../groups.js";
 import { gameFor } from "../games.js";
 import { termsByUnit } from "../theory.js";
@@ -441,6 +441,8 @@ export function Lesson({ active, nav, route, state, setState }) {
           </MintCard>
         )}
         {groups.length > 0 && <KeyTerms groups={groups} className="a-up mt-[12px]" style={delay(0.1)} />}
+        {/* 정렬 실습(#89): 정렬 방법은 배우기에만 있고, 직접 해보기에는 정렬 이름만 나온다. */}
+        {mode === "practice" && practice.sorts && <SortGuide data={practice} className="a-up mt-[12px]" />}
         {task && (
           <MintCard title="이 수업에서 해볼 것" className={`a-up ${learn || theory ? "mt-[12px]" : "mt-[22px]"}`}>
             <p style={delay(0.12)}>{task}</p>
