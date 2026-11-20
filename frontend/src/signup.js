@@ -15,3 +15,8 @@ export function blockSignup() {
 export function signupBody(form, version) {
   return { birth_year: Number(form.year), role: form.role, terms_agreed: form.terms, privacy_agreed: form.privacy, marketing_agreed: form.marketing, policy_version: version };
 }
+
+// 문서 버전이 바뀌면 이전 문서에 대한 체크를 새 동의로 취급하지 않는다.
+export function refreshSignupConsent(form, version) {
+  return form.version === version ? form : { ...form, version, terms: false, privacy: false, marketing: false };
+}

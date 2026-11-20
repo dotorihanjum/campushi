@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { ageAllowed, blockSignup, signupBlocked, signupBody } from "./signup.js";
+import { ageAllowed, blockSignup, signupBlocked, signupBody, refreshSignupConsent } from "./signup.js";
 
 export function SignupForm({ auth, onAuthenticated, onNeedsLogin, onBusy }) {
   const preset = auth.preflight;
-  const [form, setForm] = useState({ year: preset?.birth_year || "", role: preset?.role || "student", terms: !!preset?.terms_agreed, privacy: !!preset?.privacy_agreed, marketing: !!preset?.marketing_agreed });
+  const [form, setForm] = useState({ year: preset?.birth_year || "", role: preset?.role || "student", terms: !!preset?.terms_agreed, privacy: !!preset?.privacy_agreed, marketing: !!preset?.marketing_agreed, version: auth.policy.version });
   const [blocked, setBlocked] = useState(signupBlocked);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const lock = useRef(false);
   const birthField = useRef(null);
+  useEffect(() => setForm((f) => refreshSignupConsent(f, auth.policy.version)), [auth.policy.version]);
   useEffect(() => birthField.current?.focus({ preventScroll: true }), []);
   const change = (key, value) => { setForm((f) => ({ ...f, [key]: value })); setError(""); };
   const allowed = ageAllowed(Number(form.year), auth.year);
@@ -20,7 +21,7 @@ export function SignupForm({ auth, onAuthenticated, onNeedsLogin, onBusy }) {
     lock.current = true; setBusy(true); onBusy(true); setError("");
     if (!allowed) { blockSignup(); setBlocked(true); }
     try {
-      const body = signupBody(form, policy.version);
+      const body = signupBody(form, form.version);
       if (auth.pending) { await auth.register(body); onAuthenticated(); }
       else { await auth.checkEligibility(body); onNeedsLogin(); }
     } catch (e) { setError(e.message); }

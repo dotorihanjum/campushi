@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ageAllowed, signupBody, signupBlocked, blockSignup } from "./signup.js";
+import { ageAllowed, signupBody, signupBlocked, blockSignup, refreshSignupConsent } from "./signup.js";
 
 test("출생연도로 만 나이를 보수적으로 판정하며 경계 연도는 거부한다", () => {
   assert.equal(ageAllowed(2012, 2026), false);
@@ -16,4 +16,11 @@ test("같은 창에서 출생연도를 바꿔도 가입 제한을 유지하며 �
   Object.defineProperty(globalThis, "sessionStorage", { configurable: true, get() { throw new Error("blocked"); } });
   assert.equal(signupBlocked(), false);
   blockSignup(); assert.equal(signupBlocked(), true);
+});
+
+test("약관 버전이 바뀌면 나이·역할은 보존하고 필수·선택 동의를 다시 받는다", () => {
+  const old = { year: "2011", role: "mentor", terms: true, privacy: true, marketing: true, version: "v1" };
+  assert.equal(refreshSignupConsent(old, "v1"), old);
+  assert.deepEqual(refreshSignupConsent(old, "v2"), { ...old, version: "v2", terms: false, privacy: false, marketing: false });
+  assert.equal(signupBody(old, old.version).policy_version, "v1");
 });
