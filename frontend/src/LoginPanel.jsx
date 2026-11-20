@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Dialog } from "./ui.jsx";
 import { SignupForm } from "./SignupForm.jsx";
 import { signupBlocked } from "./signup.js";
 import { PROVIDER_NAMES } from "./login.js";
 
-export function LoginPanel({ auth }) {
+export function LoginPanel({ auth, portalTarget }) {
   const [open, setOpen] = useState(() => ["signup","error","cancelled"].includes(auth.result));
   const [mode, setMode] = useState(() => auth.result === "signup" ? "signup" : "login");
   const [email, setEmail] = useState("");
@@ -37,7 +38,7 @@ export function LoginPanel({ auth }) {
     </>}
     {auth.error && <><p role="alert" className="my-profile-error">{auth.error}</p><button className="my-action" disabled={busy} onClick={() => run(auth.refresh)}>다시 확인하기</button></>}
     {error && !open && <p role="alert" className="my-profile-error">{error}</p>}
-    {open && <Dialog title={mode === "signup" && !auth.linkProvider ? "처음 가입하기" : "로그인"} onClose={close} actions={<button className="button ghost" disabled={busy} onClick={close}>{mode === "signup" && signupBlocked() ? "로그인 없이 체험하기" : "체험 계속하기"}</button>}>
+    {open && portalTarget && createPortal(<Dialog title={mode === "signup" && !auth.linkProvider ? "처음 가입하기" : "로그인"} onClose={close} actions={<button className="button ghost" disabled={busy} onClick={close}>{mode === "signup" && signupBlocked() ? "로그인 없이 체험하기" : "체험 계속하기"}</button>}>
       {mode === "signup" && !auth.linkProvider && auth.policy ? <SignupForm key={auth.pending ? "verified" : "new"} auth={auth} onBusy={setBusy} onAuthenticated={() => { setOpen(false); auth.clearResult(); }} onNeedsLogin={() => setMode("login")} /> : <>
       <p>체험은 로그인 없이도 할 수 있어요.</p>
       {auth.result === "cancelled" && <p role="status" className="my-secondary mt-[10px]">로그인을 취소했어요. 다시 시도할 수 있어요.</p>}
@@ -56,6 +57,6 @@ export function LoginPanel({ auth }) {
       {!auth.linkProvider && <button className="my-signup-entry" onClick={() => setMode("signup")}>처음이신가요? 가입 안내 보기</button>}
       </>}
       {error && <p role="alert" className="my-profile-error mt-[12px]">{error}</p>}
-    </Dialog>}
+    </Dialog>, portalTarget)}
   </section>;
 }
