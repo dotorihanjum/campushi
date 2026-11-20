@@ -13,7 +13,7 @@ import { openStorage, storageNotice, writeStorage } from "./storage.js";
 import { useAccountRecords } from "./useAccountRecords.js";
 import { useLogin } from "./useLogin.js";
 import { authReturn } from "./login.js";
-import { Dialog } from "./ui.jsx";
+import { Dialog, Toast } from "./ui.jsx";
 import { isReview } from "./certificates.js";
 
 // 화면은 402×874 아트보드에 맞춰 그리고, 창 크기에 맞게 통째로 줄이거나 늘린다.
@@ -172,7 +172,12 @@ export default function App() {
     storage,
     load.status === "ready",
   );
-  const accountAuth = { ...auth, records, logout: records.logout };
+  const accountAuth = {
+    ...auth,
+    records,
+    logout: records.logout,
+    withdraw: records.withdraw,
+  };
 
   // 저장 공간을 쓸 수 없으면 이번 방문 동안만 기록이 유지되므로 화면 위쪽에 알린다.
   useEffect(() => {
@@ -280,6 +285,14 @@ export default function App() {
     setBusy(false);
     setStack([make("splash")]);
   }, [records.loggedOutAt]);
+  // #36 탈퇴를 마치면 시작 화면에서 잠깐 알린다.
+  const [farewell, setFarewell] = useState("");
+  useEffect(() => {
+    if (!records.withdrawnAt) return;
+    setFarewell("회원 탈퇴를 마쳤어요. 계정과 기록을 모두 지웠어요.");
+    const timer = window.setTimeout(() => setFarewell(""), 4000);
+    return () => window.clearTimeout(timer);
+  }, [records.withdrawnAt]);
   const accountLocked =
     auth.loading ||
     (!auth.user && !!records.context.current) ||
@@ -475,6 +488,7 @@ export default function App() {
                 </p>
               </Dialog>
             )}
+            <Toast>{farewell}</Toast>
             {busy && <div className="absolute inset-0 z-50" />}
           </div>
         </div>

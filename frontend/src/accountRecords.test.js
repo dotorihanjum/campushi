@@ -317,3 +317,53 @@ test("a session rejected during periodic refresh hides the active account", asyn
   await assert.rejects(sync.refresh());
   assert.equal(phases.at(-1), "expired");
 });
+
+test("withdrawal locks other tabs, skips unsent changes and clears only after the server deleted the account", async () => {
+  const storage = memory();
+  const sent = [];
+  const sync = new RecordSync({
+    storage,
+    change() {},
+    request: async (path, method, body) => {
+      sent.push(body);
+      throw Error("offline");
+    },
+  });
+  const other = new RecordSync({ storage, change() {} });
+  await sync.open(doc());
+  await other.open(doc());
+  sync.enqueue([{ kind: "enroll", department: "khu-cse" }]);
+  sent.length = 0;
+  let lockedDuring = null;
+  await sync.withdraw(async () => {
+    lockedDuring = other.enqueue([{ kind: "reset" }]);
+  });
+  assert.equal(lockedDuring, false, "다른 창은 탈퇴 중 새 변경을 더하지 못한다");
+  assert.deepEqual(sent, [], "지워질 계정에 대기 변경을 보내지 않는다");
+  assert.equal(sync.active, false);
+  assert.deepEqual(readAccount(storage, "account-A").queue, []);
+  assert.equal(JSON.parse(storage.getItem("campushi-account-logout-v1")).phase, "ended");
+});
+test("failed withdrawal keeps the account copy and queue and releases the lock", async () => {
+  const storage = memory();
+  const sync = new RecordSync({
+    storage,
+    change() {},
+    request: async () => {
+      throw Error("offline");
+    },
+  });
+  await sync.open(doc());
+  sync.enqueue([{ kind: "enroll", department: "khu-cse" }]);
+  const failure = Object.assign(Error("서버에 연결하지 못했어요."), { status: 0 });
+  await assert.rejects(
+    sync.withdraw(async () => {
+      throw failure;
+    }),
+    (e) => e === failure,
+  );
+  assert.equal(sync.active, true);
+  assert.equal(readAccount(storage, "account-A").queue.length, 1);
+  assert.equal(JSON.parse(storage.getItem("campushi-account-logout-v1")).phase, "release");
+  assert.notEqual(sync.enqueue([{ kind: "reset" }]), false);
+});

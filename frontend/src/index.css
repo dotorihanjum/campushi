@@ -59,6 +59,18 @@
 .my-reset { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--color-line); }
 .my-reset button { min-height: 48px; color: #a52930; font-size: 14px; border-radius: 8px; }
 .my-reset p { font-size: 14px; color: var(--color-slate); }
+.my-withdraw { display: grid; gap: 16px; overflow-y: auto; overflow-wrap: anywhere; padding: 2px; }
+.my-withdraw section { display: grid; gap: 4px; padding-top: 12px; border-top: 1px solid var(--color-line); }
+.my-withdraw section:first-of-type { padding-top: 0; border-top: 0; }
+.my-withdraw h3 { color: var(--color-navy); font-size: 15px; font-weight: 700; }
+.my-withdraw ul { display: grid; gap: 2px; padding-left: 18px; list-style: disc; }
+.my-withdraw-credit { color: var(--color-ink-2); }
+.my-withdraw-credit strong { font-size: 18px; color: #a52930; }
+.my-withdraw-note { font-size: 13px; line-height: 20px; color: var(--color-slate); }
+.my-withdraw-agree { display: flex; align-items: flex-start; gap: 8px; color: var(--color-ink-2); font-weight: 600; cursor: pointer; }
+.my-withdraw-agree input { margin-top: 4px; width: 18px; height: 18px; flex-shrink: 0; accent-color: #a52930; }
+.my-withdraw input:focus-visible, .my-withdraw button:focus-visible, [role="dialog"] .button:focus-visible { outline: 2px solid var(--color-mint-deep); outline-offset: 2px; }
+.my-reset + .my-reset { margin-top: 12px; }
 .my-record-notes { overflow-y: auto; overflow-wrap: anywhere; white-space: pre-wrap; }
 .my-record-notes li + li { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-line); }
 .my-record-notes h3 { color: var(--color-navy); font-size: 16px; font-weight: 600; }

@@ -226,6 +226,10 @@ export function useAccountRecords(
         /* UI still clears */
       }
     }
+    signedOut();
+  };
+  // 로그아웃·탈퇴 공통: 계정 사본·프로필·화면 스택을 비운다. 아직 옮기지 않은 게스트 원본(STORAGE_KEY)은 남긴다.
+  const signedOut = (extra) => {
     context.current = null;
     try {
       sessionStorage.removeItem("campushi-stack-v2");
@@ -242,7 +246,22 @@ export function useAccountRecords(
       pending: 0,
       importAvailable: false,
       loggedOutAt: Date.now(),
+      ...extra,
     });
+  };
+  const withdraw = async () => {
+    const sync = engine.current;
+    if (sync?.active) await sync.withdraw(auth.withdraw);
+    else {
+      // 계정 기록을 불러오지 못한 상태에서도 탈퇴할 수 있다. 서버가 지운 뒤에만 이 기기의 모든 계정 사본을 지운다.
+      await auth.withdraw();
+      try {
+        clearAccountCache(storage);
+      } catch {
+        /* UI still clears */
+      }
+    }
+    signedOut({ withdrawnAt: Date.now() });
   };
   return {
     ...status,
@@ -252,6 +271,7 @@ export function useAccountRecords(
     importGuest,
     update,
     logout,
+    withdraw,
     preserveGuest: hasGuestRecords(guest.current) && !!status.loggedOutAt,
     retry: () =>
       engine.current?.active
