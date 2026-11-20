@@ -12,6 +12,7 @@ import {
   summarizeReaction,
   templates,
   trainStump,
+  SORT_GUIDE_START,
   SORT_KINDS,
   SORT_ROUNDS,
   sortPick,
@@ -331,4 +332,23 @@ test("정렬 고르기: 5라운드는 버블 → 선택 → 삽입 → 무작위
   assert.deepEqual(sortRoundKinds(() => 0.9999999).slice(3), ["insertion", "insertion"]);
   // 시작 배치는 어느 정렬이든 바꿀 것이 있다.
   for (let seed = 1; seed <= 50; seed++) for (const kind of SORT_KINDS) assert.equal(sortStart(startOrder(6, "pick", seeded(seed)), kind).done, false);
+});
+
+test("배우기 예시: 세 정렬의 교환 순서가 서로 달라 방법의 차이가 보인다(#90)", () => {
+  // 3·4·1·2번째로 작은 카드로 시작한다.
+  assert.deepEqual(SORT_GUIDE_START, [2, 3, 0, 1]);
+  // 카드 크기(번호)로 본 교환: 버블은 옆 칸끼리 바퀴마다, 삽입은 카드 하나씩 왼쪽으로, 선택은 남은 최솟값을 앞으로.
+  const swapped = (kind) => {
+    let order = [...SORT_GUIDE_START];
+    return sortSwaps(SORT_GUIDE_START, kind).map(([i, j]) => {
+      const pair = [order[i], order[j]];
+      [order[i], order[j]] = [order[j], order[i]];
+      return pair;
+    });
+  };
+  assert.deepEqual(swapped("bubble"), [[3, 0], [3, 1], [2, 0], [2, 1]]);
+  assert.deepEqual(swapped("insertion"), [[3, 0], [2, 0], [3, 1], [2, 1]]);
+  assert.deepEqual(swapped("selection"), [[2, 0], [3, 1]]);
+  const seqs = SORT_KINDS.map((kind) => JSON.stringify(swapped(kind)));
+  assert.equal(new Set(seqs).size, 3);
 });

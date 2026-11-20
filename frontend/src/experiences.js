@@ -280,6 +280,11 @@ export function sortPick(state, a, b) {
   const at = state.at + 1;
   return { state: { ...state, order: swapAt(state.order, i, j), at, correct: state.correct + 1, done: at === state.steps.length }, ok: true, counted: true };
 }
+/**
+ * 배우기 예시 카드의 처음 배치(카드 번호 = 크기 순서, 3·4·1·2번째로 작은 카드). 세 정렬의 교환 순서가 서로 달라
+ * 방법의 차이가 예시로 보이게 고른 배치다(#90 QA·원준 결정). 화면(SortGuide)이 sortSwaps로 바뀌는 과정을 계산한다.
+ */
+export const SORT_GUIDE_START = [2, 3, 0, 1];
 /** 5라운드의 정렬 순서: 버블 → 선택 → 삽입 → 셋 중 무작위 → 셋 중 무작위. */
 export const sortRoundKinds = (random = Math.random) => [
   ...SORT_KINDS,

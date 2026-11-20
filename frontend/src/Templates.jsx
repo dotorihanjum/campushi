@@ -5,6 +5,7 @@ import { img } from "./assets.js";
 import { T } from "./ui.jsx";
 import { moveStep, rightPlaces } from "./lessonGames.js";
 import {
+  SORT_GUIDE_START,
   SORT_KINDS,
   SORT_ROUNDS,
   checkPicks,
@@ -372,7 +373,8 @@ function PickSort({ data, onComplete }) {
 }
 
 // 배우기 단계의 정렬 방법(#89): 정렬마다 한 줄 설명과, 같은 카드 4장이 그 방법대로 바뀌는 예시(sortSwaps로 계산)를 보여 준다.
-const GUIDE_START = [2, 0, 3, 1];
+// 처음 배치는 experiences.js의 SORT_GUIDE_START(세 정렬의 교환 순서가 서로 다른 배치).
+const GUIDE_START = SORT_GUIDE_START;
 export function SortGuide({ data, className = "" }) {
   // 예시 카드: items 순서가 곧 크기 순서이므로 GUIDE_START 번호의 카드를 쓴다.
   return (
