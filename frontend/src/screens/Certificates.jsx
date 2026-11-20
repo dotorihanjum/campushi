@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { icon, img } from "../assets.js";
 import { BackButton, Center, Confetti, delay, Header, Mask, OutlineButton, Paper, PaperFold, Screen, T, SchoolLogo } from "../ui.jsx";
-import { YEARS, courseKey, isRequired } from "../model.js";
+import { YEARS, courseKey, welcomeGuide } from "../model.js";
 import { CERTIFICATES, isReview } from "../certificates.js";
 import { canShareFile, isAbort, retryBy, singleFlight } from "../certificateSave.js";
 import { downloadFile, renderCertificate } from "../certificateImage.js";
@@ -374,8 +374,10 @@ export function Welcome({ active, nav, state }) {
   const v = view(state);
   useGuard(!!v?.journey, nav, active);
   if (!v?.journey) return null;
-  const { d } = v;
-  // 화면이 낮으면 캐릭터를 줄여서(최대 150) 그 아래 인사와 1학년 안내가 버튼에 가려지지 않게 올린다.
+  const { d, progress } = v;
+  // 학년 안내: 바로 넘어간 학년이 있으면 그 사실과 처음 들을 학년 기준(학과 홈과 같은 계산, #40).
+  const guide = welcomeGuide(d, progress);
+  // 화면이 낮으면 캐릭터를 줄여서(최대 150) 그 아래 인사와 학년 안내가 버튼에 가려지지 않게 올린다.
   const shrink = "min(150px, var(--cut) * 1px)";
   return (
     <Screen
@@ -427,12 +429,29 @@ export function Welcome({ active, nav, state }) {
           나에게 맞는 전공인지, 직접 경험하며 알아봐요.
         </T>
         <div className="a-up absolute left-0 top-[603px] h-[115px] w-[402px] rounded-[28px] bg-cream-2" style={delay(0.8)}>
-          <T y={27} size={16.5} center clip={360} className="font-bold text-ink-2">
-            {`1학년 과목 ${d.years[1].length}개 · 필수 ${d.years[1].filter((subject) => isRequired(d, subject)).length}개`}
-          </T>
-          <T y={62.5} size={13.5} lh={20} center className="text-ink-3">
-            {"필수과목을 B- 이상으로 이수하면 다음 학년이 열려요.\n4학년에는 졸업 과제에 도전해요."}
-          </T>
+          {guide.skipped ? (
+            // 넘어간 학년 · 처음 들을 학년 · 안내 한 줄을 같은 115px 카드 안에 세 줄로 놓는다.
+            <>
+              <T y={17} size={13} lh={18} center clip={360} className="font-semibold text-mint-deep">
+                {guide.skipped}
+              </T>
+              <T y={43} size={16.5} center clip={360} className="font-bold text-ink-2">
+                {guide.title}
+              </T>
+              <T y={77} size={13.5} lh={20} center clip={360} className="text-ink-3">
+                {guide.body}
+              </T>
+            </>
+          ) : (
+            <>
+              <T y={27} size={16.5} center clip={360} className="font-bold text-ink-2">
+                {guide.title}
+              </T>
+              <T y={62.5} size={13.5} lh={20} center className="text-ink-3">
+                {guide.body}
+              </T>
+            </>
+          )}
         </div>
       </div>
     </Screen>
