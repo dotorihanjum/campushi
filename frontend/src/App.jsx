@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { SCREENS } from "./screens/index.js";
 import { STORAGE_KEY, loadState, refreshCatalog } from "./model.js";
 import { getDepartments } from "./api.js";
@@ -6,6 +13,7 @@ import { openStorage, storageNotice, writeStorage } from "./storage.js";
 import { useAccountRecords } from "./useAccountRecords.js";
 import { useLogin } from "./useLogin.js";
 import { authReturn } from "./login.js";
+import { Dialog } from "./ui.jsx";
 import { isReview } from "./certificates.js";
 
 // 화면은 402×874 아트보드에 맞춰 그리고, 창 크기에 맞게 통째로 줄이거나 늘린다.
@@ -23,7 +31,11 @@ const ENTER = { push: "tr-push-in", fade: "tr-fade-in", rise: "tr-rise-in" };
 const EXIT = { push: "tr-push-out", fade: "tr-fade-out", rise: "tr-fade-out" };
 // 잠깐 보여주고 넘어가는 화면. 새로고침으로 돌아왔을 때는 그다음 화면을 보여준다.
 // 체험 탭에서 다시 보기로 연 증명서(#23)는 넘어가지 않으므로 그 화면 그대로 둔다.
-const SETTLED = { enrolled: "welcome", grades: "graduation", diploma: "graduation" };
+const SETTLED = {
+  enrolled: "welcome",
+  grades: "graduation",
+  diploma: "graduation",
+};
 
 let keySeed = 1;
 const make = (name, params) => ({ name, params, key: keySeed++ });
@@ -33,9 +45,18 @@ function initialStack(state) {
   if (returned.result) return [make(returned.view)];
   try {
     const saved = JSON.parse(sessionStorage.getItem(STACK_KEY));
-    if (Array.isArray(saved) && saved.length && saved.every((r) => r && r.name in SCREENS))
+    if (
+      Array.isArray(saved) &&
+      saved.length &&
+      saved.every((r) => r && r.name in SCREENS)
+    )
       return saved.map((r, i) =>
-        make(i === saved.length - 1 && !isReview(r.params) ? SETTLED[r.name] || r.name : r.name, r.params || undefined),
+        make(
+          i === saved.length - 1 && !isReview(r.params)
+            ? SETTLED[r.name] || r.name
+            : r.name,
+          r.params || undefined,
+        ),
       );
   } catch {
     // 저장된 화면 기록을 읽을 수 없으면 처음부터 시작한다.
@@ -59,19 +80,30 @@ function fit(vw, vh) {
 
 // 가로로 긴 낮은 화면(가로로 돌린 휴대폰)이고 아트보드 옆에 글을 놓을 자리가 있으면 세로로 돌리라고 안내한다.
 const ASIDE_W = 200;
-const showsRotateHint = (vw, vh, scale) => vw > vh && vh < 600 && (vw - W * scale) / 2 >= ASIDE_W + 16;
+const showsRotateHint = (vw, vh, scale) =>
+  vw > vh && vh < 600 && (vw - W * scale) / 2 >= ASIDE_W + 16;
 
 // 창 크기가 아니라 실제로 그려지는 영역(main)을 재서 맞춘다. 모바일 브라우저는 주소창·도구 막대 때문에
 // 창 높이와 보이는 영역이 다를 수 있다.
 function useFit(ref) {
-  const [box, setBox] = useState(() => fit(window.innerWidth, window.innerHeight));
+  const [box, setBox] = useState(() =>
+    fit(window.innerWidth, window.innerHeight),
+  );
   useLayoutEffect(() => {
     const el = ref.current;
     const update = () =>
       setBox((cur) => {
         const next = fit(el.clientWidth, el.clientHeight);
-        next.hint = showsRotateHint(el.clientWidth, el.clientHeight, next.scale);
-        return next.scale === cur.scale && next.height === cur.height && next.hint === cur.hint ? cur : next;
+        next.hint = showsRotateHint(
+          el.clientWidth,
+          el.clientHeight,
+          next.scale,
+        );
+        return next.scale === cur.scale &&
+          next.height === cur.height &&
+          next.hint === cur.hint
+          ? cur
+          : next;
       });
     update();
     const observer = new ResizeObserver(update);
@@ -83,6 +115,8 @@ function useFit(ref) {
 
 export default function App() {
   const auth = useLogin();
+  const [recovery, setRecovery] = useState(null);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
   // 쿠키·사이트 데이터를 막은 브라우저에서는 localStorage를 읽기만 해도 예외가 나므로, 열지 못하면 빈 상태로 시작한다.
   const [storage] = useState(() => openStorage(() => window.localStorage));
   const [state, setState] = useState(() => loadState(storage));
@@ -120,22 +154,47 @@ export default function App() {
         setLoad({ status: "ready" });
       },
       (error) => {
-        if (!controller.signal.aborted) setLoad({ status: "error", message: error.message });
+        if (!controller.signal.aborted)
+          setLoad({ status: "error", message: error.message });
       },
     );
     return () => controller.abort();
   }, [attempt]);
-  const catalog = useMemo(() => ({ ...load, retry: () => setAttempt((n) => n + 1) }), [load]);
+  const catalog = useMemo(
+    () => ({ ...load, retry: () => setAttempt((n) => n + 1) }),
+    [load],
+  );
 
-  const records = useAccountRecords(auth, state, setState, storage, load.status === "ready");
-  const accountAuth = { ...auth, records };
+  const records = useAccountRecords(
+    auth,
+    state,
+    setState,
+    storage,
+    load.status === "ready",
+  );
+  const accountAuth = { ...auth, records, logout: records.logout };
 
   // 저장 공간을 쓸 수 없으면 이번 방문 동안만 기록이 유지되므로 화면 위쪽에 알린다.
   useEffect(() => {
-    if (auth.loading || auth.user || records.context.current) return;
+    if (
+      auth.loading ||
+      auth.user ||
+      records.context.current ||
+      records.phase !== "guest" ||
+      records.preserveGuest
+    )
+      return;
     const saved = writeStorage(storage, STORAGE_KEY, JSON.stringify(state));
     setNotice((n) => storageNotice(n, saved));
-  }, [storage, state, auth.loading, auth.user, records.context]);
+  }, [
+    storage,
+    state,
+    auth.loading,
+    auth.user,
+    records.context,
+    records.phase,
+    records.preserveGuest,
+  ]);
   useEffect(() => {
     try {
       sessionStorage.setItem(
@@ -172,13 +231,25 @@ export default function App() {
       replace: (name, params, tr = "fade") => {
         const cur = stackRef.current;
         const prev = cur[cur.length - 1];
-        run([...cur.slice(0, -1), make(name, params)], ENTER[tr], null, EXIT[tr], prev);
+        run(
+          [...cur.slice(0, -1), make(name, params)],
+          ENTER[tr],
+          null,
+          EXIT[tr],
+          prev,
+        );
       },
       // names: 화면 이름, 또는 [화면 이름, params].
       reset: (names, tr = "fade") => {
         const cur = stackRef.current;
         const prev = cur[cur.length - 1];
-        run(names.map((n) => (Array.isArray(n) ? make(n[0], n[1]) : make(n))), ENTER[tr], null, EXIT[tr], prev);
+        run(
+          names.map((n) => (Array.isArray(n) ? make(n[0], n[1]) : make(n))),
+          ENTER[tr],
+          null,
+          EXIT[tr],
+          prev,
+        );
       },
       back: () => {
         const cur = stackRef.current;
@@ -202,35 +273,100 @@ export default function App() {
     return () => window.removeEventListener("popstate", onPop);
   }, [nav]);
 
+  useEffect(() => {
+    if (!records.loggedOutAt) return;
+    setGhosts([]);
+    setAnim({});
+    setBusy(false);
+    setStack([make("splash")]);
+  }, [records.loggedOutAt]);
+  const accountLocked =
+    auth.loading ||
+    (auth.user &&
+      ["checking", "loading", "expired", "locking"].includes(records.phase)) ||
+    (!!auth.user && records.phase === "error" && !records.context.current);
   const top = stack[stack.length - 1];
   const layers = [
     ...stack.map((route) => ({
       route,
-      cls: anim[route.key] ?? (route.key === top.key ? "" : "invisible pointer-events-none"),
+      cls:
+        anim[route.key] ??
+        (route.key === top.key ? "" : "invisible pointer-events-none"),
       ghost: false,
     })),
-    ...ghosts.map((g) => ({ route: g.route, cls: `${g.cls} pointer-events-none`, ghost: true })),
+    ...ghosts.map((g) => ({
+      route: g.route,
+      cls: `${g.cls} pointer-events-none`,
+      ghost: true,
+    })),
   ];
 
   return (
     <div className="stage flex flex-col">
       <StorageNotice shown={notice === "shown"} onClose={closeNotice} />
-      <main ref={stage} className="relative flex min-h-0 w-full flex-1 items-center justify-center bg-white min-[520px]:bg-[#e9ecef]">
+      <main
+        ref={stage}
+        className="relative flex min-h-0 w-full flex-1 items-center justify-center bg-white min-[520px]:bg-[#e9ecef]"
+      >
         {hint && (
           <aside
             className="absolute top-1/2 -translate-y-1/2 text-center text-[14px] leading-[21px] text-navy"
-            style={{ width: ASIDE_W, left: `calc(25% - ${(W * scale) / 4 + ASIDE_W / 2}px)` }}
+            style={{
+              width: ASIDE_W,
+              left: `calc(25% - ${(W * scale) / 4 + ASIDE_W / 2}px)`,
+            }}
           >
-            <svg width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden className="mx-auto mb-[12px] text-mint-deep">
-              <rect x="6" y="20" width="26" height="16" rx="3" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
-              <rect x="22" y="6" width="16" height="26" rx="3" stroke="currentColor" strokeWidth="2.2" fill="#fff" />
-              <path d="M8 15a10 10 0 0 1 10-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              <path d="m15 3 3 3-3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <svg
+              width="44"
+              height="44"
+              viewBox="0 0 44 44"
+              fill="none"
+              aria-hidden
+              className="mx-auto mb-[12px] text-mint-deep"
+            >
+              <rect
+                x="6"
+                y="20"
+                width="26"
+                height="16"
+                rx="3"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeDasharray="3 3"
+              />
+              <rect
+                x="22"
+                y="6"
+                width="16"
+                height="26"
+                rx="3"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                fill="#fff"
+              />
+              <path
+                d="M8 15a10 10 0 0 1 10-9"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+              <path
+                d="m15 3 3 3-3 3"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
-            <p style={{ wordBreak: "keep-all" }}>휴대폰을 세로로 돌리면 화면이 더 크게 보여요.</p>
+            <p style={{ wordBreak: "keep-all" }}>
+              휴대폰을 세로로 돌리면 화면이 더 크게 보여요.
+            </p>
           </aside>
         )}
-        <div className="relative shrink-0 overflow-hidden" style={{ width: W * scale, height: height * scale }}>
+        <div
+          className="relative shrink-0 overflow-hidden"
+          style={{ width: W * scale, height: height * scale }}
+        >
           <div
             className="absolute left-0 top-0 overflow-hidden bg-white"
             style={{
@@ -244,28 +380,99 @@ export default function App() {
               "--cut": cut,
             }}
           >
-            {layers.map(({ route, cls, ghost }) => {
-              const S = SCREENS[route.name];
-              return (
-                <div
-                  key={route.key}
-                  ref={!ghost && route.key === top.key ? screen : undefined}
-                  className={`absolute inset-0 ${cls}`}
-                  style={ghost ? { zIndex: 3 } : undefined}
-                  aria-hidden={route.key !== top.key}
-                >
-                  <S
-                    nav={nav}
-                    route={route}
-                    state={state}
-                    setState={records.update}
-                    catalog={catalog}
-                  auth={accountAuth}
-                    active={!ghost && route.key === top.key}
-                  />
-                </div>
-              );
-            })}
+            {accountLocked ? (
+              <div
+                className="flex h-full flex-col items-center justify-center gap-[16px] px-[24px] text-center text-navy"
+                role="status"
+              >
+                <p>{records.error || "계정 기록을 불러오고 있어요…"}</p>
+                {records.error && (
+                  <>
+                    <button
+                      className="button"
+                      onClick={() => records.retry()?.catch?.(() => {})}
+                    >
+                      다시 확인하기
+                    </button>
+                    <button
+                      className="button ghost"
+                      onClick={() => setRecovery({ discard: false, error: "" })}
+                    >
+                      로그아웃
+                    </button>
+                  </>
+                )}
+              </div>
+            ) : (
+              layers.map(({ route, cls, ghost }) => {
+                const S = SCREENS[route.name];
+                return (
+                  <div
+                    key={route.key}
+                    ref={!ghost && route.key === top.key ? screen : undefined}
+                    className={`absolute inset-0 ${cls}`}
+                    style={ghost ? { zIndex: 3 } : undefined}
+                    aria-hidden={route.key !== top.key}
+                  >
+                    <S
+                      nav={nav}
+                      route={route}
+                      state={state}
+                      setState={records.update}
+                      catalog={catalog}
+                      auth={accountAuth}
+                      active={!ghost && route.key === top.key}
+                    />
+                  </div>
+                );
+              })
+            )}
+            {recovery && (
+              <Dialog
+                title="로그아웃할까요?"
+                onClose={() => {
+                  if (!recoveryBusy) setRecovery(null);
+                }}
+                actions={
+                  <>
+                    <button
+                      className="button"
+                      disabled={recoveryBusy}
+                      onClick={async () => {
+                        setRecoveryBusy(true);
+                        try {
+                          await accountAuth.logout({
+                            discard: recovery.discard,
+                          });
+                          setRecovery(null);
+                        } catch (error) {
+                          setRecovery({
+                            discard: !!error.unsaved || recovery.discard,
+                            error: error.message,
+                          });
+                        } finally {
+                          setRecoveryBusy(false);
+                        }
+                      }}
+                    >
+                      {recovery.discard ? "저장하지 않고 로그아웃" : "로그아웃"}
+                    </button>
+                    <button
+                      className="button ghost"
+                      disabled={recoveryBusy}
+                      onClick={() => setRecovery(null)}
+                    >
+                      취소
+                    </button>
+                  </>
+                }
+              >
+                <p>
+                  {recovery.error ||
+                    "로그아웃하면 이 기기에서는 기록이 안 보여요. 다시 로그인하면 그대로 있어요."}
+                </p>
+              </Dialog>
+            )}
             {busy && <div className="absolute inset-0 z-50" />}
           </div>
         </div>
@@ -274,7 +481,8 @@ export default function App() {
   );
 }
 
-const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE =
+  'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * 화면의 첫 번째 조작 가능한 요소(보이는 것)에 포커스를 둔다. 없으면 화면 영역 자체에 둔다(테두리 없이).
@@ -283,7 +491,10 @@ const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]):not([t
 function focusScreen(el) {
   if (!el) return;
   const first = [...el.querySelectorAll(FOCUSABLE)].find(
-    (node) => node.getClientRects().length && getComputedStyle(node).visibility !== "hidden" && !node.closest('[aria-hidden="true"], [inert]'),
+    (node) =>
+      node.getClientRects().length &&
+      getComputedStyle(node).visibility !== "hidden" &&
+      !node.closest('[aria-hidden="true"], [inert]'),
   );
   if (first) return first.focus();
   el.tabIndex = -1;
@@ -302,7 +513,10 @@ function StorageNotice({ shown, onClose }) {
       {shown && (
         <div className="border-b border-cream-line bg-cream">
           <div className="mx-auto flex max-w-[402px] items-center gap-[4px] py-[6px] pl-[16px] pr-[6px]">
-            <p className="flex-1 text-[13.5px] font-medium leading-[20px] text-navy" style={{ wordBreak: "keep-all" }}>
+            <p
+              className="flex-1 text-[13.5px] font-medium leading-[20px] text-navy"
+              style={{ wordBreak: "keep-all" }}
+            >
               이 브라우저에서는 기록이 저장되지 않아요. 창을 닫으면 사라져요
             </p>
             <button
@@ -312,7 +526,12 @@ function StorageNotice({ shown, onClose }) {
               className="pressable flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-[10px] text-navy focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-mint-deep"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-                <path d="M2 2l10 10M12 2 2 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path
+                  d="M2 2l10 10M12 2 2 12"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
               </svg>
             </button>
           </div>

@@ -14,7 +14,7 @@ create policy record_operations_server_read on public.record_operations for sele
 drop function public.commit_account_records(uuid,bigint,uuid,jsonb);
 create function public.commit_account_records(p_user_id uuid, p_revision bigint, p_operation_id uuid, p_state jsonb, p_awards jsonb default '[]'::jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
-declare current_row public.account_records; award jsonb; balance bigint;
+declare current_row public.account_records; award jsonb; balance bigint; credited jsonb;
 begin
   insert into public.account_records(user_id) values(p_user_id) on conflict do nothing;
   select * into current_row from public.account_records where user_id=p_user_id for update;
@@ -33,6 +33,8 @@ begin
   end loop;
   select coalesce(sum(amount),0) into balance from public.account_credit_ledger where user_id=p_user_id;
   p_state=jsonb_set(p_state,'{credits}',to_jsonb(balance));
+  select coalesce(jsonb_object_agg(course_key,last_award),'{}'::jsonb) into credited from (select course_key,max(awarded_at) as last_award from public.account_credit_ledger where user_id=p_user_id group by course_key) history;
+  p_state=jsonb_set(p_state,'{creditedAt}',credited);
   update public.account_records set revision=revision+1,state=p_state where user_id=p_user_id returning * into current_row;
   insert into public.record_operations(user_id,operation_id) values(p_user_id,p_operation_id);
   return jsonb_build_object('status','saved','revision',current_row.revision,'state',current_row.state);
