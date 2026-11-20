@@ -1,17 +1,19 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { hasBatchim } from "./korean.js";
+import { hasBatchim, pick } from "./korean.js";
 import { FOCUS_RING, SETTLE_MS } from "./focus.js";
 import { img } from "./assets.js";
 import { T } from "./ui.jsx";
 import { moveStep, rightPlaces } from "./lessonGames.js";
 import {
-  bubbleShould,
-  bubbleStart,
-  bubbleStep,
+  SORT_KINDS,
+  SORT_ROUNDS,
   checkPicks,
-  inversions,
   makeTrials,
   predict,
+  sortPick,
+  sortRoundKinds,
+  sortStart,
+  sortSwaps,
   startOrder,
   summarizeReaction,
   trainStump,
@@ -25,8 +27,6 @@ const PLAN_FIELDS = ["topic", "reason", "method"];
 // 점수는 { correct, total }(처음 고른 답 기준으로 맞힌 수)이고 성적은 grades.js가 매긴다. 점수를 매길 수 없는 체험은 "P"다.
 
 const sceneImages = { sand: img.sceneSand, paint: img.scenePaint };
-// "8 > 3이라서", "9 > 4라서"
-const because = (word) => `${word}${hasBatchim(word) ? "이라서" : "라서"}`;
 
 function Restart({ children, onClick }) {
   return (
@@ -204,135 +204,154 @@ export function Rub({ data, year, onDone, onQuit }) {
 }
 
 /* ---- B 순서 맞추기 ---- */
-// 이웃 교환(adjacent): 버블 정렬을 규칙 그대로 따라 한다. 강조된 두 카드를 비교해 바꿀지 고르고,
-// 규칙과 다르게 고르면 반영하지 않는다. 3라운드를 하고, 라운드마다 카드를 새로 섞는다(2026-11-09 사용자 결정).
-// 1라운드만 규칙 설명과 이유("3 < 9라서…")를 보여 주고, 2·3라운드는 설명 없이 스스로 정렬한다.
-export const BUBBLE_ROUNDS = 3;
-const emptyCount = () => ({ compares: 0, swaps: 0, mistakes: 0 });
-function AdjacentOrder({ data, onComplete }) {
+// 정렬 고르기(pick, #89): 라운드마다 정렬 이름만 보고, 그 방법대로 다음에 바꿀 두 카드를 차례로 누른다.
+// 5라운드(버블 → 선택 → 삽입 → 무작위 → 무작위), 라운드마다 카드를 새로 섞는다. 그 정렬의 다음 교환과 같아야 카드가 바뀌고,
+// 다르면 실수로 세고 카드는 그대로 둔다(정답은 알려 주지 않는다). 점수: 맞게 바꾼 수 ÷ (맞게 바꾼 수 + 실수).
+// 정렬 방법 설명은 배우기 단계(SortGuide)에만 있다.
+
+// 끝낸 라운드 기록. 배우기 단계에 다녀오면 이 화면이 다시 그려지므로, 앞 라운드 기록은 남기고 하던 라운드만 처음부터 한다.
+// 페이지를 새로 불러오면 지워진다(성적은 5라운드를 모두 끝냈을 때만 남는다).
+const sortMemory = new Map();
+const sortMemoryKey = (data) => `${data.title}|${data.items.join(",")}`;
+const sortName = (data, kind) => data.sorts.find((sort) => sort.id === kind)?.name ?? "";
+const shortName = (data, kind) => sortName(data, kind).replace(/\s*정렬$/, "");
+
+function PickSort({ data, onComplete }) {
   const size = data.items.length;
-  const [round, setRound] = useState(0);
-  const [state, setState] = useState(() => bubbleStart(startOrder(size, "adjacent")));
-  const [minimum, setMinimum] = useState(() => inversions(state.order));
-  // 이번 라운드와 지금까지(앞 라운드들) 센 수.
-  const [count, setCount] = useState(emptyCount);
-  const [total, setTotal] = useState(emptyCount);
+  const memoryKey = sortMemoryKey(data);
+  const [plan, setPlan] = useState(() => sortMemory.get(memoryKey)?.plan ?? sortRoundKinds());
+  // 끝낸 라운드마다 { correct, mistakes }.
+  const [results, setResults] = useState(() => sortMemory.get(memoryKey)?.results ?? []);
+  const [round, setRound] = useState(() => Math.min(results.length, SORT_ROUNDS - 1));
+  const [state, setState] = useState(() => sortStart(startOrder(size, "pick"), plan[round]));
+  // 처음 고른 카드의 자리(아직 안 골랐으면 null).
+  const [chosen, setChosen] = useState(null);
   const [feedback, setFeedback] = useState("");
-  const explain = round === 0;
-  const last = round === BUBBLE_ROUNDS - 1;
-  const card = (i) => data.items[state.order[i]];
-  // 키보드 초점(#74): 라운드가 끝나면 결과 문장에(Tab 한 번에 "N라운드 시작"), 새 라운드가 시작되면 첫 비교 버튼에 둔다.
-  // 처음 화면을 열 때는 옮기지 않는다(사용자가 이 화면에서 조작한 뒤에만).
+  const row = useRef(null);
   const summary = useRef(null);
-  const choices = useRef(null);
   const acted = useRef(false);
-  // 라운드가 나온 시각. "N라운드 시작"을 연타한 두 번째 입력이 첫 비교를 고르지 않게 잠깐 막는다(#20과 같은 SETTLE_MS).
+  // 라운드가 나온 시각. "N라운드 시작"을 연타한 두 번째 입력이 첫 카드를 고르지 않게 잠깐 막는다(#74와 같은 SETTLE_MS).
   const shownAt = useRef(0);
+  const last = round === SORT_ROUNDS - 1;
+  const finished = last && state.done;
+  const card = (i) => data.items[state.order[i]];
+  const name = sortName(data, plan[round]);
+
+  useEffect(() => {
+    if (finished) sortMemory.delete(memoryKey);
+    else sortMemory.set(memoryKey, { plan, results });
+  }, [memoryKey, plan, results, finished]);
+  // 키보드 초점(#74와 같다): 라운드가 시작되면 첫 카드에, 라운드가 끝나면 결과 문장에 둔다. 처음 열 때는 옮기지 않는다.
   useEffect(() => {
     shownAt.current = performance.now();
-    if (acted.current) choices.current?.querySelector("button")?.focus();
-  }, [round]);
+    if (acted.current) row.current?.querySelector("button")?.focus();
+  }, [round, plan]);
   useEffect(() => {
     if (state.done && acted.current) summary.current?.focus();
   }, [state.done]);
+  // 한 장만 고른 채 카드 밖을 누르면 고른 것을 푼다(실수로 세지 않는다).
+  useEffect(() => {
+    if (chosen === null) return undefined;
+    const away = (event) => {
+      if (!row.current?.contains(event.target)) {
+        setChosen(null);
+        setFeedback("고른 카드를 풀었어요.");
+      }
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [chosen]);
 
-  function choose(swap) {
+  function choose(index) {
     if (state.done || performance.now() - shownAt.current < SETTLE_MS) return;
     acted.current = true;
-    const [left, right] = [card(state.at), card(state.at + 1)];
-    const should = bubbleShould(state);
-    const { state: next, ok } = bubbleStep(state, swap);
-    if (!ok) {
-      setCount({ ...count, mistakes: count.mistakes + 1 });
-      setFeedback(
-        explain ? (should ? `${left} > ${because(right)} 바꿔야 해요.` : `${left} < ${because(right)} 그대로 둬야 해요.`) : "아니에요, 다시 골라 봐요.",
-      );
+    if (chosen === null) {
+      setChosen(index);
+      setFeedback(`${pick(card(index), "을", "를")} 골랐어요. 바꿀 카드를 하나 더 골라요.`);
       return;
     }
-    const counted = { ...count, compares: count.compares + 1, swaps: count.swaps + (swap ? 1 : 0) };
-    setCount(counted);
+    setChosen(null);
+    if (chosen === index) {
+      setFeedback("고른 카드를 풀었어요.");
+      return;
+    }
+    const [left, right] = [card(Math.min(chosen, index)), card(Math.max(chosen, index))];
+    const { state: next, ok } = sortPick(state, chosen, index);
     setState(next);
-    const passed = next.pass > state.pass;
-    setFeedback(
-      explain
-        ? `${swap ? `${left} > ${because(right)} 바꿨어요.` : `${left} < ${because(right)} 그대로 뒀어요.`}` +
-            (next.done ? " 정렬이 끝났어요." : passed ? ` ${next.pass}바퀴 끝, 오른쪽 끝 ${next.pass}칸이 자리를 잡았어요.` : "")
-        : next.done
-          ? "정렬이 끝났어요."
-          : "",
-    );
-    if (next.done && last) {
-      const all = {
-        compares: total.compares + counted.compares,
-        swaps: total.swaps + counted.swaps,
-        mistakes: total.mistakes + counted.mistakes,
-      };
-      // 점수: 세 라운드 동안 비교한 횟수 중 처음부터 규칙대로 고른 비율.
-      onComplete(`버블 정렬 ${BUBBLE_ROUNDS}라운드 · 비교 ${all.compares}번 · 교환 ${all.swaps}번 · 실수 ${all.mistakes}번`, {
-        correct: all.compares,
-        total: all.compares + all.mistakes,
-      });
+    if (!ok) {
+      setFeedback(`${name} 순서와 달라요. 다시 골라 봐요.`);
+      return;
+    }
+    setFeedback(`${pick(left, "과", "와")} ${pick(right, "을", "를")} 바꿨어요.${next.done ? " 정렬이 끝났어요." : ""}`);
+    if (!next.done) return;
+    const done = [...results, { correct: next.correct, mistakes: next.mistakes }];
+    setResults(done);
+    if (done.length === SORT_ROUNDS) {
+      const correct = done.reduce((sum, item) => sum + item.correct, 0);
+      const mistakes = done.reduce((sum, item) => sum + item.mistakes, 0);
+      onComplete(`정렬 ${SORT_ROUNDS}라운드 · 바꾼 횟수 ${correct}번 · 실수 ${mistakes}번`, { correct, total: correct + mistakes });
     }
   }
-  function startRound(next) {
-    const order = startOrder(size, "adjacent");
+  function startRound(next, kinds = plan) {
     setRound(next);
-    setState(bubbleStart(order));
-    setMinimum(inversions(order));
-    setCount(emptyCount());
+    setState(sortStart(startOrder(size, "pick"), kinds[next]));
+    setChosen(null);
     setFeedback("");
   }
   function nextRound() {
     acted.current = true;
-    setTotal({ compares: total.compares + count.compares, swaps: total.swaps + count.swaps, mistakes: total.mistakes + count.mistakes });
     startRound(round + 1);
   }
   function restart() {
     acted.current = true;
-    setTotal(emptyCount());
-    startRound(0);
+    const kinds = sortRoundKinds();
+    setPlan(kinds);
+    setResults([]);
+    startRound(0, kinds);
   }
-  const fixed = (i) => state.done || i >= size - state.pass;
-  const comparing = (i) => !state.done && (i === state.at || i === state.at + 1);
-  const sum = { compares: total.compares + count.compares, swaps: total.swaps + count.swaps, mistakes: total.mistakes + count.mistakes };
+  const sum = (key) => results.reduce((total, item) => total + item[key], 0);
   return (
     <>
       <ol className="round-steps" aria-label="라운드">
-        {Array.from({ length: BUBBLE_ROUNDS }, (_, i) => (
-          <li key={i} aria-current={i === round ? "step" : undefined} className={i < round || (i === round && state.done) ? "is-done" : i === round ? "is-now" : ""}>
-            {i === 0 ? "1. 규칙 익히기" : `${i + 1}. 스스로`}
+        {plan.map((kind, i) => (
+          <li key={i} aria-current={i === round ? "step" : undefined} className={i < results.length ? "is-done" : i === round ? "is-now" : ""}>
+            {`${i + 1}. ${i < SORT_KINDS.length || i <= round ? shortName(data, kind) : "무작위"}`}
           </li>
         ))}
       </ol>
-      <p className="body-copy">{explain ? data.prompt : "이번엔 설명 없이 해 봐요. 작은 수부터 차례로 놓아요."}</p>
-      <div className="sort-row" aria-label="카드">
+      <h3 className="text-[20px] font-bold leading-[28px] text-navy">{name}</h3>
+      <p className="body-copy">{data.prompt}</p>
+      <div ref={row} className="sort-row" role="group" aria-label="카드">
         {state.order.map((step, i) => (
-          <span
+          <button
             key={step}
-            className={`sort-card ${comparing(i) ? "is-compare" : ""} ${explain && fixed(i) ? "is-fixed" : ""}`}
-            aria-current={comparing(i) ? "true" : undefined}
+            type="button"
+            className={`sort-card ${chosen === i ? "is-compare" : ""} ${FOCUS_RING}`}
+            aria-pressed={chosen === i}
+            aria-label={`${data.items[step]}${chosen === i ? ", 고름" : ""}`}
+            disabled={state.done}
+            onClick={() => choose(i)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && chosen !== null) {
+                setChosen(null);
+                setFeedback("고른 카드를 풀었어요.");
+              }
+            }}
           >
             {data.items[step]}
-          </span>
+          </button>
         ))}
       </div>
       <p className="game-progress">
-        {state.done ? `${round + 1}라운드 정렬 완료!` : explain ? `${state.pass + 1}바퀴째 · ${card(state.at)}, ${card(state.at + 1)} 비교` : `${round + 1}라운드`}
+        {state.done ? `${round + 1}라운드 정렬 완료!` : `${round + 1}라운드 · 바꾼 횟수 ${state.correct}번 · 실수 ${state.mistakes}번`}
       </p>
       <p className="game-feedback" role="status">
         {feedback}
       </p>
-      {!state.done ? (
-        <div ref={choices} className="game-choices" role="group" aria-label="고르기">
-          <button onClick={() => choose(true)}>바꾸기</button>
-          <button onClick={() => choose(false)}>그대로 두기</button>
-        </div>
-      ) : !last ? (
+      {!state.done ? null : !last ? (
         <>
           <p ref={summary} tabIndex={-1} className={`body-copy rounded-[6px] ${FOCUS_RING}`}>
-            {explain
-              ? `${state.pass}바퀴 동안 ${count.compares}번 비교하고 ${count.swaps}번 바꿨어요. 바꾼 횟수는 처음 배치에서 순서가 뒤집힌 쌍의 수(${minimum}개)와 같아요. 이제 설명 없이 해 볼까요?`
-              : `실수 ${count.mistakes}번으로 정렬했어요.`}
+            {`이번 라운드는 ${state.correct}번 바꿨고, 실수는 ${state.mistakes}번이에요.`}
           </p>
           <button className="button" onClick={nextRound}>
             {`${round + 2}라운드 시작`}
@@ -341,12 +360,62 @@ function AdjacentOrder({ data, onComplete }) {
       ) : (
         <>
           <p ref={summary} tabIndex={-1} className={`body-copy rounded-[6px] ${FOCUS_RING}`}>
-            {`${BUBBLE_ROUNDS}라운드 동안 ${sum.compares}번 비교하고 ${sum.swaps}번 바꿨어요. 실수는 ${sum.mistakes}번이에요.`} {data.explanation}
+            {`${SORT_ROUNDS}라운드 동안 ${sum("correct")}번 바꾸고, 실수는 ${sum("mistakes")}번이에요.`} {data.explanation}
           </p>
           <Restart onClick={restart}>새로 섞어서 처음부터 다시 하기 →</Restart>
         </>
       )}
     </>
+  );
+}
+
+// 배우기 단계의 정렬 방법(#89): 정렬마다 한 줄 설명과, 같은 카드 4장이 그 방법대로 바뀌는 예시(sortSwaps로 계산)를 보여 준다.
+const GUIDE_START = [2, 0, 3, 1];
+export function SortGuide({ data, className = "" }) {
+  // 예시 카드: items 순서가 곧 크기 순서이므로 GUIDE_START 번호의 카드를 쓴다.
+  return (
+    <section className={`rounded-[20px] bg-mint-soft px-[18px] py-[16px] ${className}`} aria-labelledby="sort-guide-title">
+      <h2 id="sort-guide-title" className="text-[15px] font-bold leading-[22px] text-ink-2">
+        정렬 방법
+      </h2>
+      <p className="mt-[6px] text-[13.5px] leading-[22px] text-ink-3">{data.prompt} 바꾸지 않고 지나가는 단계는 누르지 않아요.</p>
+      <ul className="mt-[10px] grid gap-[14px]">
+        {data.sorts.map((sort) => {
+          let order = [...GUIDE_START];
+          const rows = [{ order, pair: null }];
+          for (const [i, j] of sortSwaps(GUIDE_START, sort.id)) {
+            order = [...order];
+            [order[i], order[j]] = [order[j], order[i]];
+            rows.push({ order, pair: [i, j] });
+          }
+          return (
+            <li key={sort.id}>
+              <h3 className="text-[14.5px] font-bold leading-[21px] text-navy">{sort.name}</h3>
+              <p className="mt-[2px] text-[13px] leading-[20px] text-ink-3">{sort.rule}</p>
+              <ol className="mt-[6px] grid gap-[4px]" aria-label={`${sort.name} 예시`}>
+                {rows.map((rowItem, r) => (
+                  <li key={r} className="flex items-center gap-[8px]">
+                    <span className="w-[44px] shrink-0 text-[11.5px] text-gray">{r === 0 ? "처음" : `${r}번째`}</span>
+                    <span className="sort-row !m-0 !justify-start" aria-hidden>
+                      {rowItem.order.map((n, i) => (
+                        <span key={n} className={`sort-card !w-[32px] !flex-none !rounded-[8px] !py-[5px] !text-[13px] ${rowItem.pair?.includes(i) ? "is-compare" : ""}`}>
+                          {data.items[n]}
+                        </span>
+                      ))}
+                    </span>
+                    <span className="sr-only">
+                      {r === 0
+                        ? `처음 ${rowItem.order.map((n) => data.items[n]).join(", ")}`
+                        : `${pick(data.items[rows[r - 1].order[rowItem.pair[0]]], "과", "와")} ${pick(data.items[rows[r - 1].order[rowItem.pair[1]]], "을", "를")} 바꿔요: ${rowItem.order.map((n) => data.items[n]).join(", ")}`}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -465,7 +534,7 @@ function MoveOrder({ data, onComplete, after }) {
 
 // after: 이론 퀴즈의 라운드로 쓸 때 다 맞힌 뒤 "다시 해보기" 대신 보여줄 것(자리 옮기기에서만 쓴다).
 export function OrderTemplate({ data, onComplete, after }) {
-  return data.swap === "adjacent" ? <AdjacentOrder data={data} onComplete={onComplete} /> : <MoveOrder data={data} onComplete={onComplete} after={after} />;
+  return data.swap === "pick" ? <PickSort data={data} onComplete={onComplete} /> : <MoveOrder data={data} onComplete={onComplete} after={after} />;
 }
 
 /* ---- C 분류하기: 카드마다 칸별로 보기를 고르고 확인한다. 틀리면 맞힐 때까지 다시 고른다. ---- */

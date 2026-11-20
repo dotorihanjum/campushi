@@ -4,7 +4,7 @@ import { GROUPS, buildGroupExperience, groupExperience, groupName } from "./grou
 import { groupData } from "./groupData.js";
 import { cleanExperience } from "./experiences.js";
 
-test("두 학과군에 검토를 통과한 졸업 과제가 있고, 실습은 컴퓨터·AI(버블 정렬)만 공개한다", () => {
+test("두 학과군에 검토를 통과한 졸업 과제가 있고, 실습은 컴퓨터·AI(정렬 고르기)만 공개한다", () => {
   assert.deepEqual(GROUPS.map((group) => group.id), ["computing", "design"]);
   assert.equal(groupName("computing"), "컴퓨터·AI");
   assert.equal(groupName("없음"), "");
@@ -17,7 +17,8 @@ test("두 학과군에 검토를 통과한 졸업 과제가 있고, 실습은 �
   // 실습은 수업 안에 들어가는 틀(순서 맞추기 B). 디자인 실습은 다시 만들 때까지 공개하지 않는다(2026-11-09 사용자 결정).
   const practice = groupExperience("computing", "practice");
   assert.equal(practice.template, "B");
-  assert.equal(practice.swap, "adjacent");
+  assert.equal(practice.swap, "pick");
+  assert.deepEqual(practice.sorts.map((sort) => sort.id), ["bubble", "selection", "insertion"]);
   assert.ok(practice.learn);
   assert.equal(groupExperience("design", "practice"), null);
 });

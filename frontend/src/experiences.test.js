@@ -10,12 +10,14 @@ import {
   predict,
   startOrder,
   summarizeReaction,
-  swapAdjacent,
   templates,
   trainStump,
-  bubbleShould,
-  bubbleStart,
-  bubbleStep,
+  SORT_KINDS,
+  SORT_ROUNDS,
+  sortPick,
+  sortRoundKinds,
+  sortStart,
+  sortSwaps,
 } from "./experiences.js";
 import { createDepartment } from "./model.js";
 import { groupData } from "./groupData.js";
@@ -72,12 +74,22 @@ test("형식이 틀린 체험 데이터는 거른다", () => {
   assert.equal(cleanExperience({ ...base, title: "" }), null);
   assert.equal(cleanExperience({ ...base, title: "가".repeat(21) }), null);
   assert.equal(cleanExperience({ ...base, task: undefined }), null);
-  // B: 단계 수, 중복, 이웃 교환일 때 카드 글자 수
+  // B: 단계 수, 중복, 정렬 고르기일 때 카드 글자 수
   assert.equal(cleanExperience({ ...base, items: ["1", "2", "3"] }), null);
   assert.equal(cleanExperience({ ...base, items: ["1", "1", "3", "4"] }), null);
   assert.equal(cleanExperience({ ...base, items: ["가나다라마", "2", "3", "4"] }), null);
   assert.ok(cleanExperience({ ...base, swap: "move", items: ["가나다라마", "2", "3", "4"] }));
   assert.equal(cleanExperience({ ...base, swap: "jump" }), null);
+  // 예전 버블 정렬 따라 하기(adjacent)는 없어졌다(#89).
+  assert.equal(cleanExperience({ ...base, swap: "adjacent" }), null);
+  // 정렬 고르기는 버블·선택·삽입 세 정렬의 이름과 방법이 모두 있어야 한다.
+  assert.equal(cleanExperience({ ...base, sorts: undefined }), null);
+  assert.equal(cleanExperience({ ...base, sorts: base.sorts.slice(0, 2) }), null);
+  assert.equal(cleanExperience({ ...base, sorts: [base.sorts[0], base.sorts[0], base.sorts[2]] }), null);
+  assert.equal(cleanExperience({ ...base, sorts: [{ ...base.sorts[0], id: "quick" }, ...base.sorts.slice(1)] }), null);
+  assert.equal(cleanExperience({ ...base, sorts: [{ ...base.sorts[0], rule: "" }, ...base.sorts.slice(1)] }), null);
+  // 자리 옮기기에는 정렬 방법이 붙지 않는다.
+  assert.equal(cleanExperience({ ...base, swap: "move" }).sorts, undefined);
   // C: 정답이 보기에 없거나 칸 수와 다르면 안 된다.
   const journal = experiences.journal;
   assert.equal(cleanExperience({ ...journal, items: [{ ...journal.items[0], answer: ["cash"] }, ...journal.items.slice(1)] }), null);
@@ -100,27 +112,15 @@ test("형식이 틀린 체험 데이터는 거른다", () => {
   assert.equal(cleanExperience({ ...plan, prompts: [{ ...plan.prompts[0], options: ["하나"] }, ...plan.prompts.slice(1)] }), null);
 });
 
-test("순서 맞추기: 이웃 교환의 최소 횟수는 역순 쌍의 수와 같다", () => {
+test("순서 맞추기: 역순 쌍과 시작 순서", () => {
   assert.equal(inversions([0, 1, 2]), 0);
   assert.equal(inversions([2, 1, 0]), 3);
   assert.equal(inversions([1, 0, 3, 2]), 2);
-  assert.deepEqual(swapAdjacent([2, 0, 1], 0), [0, 2, 1]);
-  assert.deepEqual(swapAdjacent([2, 0, 1], 2), [2, 0, 1]);
-  assert.deepEqual(swapAdjacent([2, 0, 1], -1), [2, 0, 1]);
-  // 버블 정렬을 그대로 따라 하면 정확히 역순 쌍의 수만큼 교환한다.
+  // 정렬 고르기는 너무 쉬운 배치를 피한다(역순 쌍이 최대의 40% 이상).
   for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-    let order = startOrder(6, "adjacent", seeded(seed));
-    const minimum = inversions(order);
+    const order = startOrder(6, "pick", seeded(seed));
     assert.deepEqual([...order].sort(), [0, 1, 2, 3, 4, 5]);
-    assert.ok(minimum >= 6);
-    let swaps = 0;
-    while (!isSorted(order))
-      for (let i = 0; i < order.length - 1; i++)
-        if (order[i] > order[i + 1]) {
-          order = swapAdjacent(order, i);
-          swaps++;
-        }
-    assert.equal(swaps, minimum);
+    assert.ok(inversions(order) >= 6);
   }
   // 자리 옮기기는 이미 맞춰진 순서로 시작하지 않는다.
   for (const seed of [1, 2, 3, 4, 5]) assert.ok(!isSorted(startOrder(4, "move", seeded(seed))));
@@ -239,39 +239,96 @@ test("졸업 과제는 틀에 따라 프로젝트(점수) 또는 작품(P)이다
   assert.equal(createDepartment(RAW_ID).final.kind, "artwork");
 });
 
-test("버블 정렬 실습은 규칙대로 고를 때만 진행되고, 바꾼 횟수는 뒤집힌 쌍의 수와 같다", () => {
-  // 규칙과 다른 선택은 상태를 바꾸지 않는다.
-  const start = bubbleStart([2, 0, 1, 3]);
-  assert.equal(bubbleShould(start), true);
-  assert.deepEqual(bubbleStep(start, false), { state: start, ok: false });
-  // 첫 바퀴: (2,0) 바꿈 → (2,1) 바꿈 → (2,3) 그대로. 바퀴가 끝나면 다음 바퀴는 왼쪽부터, 비교 범위가 하나 줄어든다.
-  let state = bubbleStep(start, true).state;
-  assert.deepEqual(state.order, [0, 2, 1, 3]);
-  state = bubbleStep(state, true).state;
-  state = bubbleStep(state, false).state;
-  assert.deepEqual(state, { order: [0, 1, 2, 3], pass: 1, at: 0, swapped: false, done: false });
-  // 둘째 바퀴에서 한 번도 바꾸지 않으면 끝난다.
-  state = bubbleStep(state, false).state;
-  state = bubbleStep(state, false).state;
-  assert.equal(state.done, true);
-  assert.equal(state.pass, 2);
-  assert.deepEqual(bubbleStep(state, false), { state, ok: false });
-
-  for (let seed = 1; seed <= 100; seed++) {
-    const order = startOrder(6, "adjacent", seeded(seed));
-    let current = bubbleStart(order);
-    let swaps = 0;
-    let compares = 0;
-    while (!current.done) {
-      const swap = bubbleShould(current);
-      // 반대로 고르면 언제나 거절된다.
-      assert.equal(bubbleStep(current, !swap).ok, false);
-      current = bubbleStep(current, swap).state;
-      swaps += swap ? 1 : 0;
-      compares++;
-      assert.ok(compares <= 15);
-    }
-    assert.deepEqual(current.order, [0, 1, 2, 3, 4, 5]);
-    assert.equal(swaps, inversions(order));
+// 고른 대로 바꿔 끝까지 정렬한다(맞는 교환만 고른다).
+function solve(order, kind) {
+  let state = sortStart(order, kind);
+  while (!state.done) {
+    const [i, j] = state.steps[state.at];
+    state = sortPick(state, j, i).state; // 고르는 순서는 상관없다
   }
+  return state;
+}
+
+test("정렬 고르기: 세 정렬이 실제로 바꾸는 순서", () => {
+  // [4, 1, 6, 3]을 정렬하는 교환(자리 번호).
+  const start = [2, 0, 3, 1];
+  assert.deepEqual(sortSwaps(start, "bubble"), [[0, 1], [2, 3], [1, 2]]);
+  assert.deepEqual(sortSwaps(start, "selection"), [[0, 1], [1, 3], [2, 3]]);
+  assert.deepEqual(sortSwaps(start, "insertion"), [[0, 1], [2, 3], [1, 2]]);
+  // 버블: 1바퀴에 (0,1) 다음 (1,2)는 4<6이라 안 바꾸고 (2,3)을 바꾼다. 삽입: 6은 이미 제자리라 건너뛰고, 3을 두 칸 옮긴다.
+  assert.deepEqual(sortSwaps([0, 1, 2, 3], "selection"), []);
+  for (let seed = 1; seed <= 200; seed++) {
+    const order = startOrder(6, "pick", seeded(seed));
+    for (const kind of SORT_KINDS) {
+      const steps = sortSwaps(order, kind);
+      // 끝까지 바꾸면 정렬된다. 버블·삽입은 이웃끼리만, 정확히 역순 쌍 수만큼 바꾸고, 선택은 많아야 카드 수 - 1번 바꾼다.
+      assert.deepEqual(solve(order, kind).order, [0, 1, 2, 3, 4, 5]);
+      if (kind === "selection") assert.ok(steps.length >= 1 && steps.length <= 5);
+      else {
+        assert.equal(steps.length, inversions(order));
+        assert.ok(steps.every(([i, j]) => j === i + 1));
+      }
+    }
+  }
+});
+
+test("정렬 고르기: 맞는 교환만 카드가 움직이고, 틀리면 실수로 세며 카드는 그대로다", () => {
+  for (const kind of SORT_KINDS) {
+    let state = sortStart([5, 1, 4, 0, 3, 2], kind);
+    const [i, j] = state.steps[0];
+    // 다른 두 카드: 실수 1번, 카드·진행은 그대로.
+    const wrong = [0, 1, 2, 3, 4, 5].flatMap((a) => [0, 1, 2, 3, 4, 5].map((b) => [a, b])).find(([a, b]) => a < b && !(a === i && b === j));
+    const missed = sortPick(state, ...wrong);
+    assert.equal(missed.ok, false);
+    assert.equal(missed.counted, true);
+    assert.deepEqual(missed.state.order, state.order);
+    assert.equal(missed.state.at, 0);
+    assert.equal(missed.state.mistakes, 1);
+    // 같은 카드를 두 번 고르거나 없는 자리는 실수로 세지 않는다.
+    for (const [a, b] of [[i, i], [-1, j], [i, 6]]) {
+      const ignored = sortPick(missed.state, a, b);
+      assert.equal(ignored.counted, false);
+      assert.equal(ignored.state, missed.state);
+    }
+    // 맞는 교환: 두 카드가 자리를 바꾼다.
+    state = sortPick(missed.state, i, j).state;
+    assert.equal(state.correct, 1);
+    assert.equal(state.order[i], missed.state.order[j]);
+    assert.equal(state.order[j], missed.state.order[i]);
+    // 끝까지 하면 done이고, 그 뒤에는 아무것도 바뀌지 않는다.
+    while (!state.done) state = sortPick(state, ...state.steps[state.at]).state;
+    assert.deepEqual(state.order, [0, 1, 2, 3, 4, 5]);
+    assert.equal(state.mistakes, 1);
+    assert.equal(sortPick(state, 0, 1).counted, false);
+  }
+});
+
+test("정렬 고르기: 선택 정렬에서 가장 작은 수가 이미 맨 앞이면 누르지 않아도 다음 교환으로 간다", () => {
+  // 0이 이미 맨 앞, 1도 이미 둘째 자리라 첫 교환은 셋째 칸(2)과 가장 작은 남은 수(자리 4)다.
+  const state = sortStart([0, 1, 5, 4, 2, 3], "selection");
+  assert.deepEqual(state.steps[0], [2, 4]);
+  assert.equal(sortPick(state, 0, 1).ok, false);
+  assert.equal(sortPick(state, 2, 4).ok, true);
+  // 이미 정렬된 카드로 시작하면 바로 끝난 라운드다.
+  assert.equal(sortStart([0, 1, 2, 3], "insertion").done, true);
+});
+
+test("정렬 고르기: 5라운드는 버블 → 선택 → 삽입 → 무작위 → 무작위", () => {
+  assert.equal(SORT_ROUNDS, 5);
+  const seen = new Set();
+  for (let seed = 1; seed <= 60; seed++) {
+    const kinds = sortRoundKinds(seeded(seed));
+    assert.equal(kinds.length, 5);
+    assert.deepEqual(kinds.slice(0, 3), ["bubble", "selection", "insertion"]);
+    for (const kind of kinds.slice(3)) {
+      assert.ok(SORT_KINDS.includes(kind));
+      seen.add(kind);
+    }
+  }
+  // 무작위 라운드에는 세 정렬이 모두 나온다.
+  assert.equal(seen.size, 3);
+  // 난수가 1에 가까워도 범위를 넘지 않는다.
+  assert.deepEqual(sortRoundKinds(() => 0.9999999).slice(3), ["insertion", "insertion"]);
+  // 시작 배치는 어느 정렬이든 바꿀 것이 있다.
+  for (let seed = 1; seed <= 50; seed++) for (const kind of SORT_KINDS) assert.equal(sortStart(startOrder(6, "pick", seeded(seed)), kind).done, false);
 });

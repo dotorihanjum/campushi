@@ -26,16 +26,27 @@ function cleanRub(raw) {
   return phases && { phases };
 }
 
-// 순서 맞추기. items는 올바른 순서대로 적는다. swap이 "adjacent"면 버블 정렬 규칙대로 이웃한 두 카드를 비교하며 정렬한다.
+// 순서 맞추기. items는 올바른 순서대로 적는다.
+// swap "move": 단계를 위아래로 옮겨 순서를 맞춘다.
+// swap "pick": 정렬 이름(sorts)만 보고 그 방법대로 바꿀 두 카드를 차례로 고른다(#89). sorts는 버블·선택·삽입 정렬 셋의
+//   { id, name, rule }이고, rule은 배우기 단계에서 보여 주는 방법 설명이다(직접 해보기 화면에는 이름만 나온다).
 function cleanOrder(raw) {
-  const adjacent = raw.swap === "adjacent";
-  const items = all(list(raw.items, 4, 6)?.map((item) => text(item, adjacent ? 4 : 24)));
+  const pick = raw.swap === "pick";
+  const items = all(list(raw.items, 4, 6)?.map((item) => text(item, pick ? 4 : 24)));
+  const sorts = pick
+    ? all(
+        list(raw.sorts, SORT_KINDS.length, SORT_KINDS.length)?.map((sort) =>
+          sort && SORT_KINDS.includes(sort.id) && text(sort.name, 10) && text(sort.rule, 100) ? { id: sort.id, name: sort.name, rule: sort.rule } : null,
+        ),
+      )
+    : null;
   return items &&
     distinct(items) &&
-    ["adjacent", "move"].includes(raw.swap) &&
+    ["pick", "move"].includes(raw.swap) &&
+    (!pick || (sorts && distinct(sorts.map((sort) => sort.id)))) &&
     text(raw.prompt, 80) &&
     (raw.explanation === undefined || text(raw.explanation, 160))
-    ? { swap: raw.swap, prompt: raw.prompt, items, explanation: raw.explanation || "" }
+    ? { swap: raw.swap, prompt: raw.prompt, items, explanation: raw.explanation || "", ...(pick ? { sorts } : {}) }
     : null;
 }
 
@@ -218,33 +229,66 @@ export function inversions(order) {
   return count;
 }
 export const isSorted = (order) => inversions(order) === 0;
-export function swapAdjacent(order, index) {
-  if (index < 0 || index >= order.length - 1) return order;
-  const next = [...order];
-  [next[index], next[index + 1]] = [next[index + 1], next[index]];
-  return next;
-}
-// 버블 정렬 따라 하기. order: 지금 놓인 카드(번호가 곧 크기 순서), pass: 끝낸 바퀴 수, at: 이번에 비교할 왼쪽 자리,
-// swapped: 이번 바퀴에 바꾼 적이 있는지. 바퀴마다 왼쪽부터 오른쪽 끝(고정된 카드 앞)까지 이웃한 두 카드를 비교한다.
-export const bubbleStart = (order) => ({ order, pass: 0, at: 0, swapped: false, done: isSorted(order) && order.length < 2 });
-// 지금 비교하는 두 카드를 바꿔야 하는지(왼쪽이 더 크면 바꾼다).
-export const bubbleShould = (state) => state.order[state.at] > state.order[state.at + 1];
-// 한 번 비교한다. swap이 버블 정렬 규칙과 다르면 상태를 그대로 둔다(ok: false).
-// 바퀴가 끝났을 때 이번 바퀴에 바꾼 것이 없거나 비교할 카드가 하나만 남으면 정렬이 끝난다.
-export function bubbleStep(state, swap) {
-  if (state.done || swap !== bubbleShould(state)) return { state, ok: false };
-  const order = swap ? swapAdjacent(state.order, state.at) : state.order;
-  const swapped = state.swapped || swap;
-  const at = state.at + 1;
-  if (at < order.length - 1 - state.pass) return { state: { ...state, order, at, swapped }, ok: true };
-  const pass = state.pass + 1;
-  const done = !swapped || order.length - 1 - pass <= 0;
-  return { state: { order, pass, at: 0, swapped: false, done }, ok: true };
-}
 
-// 섞은 시작 순서. 이웃 교환일 때는 너무 쉬운 배치를 피해 역순 쌍이 최대의 40% 이상이 되게 한다.
+// ---- 정렬 고르기(#89): 버블·선택·삽입 정렬이 실제로 카드를 바꾸는 순서. order는 카드 번호 배열이고 번호가 곧 크기 순서다.
+// 학생은 바꾸는 두 카드만 고르고, 비교만 하고 바꾸지 않는 단계·이미 제자리인 카드는 건너뛴다. 채점은 이 교환 순서만 본다.
+export const SORT_KINDS = ["bubble", "selection", "insertion"];
+export const SORT_ROUNDS = 5;
+const swapAt = (order, i, j) => {
+  const next = [...order];
+  [next[i], next[j]] = [next[j], next[i]];
+  return next;
+};
+/** 그 정렬이 차례로 바꾸는 두 자리 [왼쪽, 오른쪽]의 목록. */
+export function sortSwaps(start, kind) {
+  let order = [...start];
+  const swaps = [];
+  const swap = (i, j) => {
+    swaps.push([Math.min(i, j), Math.max(i, j)]);
+    order = swapAt(order, i, j);
+  };
+  const n = order.length;
+  if (kind === "bubble")
+    // 왼쪽부터 옆 칸끼리 비교해 왼쪽이 더 크면 바꾼다. 한 바퀴마다 맨 뒤 칸이 하나씩 자리를 잡는다.
+    for (let pass = 0; pass < n - 1; pass++) for (let i = 0; i < n - 1 - pass; i++) if (order[i] > order[i + 1]) swap(i, i + 1);
+  if (kind === "selection")
+    // 왼쪽 칸부터 차례로, 남은 카드 중 가장 작은 수를 그 칸과 바꾼다. 이미 그 칸에 있으면 바꾸지 않는다.
+    for (let i = 0; i < n - 1; i++) {
+      let min = i;
+      for (let j = i + 1; j < n; j++) if (order[j] < order[min]) min = j;
+      if (min !== i) swap(i, min);
+    }
+  if (kind === "insertion")
+    // 왼쪽 두 번째 카드부터 하나씩, 왼쪽 옆 카드가 더 크면 자리를 바꾸며 알맞은 자리까지 옮긴다.
+    for (let i = 1; i < n; i++) for (let j = i; j > 0 && order[j - 1] > order[j]; j--) swap(j - 1, j);
+  return swaps;
+}
+/** 한 라운드의 시작 상태. correct: 맞게 바꾼 수, mistakes: 다르게 고른 수. */
+export function sortStart(order, kind) {
+  const steps = sortSwaps(order, kind);
+  return { kind, order, steps, at: 0, correct: 0, mistakes: 0, done: steps.length === 0 };
+}
+/**
+ * 두 카드(자리 a, b)를 골랐다. 그 정렬의 다음 교환과 같으면 바꾸고(ok: true), 다르면 실수로 세고 카드는 그대로 둔다(ok: false).
+ * 같은 자리를 두 번 고르거나 끝난 라운드면 아무것도 바꾸지 않는다(counted: false, 실수로 세지 않음).
+ */
+export function sortPick(state, a, b) {
+  const n = state.order.length;
+  if (state.done || a === b || ![a, b].every((x) => Number.isInteger(x) && x >= 0 && x < n)) return { state, ok: false, counted: false };
+  const [i, j] = state.steps[state.at];
+  if (Math.min(a, b) !== i || Math.max(a, b) !== j) return { state: { ...state, mistakes: state.mistakes + 1 }, ok: false, counted: true };
+  const at = state.at + 1;
+  return { state: { ...state, order: swapAt(state.order, i, j), at, correct: state.correct + 1, done: at === state.steps.length }, ok: true, counted: true };
+}
+/** 5라운드의 정렬 순서: 버블 → 선택 → 삽입 → 셋 중 무작위 → 셋 중 무작위. */
+export const sortRoundKinds = (random = Math.random) => [
+  ...SORT_KINDS,
+  ...Array.from({ length: SORT_ROUNDS - SORT_KINDS.length }, () => SORT_KINDS[Math.min(SORT_KINDS.length - 1, Math.floor(random() * SORT_KINDS.length))]),
+];
+
+// 섞은 시작 순서. 정렬 고르기(pick)일 때는 너무 쉬운 배치를 피해 역순 쌍이 최대의 40% 이상이 되게 한다.
 export function startOrder(size, swap, random = Math.random) {
-  if (swap !== "adjacent") return scramble(size, random);
+  if (swap !== "pick") return scramble(size, random);
   const least = Math.ceil((size * (size - 1)) / 2 * 0.4);
   const ordered = Array.from({ length: size }, (_, i) => i);
   for (let attempt = 0; attempt < 50; attempt++) {
@@ -338,13 +382,19 @@ const raw = {
   // 학과군 실습의 바탕이 되는 체험(groupData.js의 base). 학과군 데이터가 learn 등을 덧붙인다.
   sorting: {
     template: "B",
-    title: "버블 정렬 직접 해보기",
-    task: "버블 정렬 3라운드: 1라운드에서 규칙을 익히고, 2·3라운드는 설명 없이 스스로 정렬해요.",
-    swap: "adjacent",
-    prompt: "왼쪽부터 이웃한 두 카드를 비교해 왼쪽이 더 크면 바꿔요. 끝까지 가면 다시 왼쪽부터 하고, 한 바퀴 동안 바꾼 게 없으면 끝나요.",
+    title: "정렬 직접 해보기",
+    task: "정렬 이름만 보고 그 방법대로 카드를 바꿔요. 버블·선택·삽입 정렬과 무작위 두 번, 모두 5라운드예요.",
+    swap: "pick",
+    prompt: "정렬 이름을 보고, 그 방법대로 다음에 바꿀 두 카드를 차례로 눌러요.",
     items: ["1", "3", "4", "6", "8", "9"],
+    // 배우기 단계에서 보여 주는 정렬 방법(#89, 2026-11-20 기획 회의). 바꾸지 않는 단계는 누르지 않는다.
+    sorts: [
+      { id: "bubble", name: "버블 정렬", rule: "왼쪽부터 옆 칸끼리 비교해 왼쪽이 더 크면 바꿔요. 한 바퀴 돌면 가장 큰 수가 맨 뒤에 가고, 다시 왼쪽부터 해요." },
+      { id: "selection", name: "선택 정렬", rule: "맨 앞 칸부터 차례로, 남은 카드 중 가장 작은 수를 찾아 남은 칸의 맨 앞 카드와 바꿔요. 이미 맨 앞에 있으면 그대로 둬요." },
+      { id: "insertion", name: "삽입 정렬", rule: "왼쪽 두 번째 카드부터 하나씩, 왼쪽 옆 카드가 더 크면 자리를 바꾸며 알맞은 자리까지 옮겨요." },
+    ],
     explanation:
-      "이웃끼리만 바꿀 수 있을 때 정렬하는 데 필요한 최소 교환 횟수는 순서가 뒤집힌 쌍의 개수와 같아요. 버블 정렬이 바로 이 방식이라, 카드가 많아질수록 교환 횟수가 빠르게 늘어요. 그래서 더 빠른 정렬 방법을 배우게 돼요.",
+      "세 방법 모두 같은 순서가 되지만 바꾸는 횟수가 달라요. 버블·삽입 정렬은 순서가 뒤집힌 쌍의 수만큼 바꾸고, 선택 정렬은 많아야 카드 수보다 하나 적게 바꿔요.",
   },
   journal: {
     template: "C",
