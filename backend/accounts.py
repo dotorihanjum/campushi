@@ -137,7 +137,7 @@ def clear_session_cookie(response):
     response.delete_cookie(SESSION_COOKIE, **cookie_options())
 
 
-def current_user(store, request, now=None):
+def current_user(store, request, now=None, *, internal=False):
     """쿠키의 세션으로 지금 로그인한 사용자의 공개 필드를 찾는다. 로그인하지 않았거나 만료·위조된 세션이면 401."""
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
@@ -150,7 +150,7 @@ def current_user(store, request, now=None):
         "GET",
         "sessions",
         params={
-            "select": f"user:users({','.join(PUBLIC_FIELDS)})",
+            "select": f"user:users({','.join(('id',) + PUBLIC_FIELDS if internal else PUBLIC_FIELDS)})",
             "token_hash": f"eq.{hash_token(token)}",
             "expires_at": f"gt.{utc_text(now)}",
             "limit": "1",
@@ -163,7 +163,7 @@ def current_user(store, request, now=None):
         if not rows:
             raise AccountError(401, SESSION_ENDED, clear_cookie=True)
         user = rows[0]["user"]
-        return {key: user[key] for key in PUBLIC_FIELDS}
+        return {key: user[key] for key in (('id',) + PUBLIC_FIELDS if internal else PUBLIC_FIELDS)}
     except AccountError:
         raise
     except (ValueError, KeyError, TypeError, IndexError) as error:

@@ -30,7 +30,10 @@ export function LoginPanel({ auth, portalTarget }) {
     <div className="my-section-heading"><h2>{auth.user ? "로그인한 계정" : "기록을 이어갈 준비"}</h2></div>
     {auth.loading ? <p className="my-secondary" role="status">계정을 확인하고 있어요…</p> : auth.user ? <>
       <p className="my-secondary">{auth.user.email || `${PROVIDER_NAMES[auth.user.provider]} 계정으로 로그인했어요.`}</p>
-      <p className="my-secondary">현재 체험 기록은 이 브라우저에 보관돼요.</p>
+      <p className="my-secondary" role="status">{auth.records?.phase === "loading" ? "계정 기록을 불러오고 있어요…" : "프로필과 체험 기록을 계정에 보관해요."}</p>
+      {auth.records?.error && <p role="alert" className="my-profile-error">{auth.records.error}</p>}
+      {auth.records?.importAvailable && <><p className="my-secondary">이 브라우저에서 체험한 기록을 가져올 수 있어요. 크레딧은 옮겨지지 않아요. 이제부터 이수하면 쌓여요.</p><button className="my-action primary" disabled={busy} onClick={() => run(auth.records.importGuest)}>이 브라우저 기록 가져오기</button></>}
+      {auth.records?.imported && <p role="status" className="my-secondary">기록을 가져왔어요. 크레딧은 옮겨지지 않아요. 이제부터 이수하면 쌓여요.</p>}
       <button className="my-action" onClick={() => run(auth.logout)} disabled={busy}>로그아웃</button>
     </> : <>
       <p className="my-secondary">체험은 로그인 없이도 할 수 있어요.</p>

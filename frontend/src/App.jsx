@@ -3,6 +3,7 @@ import { SCREENS } from "./screens/index.js";
 import { STORAGE_KEY, loadState, refreshCatalog } from "./model.js";
 import { getDepartments } from "./api.js";
 import { openStorage, storageNotice, writeStorage } from "./storage.js";
+import { useAccountRecords } from "./useAccountRecords.js";
 import { useLogin } from "./useLogin.js";
 import { authReturn } from "./login.js";
 import { isReview } from "./certificates.js";
@@ -126,11 +127,15 @@ export default function App() {
   }, [attempt]);
   const catalog = useMemo(() => ({ ...load, retry: () => setAttempt((n) => n + 1) }), [load]);
 
-  // 저장 공간을 쓸 수 없으면 이번 방문 동안만 기록이 유지되므로, 화면 위쪽에 알린다(storage.js).
+  const records = useAccountRecords(auth, state, setState, storage, load.status === "ready");
+  const accountAuth = { ...auth, records };
+
+  // 저장 공간을 쓸 수 없으면 이번 방문 동안만 기록이 유지되므로 화면 위쪽에 알린다.
   useEffect(() => {
+    if (auth.loading || auth.user || records.context.current) return;
     const saved = writeStorage(storage, STORAGE_KEY, JSON.stringify(state));
     setNotice((n) => storageNotice(n, saved));
-  }, [storage, state]);
+  }, [storage, state, auth.loading, auth.user, records.context]);
   useEffect(() => {
     try {
       sessionStorage.setItem(
@@ -253,9 +258,9 @@ export default function App() {
                     nav={nav}
                     route={route}
                     state={state}
-                    setState={setState}
+                    setState={records.update}
                     catalog={catalog}
-                  auth={auth}
+                  auth={accountAuth}
                     active={!ghost && route.key === top.key}
                   />
                 </div>
