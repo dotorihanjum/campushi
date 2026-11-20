@@ -34,6 +34,8 @@ class LoginStore:
             key = (params["provider"][3:], params["provider_user_id"][3:])
             user = self.identities.get(key)
             return httpx.Response(200, json=[{"user": user}] if user else [])
+        if table == "rpc/find_login_account":
+            return httpx.Response(200, json=[u for u in self.users.values() if u["email"].lower() == body["p_email"].lower()])
         if table == "users":
             email = params.get("email", "")[3:]
             return httpx.Response(200, json=[u for u in self.users.values() if u["email"] == email])
@@ -51,6 +53,15 @@ class LoginStore:
             assert self.challenges.pop(body["p_proof_hash"]) == "signup"
             self.identities[(body["p_provider"], body["p_subject"])] = self.users[body["p_user_id"]]
             return httpx.Response(200, json=True)
+        if table == "rpc/register_login_account":
+            if self.challenges.pop(body["p_proof_hash"], None) != "signup":
+                raise accounts.AccountError(401, "인증 시간이 지났어요.")
+            key = (body["p_provider"], body["p_subject"])
+            user = self.identities.get(key)
+            if not user:
+                user = {**USER, "provider": body["p_provider"], "email": body["p_email"], "birth_year": body["p_birth_year"], "role": body["p_role"]}
+                self.identities[key] = user; self.users[user["id"]] = user
+            return httpx.Response(200, json=user)
         if table == "sessions":
             if method == "POST": self.sessions[body["token_hash"]] = body
             elif method == "DELETE": self.sessions.pop(params["token_hash"][3:], None)
@@ -110,7 +121,7 @@ class LoginTest(unittest.TestCase):
             self.assertNotIn("auth/v1", table)
             if table == "auth_challenges":
                 self.assertNotIn("email", body); self.assertNotIn("subject", body)
-        self.assertEqual(self.client.get("/api/auth/pending").json(), {"pending": True, "link_provider": None})
+        self.assertEqual(self.client.get("/api/auth/pending").json(), {"pending": True, "link_provider": None, "preflight": None})
 
     def test_cancellation_has_retry_route_and_no_user(self):
         q = self.begin()
@@ -159,3 +170,22 @@ class LoginTest(unittest.TestCase):
         response = self.callback(query=self.begin("google", True))
         self.assertIn("auth=error", response.headers["location"])
         self.assertFalse(any(t == "rpc/link_login_identity" for _, t, _ in self.store.requests))
+
+    def test_apple_signature_issuer_audience_and_nonce_are_verified(self):
+        import jwt
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        jwk = jwt.algorithms.RSAAlgorithm.to_jwk(key.public_key(), as_dict=True)
+        jwk["kid"] = "test-key"
+        now = int(time.time())
+        claims = {"sub": "apple-123", "iss": "https://appleid.apple.com", "aud": "apple-client", "iat": now, "exp": now + 300, "nonce": "expected", "email": "student@example.com", "email_verified": "true"}
+        request = type("Request", (), {})()
+        with patch.dict(os.environ, {"APPLE_CLIENT_ID": "apple-client", "APPLE_CLIENT_SECRET": "apple-secret"}), patch.object(login, "apple_keys", return_value=[jwk]):
+            for changes in ({}, {"nonce": "wrong"}, {"aud": "wrong"}, {"iss": "https://evil.example"}, {"exp": now - 10}):
+                encoded = jwt.encode({**claims, **changes}, key, algorithm="RS256", headers={"kid": "test-key"})
+                with patch.object(login, "external", return_value={"id_token": encoded}):
+                    if not changes:
+                        self.assertEqual(login.exchange("apple", "code", {"nonce": "expected"}, request)["subject"], "apple-123")
+                    else:
+                        from fastapi import HTTPException
+                        with self.assertRaises(HTTPException): login.exchange("apple", "code", {"nonce": "expected"}, request)
