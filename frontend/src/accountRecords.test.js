@@ -5,6 +5,7 @@ import {
   hasGuestRecords,
   persistAccount,
   readAccount,
+  clearAccountCache,
 } from "./accountRecords.js";
 import { initialState } from "./model.js";
 
@@ -23,6 +24,7 @@ test("cached queue is isolated by account scope and storage failure is explicit"
   const storage = {
     getItem: (k) => map.get(k),
     setItem: (k, v) => map.set(k, v),
+    removeItem: k => map.delete(k),
     get length() {
       return map.size;
     },
@@ -35,6 +37,11 @@ test("cached queue is isolated by account scope and storage failure is explicit"
     }),
     true,
   );
+  persistAccount(storage, {
+    scope: "B",
+    queue: [{ operation_id: "two", scope: "B", changes: [] }],
+  });
+  clearAccountCache(storage, "B");
   assert.deepEqual(readAccount(storage, "B").queue, []);
   assert.equal(readAccount(storage, "A").queue.length, 1);
   assert.equal(
@@ -293,4 +300,20 @@ test("a duplicated tab recovers immutable deliveries without overwriting other w
     },
   ]);
   assert.equal(readAccount(storage, "account-A").queue.length, 3);
+});
+
+test("a session rejected during periodic refresh hides the active account", async () => {
+  const phases = [];
+  const sync = new RecordSync({
+    storage: memory(),
+    change: (state) => phases.push(state.phase),
+    request: async () => {
+      const error = new Error("expired");
+      error.status = 401;
+      throw error;
+    },
+  });
+  await sync.open(doc());
+  await assert.rejects(sync.refresh());
+  assert.equal(phases.at(-1), "expired");
 });

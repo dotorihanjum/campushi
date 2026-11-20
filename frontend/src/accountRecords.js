@@ -78,6 +78,7 @@ export function clearAccountCache(storage, scope) {
   for (let i = storage.length - 1; i >= 0; i--) {
     const key = storage.key(i);
     if (
+      (!scope && key?.startsWith(ACCOUNT_PREFIX)) ||
       key === ACCOUNT_PREFIX + scope ||
       key?.startsWith(ACCOUNT_PREFIX + scope + ":")
     )
@@ -278,7 +279,13 @@ export class RecordSync {
   }
   async refresh() {
     await this.flush();
-    const saved = await this.request();
+    let saved;
+    try {
+      saved = await this.request();
+    } catch (error) {
+      this.notify(error.status === 401 ? "expired" : "waiting", error.message);
+      throw error;
+    }
     if (!this.active) return;
     if (saved.scope !== this.doc.scope) {
       this.notify(

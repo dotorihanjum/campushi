@@ -8,6 +8,8 @@ import {
   RecordSync,
   recordsRequest,
   LOGOUT_SIGNAL,
+  ACCOUNT_PREFIX,
+  clearAccountCache,
 } from "./accountRecords.js";
 
 export function useAccountRecords(
@@ -23,6 +25,7 @@ export function useAccountRecords(
     guest = useRef(state),
     generation = useRef(0);
   local.current = state;
+  const loadedUser = useRef(null);
   const [retryCount, setRetryCount] = useState(0);
   const [status, setStatus] = useState({
     phase: "checking",
@@ -68,6 +71,7 @@ export function useAccountRecords(
     recordsRequest()
       .then(async (doc) => {
         if (request !== generation.current) return;
+        loadedUser.current = auth.user;
         sync = new RecordSync({ storage, change });
         engine.current = sync;
         await sync.open(doc);
@@ -200,7 +204,28 @@ export function useAccountRecords(
   const logout = async (options) => {
     const sync = engine.current;
     if (sync?.active) await sync.logout(auth.logout, options);
-    else await auth.logout();
+    else {
+      let hasPending = false;
+      try {
+        for (let i = 0; storage && i < storage.length; i++)
+          if (storage.key(i)?.startsWith(ACCOUNT_PREFIX)) hasPending = true;
+      } catch {
+        /* storage may be inaccessible */
+      }
+      if (hasPending && !options?.discard) {
+        const warning = new Error(
+          "저장되지 않은 기록이 있어요. 그래도 로그아웃할까요?",
+        );
+        warning.unsaved = true;
+        throw warning;
+      }
+      await auth.logout();
+      try {
+        clearAccountCache(storage);
+      } catch {
+        /* UI still clears */
+      }
+    }
     context.current = null;
     try {
       sessionStorage.removeItem("campushi-stack-v2");
@@ -221,6 +246,7 @@ export function useAccountRecords(
   };
   return {
     ...status,
+    loadedUser: loadedUser.current,
     context,
     engine,
     importGuest,

@@ -282,9 +282,11 @@ export default function App() {
   }, [records.loggedOutAt]);
   const accountLocked =
     auth.loading ||
-    (auth.user &&
-      ["checking", "loading", "expired", "locking"].includes(records.phase)) ||
-    (!!auth.user && records.phase === "error" && !records.context.current);
+    (!auth.user && !!records.context.current) ||
+    (!!auth.user &&
+      (records.loadedUser !== auth.user ||
+        ["checking", "loading", "expired", "locking"].includes(records.phase) ||
+        (records.phase === "error" && !records.context.current)));
   const top = stack[stack.length - 1];
   const layers = [
     ...stack.map((route) => ({
