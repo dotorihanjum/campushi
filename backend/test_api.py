@@ -433,5 +433,8 @@ class AccountTest(unittest.TestCase):
                 self.assertNotIn("SUPABASE_SECRET_KEY", path.read_text(encoding="utf-8"), path)
 
 
+from backend.test_login import LoginTest
+
+
 if __name__ == "__main__":
     unittest.main()

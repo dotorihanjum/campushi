@@ -1,4 +1,5 @@
 // 마이페이지: 프로필, 나의 학과 체험, 설정, 도움말.
+import { LoginPanel } from "../LoginPanel.jsx";
 import { useEffect, useRef, useState } from "react";
 import { prepareProfilePhoto } from "../profilePhoto.js";
 import { openStorage, writeProfile } from "../storage.js";
@@ -31,7 +32,7 @@ function MenuGroup({ title, children, d = 0 }) {
   );
 }
 
-export function My({ nav, state, setState }) {
+export function My({ nav, state, setState, auth }) {
   // 열려 있는 창: profile, credit, storage, help, sources, reset, record:<학과id>.
   const [sheet, setSheet] = useState(null);
   const [name, setName] = useState("");
@@ -320,6 +321,8 @@ export function My({ nav, state, setState }) {
             <span className="my-credit-value"><strong>{state.credits || 0}</strong><span>크레딧</span><Chevron /></span>
           </button>
         </section>
+
+        <LoginPanel auth={auth} />
 
         <section className="my-section a-up" aria-labelledby="my-records-title" style={delay(0.06)}>
           <div className="my-section-heading">

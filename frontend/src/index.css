@@ -927,3 +927,13 @@ body {
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
 }
+
+/* 로그인도 기존 마이페이지의 색상·둥근 카드·버튼을 사용한다. */
+.my-login { border: 1px solid var(--color-line); border-radius: 16px; padding: 16px; background: #fff; }
+.my-login h2 { color: var(--color-navy); font-size: 15px; font-weight: 700; }
+.my-login .my-secondary { margin-top: 6px; }
+.my-login-options, .my-login-options form { display: grid; gap: 12px; margin-top: 14px; }
+.my-login-options form { font-size: 14px; }
+.my-login-input { width: 100%; min-width: 0; height: 48px; border: 1px solid var(--color-line); border-radius: 12px; padding: 0 14px; background: var(--color-chalk); color: var(--color-ink-2); }
+.my-login-input:focus { outline: 2px solid var(--color-mint-deep); outline-offset: 2px; }
+.my-login-notice { color: var(--color-mint-deep); font-size: 13px; line-height: 21px; }

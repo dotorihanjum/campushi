@@ -72,7 +72,7 @@ class SupabaseRest:
             logger.error("Supabase가 서버 키를 받지 않았습니다(%s). SUPABASE_SECRET_KEY와 테이블 권한을 확인하세요.", response.status_code)
             raise AccountError(500, MISCONFIGURED)
         if response.status_code >= 400:
-            logger.error("Supabase가 %s 응답을 보냈습니다: %s %s %s", response.status_code, method, table, response.text[:300])
+            logger.error("Supabase가 %s 응답을 보냈습니다: %s %s", response.status_code, method, table)
             raise AccountError(502, BAD_REPLY)
         return response
 

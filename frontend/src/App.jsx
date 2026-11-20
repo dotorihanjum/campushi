@@ -3,6 +3,8 @@ import { SCREENS } from "./screens/index.js";
 import { STORAGE_KEY, loadState, refreshCatalog } from "./model.js";
 import { getDepartments } from "./api.js";
 import { openStorage, storageNotice, writeStorage } from "./storage.js";
+import { useLogin } from "./useLogin.js";
+import { authReturn } from "./login.js";
 import { isReview } from "./certificates.js";
 
 // 화면은 402×874 아트보드에 맞춰 그리고, 창 크기에 맞게 통째로 줄이거나 늘린다.
@@ -26,6 +28,8 @@ let keySeed = 1;
 const make = (name, params) => ({ name, params, key: keySeed++ });
 
 function initialStack(state) {
+  const returned = authReturn(location.search);
+  if (returned.result) return [make(returned.view)];
   try {
     const saved = JSON.parse(sessionStorage.getItem(STACK_KEY));
     if (Array.isArray(saved) && saved.length && saved.every((r) => r && r.name in SCREENS))
@@ -77,6 +81,7 @@ function useFit(ref) {
 }
 
 export default function App() {
+  const auth = useLogin();
   // 쿠키·사이트 데이터를 막은 브라우저에서는 localStorage를 읽기만 해도 예외가 나므로, 열지 못하면 빈 상태로 시작한다.
   const [storage] = useState(() => openStorage(() => window.localStorage));
   const [state, setState] = useState(() => loadState(storage));
@@ -250,6 +255,7 @@ export default function App() {
                     state={state}
                     setState={setState}
                     catalog={catalog}
+                  auth={auth}
                     active={!ghost && route.key === top.key}
                   />
                 </div>
