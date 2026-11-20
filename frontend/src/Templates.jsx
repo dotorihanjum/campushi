@@ -212,6 +212,8 @@ export function Rub({ data, year, onDone, onQuit }) {
 // 끝낸 라운드 기록. 배우기 단계에 다녀오면 이 화면이 다시 그려지므로, 앞 라운드 기록은 남기고 하던 라운드만 처음부터 한다.
 // 페이지를 새로 불러오면 지워진다(성적은 5라운드를 모두 끝냈을 때만 남는다).
 const sortMemory = new Map();
+// 말 뒤에 조사를 붙인다("6을", "1과").
+const withJosa = (word, withBatchim, without) => `${word}${pick(word, withBatchim, without)}`;
 const sortMemoryKey = (data) => `${data.title}|${data.items.join(",")}`;
 const sortName = (data, kind) => data.sorts.find((sort) => sort.id === kind)?.name ?? "";
 const shortName = (data, kind) => sortName(data, kind).replace(/\s*정렬$/, "");
@@ -267,7 +269,7 @@ function PickSort({ data, onComplete }) {
     acted.current = true;
     if (chosen === null) {
       setChosen(index);
-      setFeedback(`${pick(card(index), "을", "를")} 골랐어요. 바꿀 카드를 하나 더 골라요.`);
+      setFeedback(`${withJosa(card(index), "을", "를")} 골랐어요. 바꿀 카드를 하나 더 골라요.`);
       return;
     }
     setChosen(null);
@@ -282,7 +284,7 @@ function PickSort({ data, onComplete }) {
       setFeedback(`${name} 순서와 달라요. 다시 골라 봐요.`);
       return;
     }
-    setFeedback(`${pick(left, "과", "와")} ${pick(right, "을", "를")} 바꿨어요.${next.done ? " 정렬이 끝났어요." : ""}`);
+    setFeedback(`${withJosa(left, "과", "와")} ${withJosa(right, "을", "를")} 바꿨어요.${next.done ? " 정렬이 끝났어요." : ""}`);
     if (!next.done) return;
     const done = [...results, { correct: next.correct, mistakes: next.mistakes }];
     setResults(done);
@@ -406,7 +408,7 @@ export function SortGuide({ data, className = "" }) {
                     <span className="sr-only">
                       {r === 0
                         ? `처음 ${rowItem.order.map((n) => data.items[n]).join(", ")}`
-                        : `${pick(data.items[rows[r - 1].order[rowItem.pair[0]]], "과", "와")} ${pick(data.items[rows[r - 1].order[rowItem.pair[1]]], "을", "를")} 바꿔요: ${rowItem.order.map((n) => data.items[n]).join(", ")}`}
+                        : `${withJosa(data.items[rows[r - 1].order[rowItem.pair[0]]], "과", "와")} ${withJosa(data.items[rows[r - 1].order[rowItem.pair[1]]], "을", "를")} 바꿔요: ${rowItem.order.map((n) => data.items[n]).join(", ")}`}
                     </span>
                   </li>
                 ))}
