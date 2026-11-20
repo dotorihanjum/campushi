@@ -189,9 +189,10 @@ export function Lesson({ active, nav, route, state, setState }) {
   const [labDone, setLabDone] = useState(false);
   const retried = useRef(false);
   const resultButton = useRef(null);
-  // "결과 보기"를 누른 시각. 같은 자리에 바로 "기록하러 가기"가 나오므로, 더블클릭·빠른 두 번 탭의 두 번째 입력이
-  // 요약을 건너뛰고 기록으로 가지 않게 SETTLE_MS 동안은 "기록하러 가기"를 무시한다(#63, #74와 같은 방식).
-  const summaryAt = useRef(0);
+  // 아래 주 버튼(같은 자리의 FilledButton)의 뜻이 바뀐 시각. 단계·결과 화면이 바뀌면 글자와 동작만 바뀌므로, 더블클릭·빠른 두 번
+  // 탭의 두 번째 입력이 다음 동작(기록 건너뛰고 성적 받기, 과목 목록으로 등)을 실행하지 않게 SETTLE_MS 동안은 무시한다
+  // (#78, "결과 보기" 뒤 막기 #63도 이것으로 합쳤다).
+  const footerAt = useRef(0);
   // 수업을 마치고 받은 결과: { grade, percent, best, opened, graduated }.
   const [result, setResult] = useState(null);
   const timer = useRef(0);
@@ -206,6 +207,9 @@ export function Lesson({ active, nav, route, state, setState }) {
     if (scroller.current) scroller.current.scrollTop = 0;
     heading.current?.focus({ preventScroll: true });
   }, [step, result]);
+  useEffect(() => {
+    footerAt.current = performance.now();
+  }, [step, result, labOpen, labDone]);
   // "체험 다시 해보기"를 누르면 다시 열린 체험의 시작(맨 위 체험 제목)에 초점을 둔다(#63).
   useEffect(() => {
     if (!labOpen || !retried.current) return;
@@ -220,6 +224,13 @@ export function Lesson({ active, nav, route, state, setState }) {
     if (!now || now === document.body || !scroller.current?.contains(now)) resultButton.current?.focus({ preventScroll: true });
   }, [labDone]);
   if (!ok) return null;
+  // 아래 주 버튼의 동작: 뜻이 바뀐 직후(SETTLE_MS)의 입력은 무시한다.
+  // 누른 즉시 시각을 남겨, 화면이 다시 그려지기 전에 들어온 두 번째 입력도 막는다.
+  const settled = (fn) => () => {
+    if (performance.now() - footerAt.current < SETTLE_MS) return;
+    footerAt.current = performance.now();
+    fn();
+  };
 
   const { d, final } = v;
   const kind = isFinal ? "졸업 과제" : kindOf(d, subject);
@@ -229,7 +240,7 @@ export function Lesson({ active, nav, route, state, setState }) {
   // 체험이 아직 없는 과목(연습 문제가 없어졌거나 형식이 맞지 않는 경우 포함): 구현 예정이라고 알린다. 성적은 남지 않는다.
   if (!isFinal && !practice && !lab && (!typed || quiz.status === "basic"))
     return (
-      <Screen foot={700} footer={<FilledButton onClick={nav.back}>과목 목록으로</FilledButton>}>
+      <Screen foot={700} footer={<FilledButton onClick={settled(nav.back)}>과목 목록으로</FilledButton>}>
         {header}
         <div className="flow no-scrollbar absolute bottom-[174px] left-0 top-[100px] w-full overflow-y-auto px-[20px] pt-[18px]">
           <h1 className="a-up text-[26px] font-bold leading-[36px] text-navy">{subject}</h1>
@@ -286,15 +297,15 @@ export function Lesson({ active, nav, route, state, setState }) {
         foot={700}
         footer={
           result.graduated ? (
-            <FilledButton onClick={() => nav.replace("grades", undefined, "fade")}>성적표와 졸업증명서 받기</FilledButton>
+            <FilledButton onClick={settled(() => nav.replace("grades", undefined, "fade"))}>성적표와 졸업증명서 받기</FilledButton>
           ) : (
             <>
               <div className="absolute inset-x-[20px] top-[708px] flex h-[36px] items-center justify-end">
-                <button onClick={again} className="pressable h-[36px] rounded-full border border-line bg-white px-[14px] text-[13px] font-semibold text-slate">
+                <button onClick={settled(again)} className="pressable h-[36px] rounded-full border border-line bg-white px-[14px] text-[13px] font-semibold text-slate">
                   다시 듣기
                 </button>
               </div>
-              <FilledButton onClick={nav.back}>과목 목록으로</FilledButton>
+              <FilledButton onClick={settled(nav.back)}>과목 목록으로</FilledButton>
             </>
           )
         }
@@ -476,7 +487,7 @@ export function Lesson({ active, nav, route, state, setState }) {
         </>
       );
     action = (
-      <FilledButton onClick={() => go(1)} disabled={mode === "loading" || mode === "error"}>
+      <FilledButton onClick={settled(() => go(1))} disabled={mode === "loading" || mode === "error"}>
         직접 해보기
       </FilledButton>
     );
@@ -527,21 +538,16 @@ export function Lesson({ active, nav, route, state, setState }) {
     action = labDone ? (
       <FilledButton
         ref={resultButton}
-        onClick={() => {
-          summaryAt.current = performance.now();
+        onClick={settled(() => {
           setLabDone(false);
           setLabOpen(false);
-        }}
+        })}
       >
         결과 보기
       </FilledButton>
     ) : (
       <FilledButton
-        onClick={() => {
-          if (performance.now() - summaryAt.current < SETTLE_MS) return;
-          if (play) go(2);
-          else warn("먼저 끝까지 해보세요.");
-        }}
+        onClick={settled(() => (play ? go(2) : warn("먼저 끝까지 해보세요.")))}
       >
         기록하러 가기
       </FilledButton>
@@ -559,7 +565,7 @@ export function Lesson({ active, nav, route, state, setState }) {
         />
       </div>
     );
-    action = <FilledButton onClick={() => (play ? go(2) : warn("먼저 끝까지 해보세요."))}>기록하러 가기</FilledButton>;
+    action = <FilledButton onClick={settled(() => (play ? go(2) : warn("먼저 끝까지 해보세요.")))}>기록하러 가기</FilledButton>;
   } else {
     // 이 수업에서 배운 것(데이터에 없으면 카드를 그리지 않는다).
     const learned = mode === "quiz" ? quiz.game.explanation : mode === "project" ? final.explanation : mode === "lab" ? lab.takeaway.summary : mode === "practice" ? practice.learn : "";
@@ -589,7 +595,7 @@ export function Lesson({ active, nav, route, state, setState }) {
         </label>
       </>
     );
-    action = <FilledButton onClick={finish}>{written ? "기록 저장하고 성적 받기" : "기록 건너뛰고 성적 받기"}</FilledButton>;
+    action = <FilledButton onClick={settled(finish)}>{written ? "기록 저장하고 성적 받기" : "기록 건너뛰고 성적 받기"}</FilledButton>;
   }
 
   return (
