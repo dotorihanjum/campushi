@@ -155,7 +155,7 @@ class LabBoundary extends Component {
   }
 }
 
-export function Lesson({ active, nav, route, state, setState }) {
+export function Lesson({ active, nav, route, state, setState, auth }) {
   // 이 화면은 들어올 때의 과목 하나를 다룬다. 열린 학년의 과목만 들을 수 있다.
   const [v] = useState(() => view(state));
   const subject = route?.params?.subject;
@@ -271,7 +271,8 @@ export function Lesson({ active, nav, route, state, setState }) {
     setResult({
       ...got,
       best: recordOf(after, d.id, subject),
-      credits: (after.credits || 0) - (base.credits || 0),
+      credits: auth?.user ? 0 : (after.credits || 0) - (base.credits || 0),
+      accountCredit: !!auth?.user,
       // 이수했지만 7일 규칙 때문에 이번엔 크레딧을 받지 못했으면, 다시 받을 수 있기까지 남은 날.
       creditWait: passes(got.grade) ? creditWaitDays(base, d.id, subject) : 0,
       // 새로 열린 학년들(체험이 있는 필수과목이 없는 학년은 함께 열린다).
@@ -322,6 +323,7 @@ export function Lesson({ active, nav, route, state, setState }) {
             {result.grade === PASS ? "끝까지 해서 통과(P)했어요." : lab ? `채점 항목 통과 ${result.percent}%` : `정답률 ${result.percent}%`}
             {result.best && result.best.grade !== result.grade ? ` · 남는 성적은 가장 좋은 ${gradeText(result.best)}이에요` : ""}
           </p>
+          {result.accountCredit && <p className="my-secondary mt-[12px]">{auth.records?.pending ? "연결되면 기록을 저장하고 크레딧을 확인할게요." : "기록과 크레딧은 서버 확인 결과로 반영돼요."}</p>}
           {result.credits > 0 && <CreditPill credits={result.credits} className="a-pop mt-[12px] inline-flex" style={delay(0.2)} />}
           {result.credits > 0 && <span className="sr-only">{`크레딧 ${josa(String(result.credits), "을", "를")} 받았어요`}</span>}
           {result.credits === 0 && result.creditWait > 0 && (
