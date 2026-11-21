@@ -52,10 +52,16 @@ export function useAccountRecords(
           catalog: local.current.catalog,
         });
       }
-      setStatus((s) => ({ ...s, phase: "guest", error: "", pending: 0 }));
+      setStatus((s) => ({
+        phase: "guest",
+        error: "",
+        pending: 0,
+        importAvailable: false,
+        loggedOutAt: s.loggedOutAt,
+      }));
       return;
     }
-    setStatus((s) => ({ ...s, phase: "loading", error: "" }));
+    setStatus({ phase: "loading", error: "", pending: 0, importAvailable: false });
     let sync;
     const change = ({ doc, queue, ...next }) => {
       if (request !== generation.current) return;
@@ -164,42 +170,47 @@ export function useAccountRecords(
     if (!sync?.active) throw new Error("계정 기록을 먼저 불러와 주세요.");
     if (sync.isLocked())
       throw new Error("다른 창에서 로그아웃을 진행하고 있어요.");
-    await sync.flush();
-    let operation_id;
+    setStatus((s) => ({ ...s, importing: true, importedDepartmentCount: null }));
     try {
-      operation_id = storage?.getItem(IMPORT_KEY);
-    } catch {
-      /* memory-only visit */
+      await sync.flush();
+      let operation_id;
+      try {
+        operation_id = storage?.getItem(IMPORT_KEY);
+      } catch {
+        /* memory-only visit */
+      }
+      operation_id ||= crypto.randomUUID();
+      try {
+        storage?.setItem(IMPORT_KEY, operation_id);
+      } catch {
+        /* no durable guest storage */
+      }
+      const saved = await recordsRequest("/import", "POST", {
+        scope: sync.doc.scope,
+        operation_id,
+        state: guest.current,
+      });
+      if (!sync.active) return;
+      sync.adopt(saved);
+      guest.current = structuredClone(initialState);
+      try {
+        storage?.removeItem(STORAGE_KEY);
+        storage?.removeItem(IMPORT_KEY);
+      } catch {
+        /* local storage is blocked */
+      }
+      display(pendingView(local.current, sync.doc, sync.queue, true));
+      context.current = sync.doc;
+      setStatus((s) => ({
+        ...s,
+        phase: "saved",
+        error: "",
+        importAvailable: false,
+        importedDepartmentCount: saved.imported_department_count,
+      }));
+    } finally {
+      if (sync.active) setStatus((s) => ({ ...s, importing: false }));
     }
-    operation_id ||= crypto.randomUUID();
-    try {
-      storage?.setItem(IMPORT_KEY, operation_id);
-    } catch {
-      /* no durable guest storage */
-    }
-    const saved = await recordsRequest("/import", "POST", {
-      scope: sync.doc.scope,
-      operation_id,
-      state: guest.current,
-    });
-    if (!sync.active) return;
-    sync.adopt(saved);
-    guest.current = structuredClone(initialState);
-    try {
-      storage?.removeItem(STORAGE_KEY);
-      storage?.removeItem(IMPORT_KEY);
-    } catch {
-      /* local storage is blocked */
-    }
-    display(pendingView(local.current, sync.doc, sync.queue, true));
-    context.current = sync.doc;
-    setStatus((s) => ({
-      ...s,
-      phase: "saved",
-      error: "",
-      importAvailable: false,
-      imported: true,
-    }));
   }, [display, storage]);
   const logout = async (options) => {
     const sync = engine.current;
@@ -258,5 +269,9 @@ export function useAccountRecords(
         ? engine.current.refresh()
         : setRetryCount((n) => n + 1),
     saveProfile: (name, photo) => engine.current.saveProfile(name, photo),
+    dismissRejected: () => {
+      engine.current?.dismissRejected();
+      setStatus((s) => ({ ...s, rejectedRecord: "" }));
+    },
   };
 }

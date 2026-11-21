@@ -98,7 +98,7 @@ def import_records(
     same_origin(request)
     user_id, scope = owner(store, request)
     if not hmac.compare_digest(scope, body.scope):
-        raise HTTPException(409, "로그인한 계정이 바뀌었어요. 다시 확인해 주세요.")
+        raise HTTPException(409, {"code": "record_account_changed", "message": "로그인한 계정이 바뀌었어요. 다시 확인해 주세요."})
     from backend.main import department_list
 
     raw = body.state
@@ -107,18 +107,18 @@ def import_records(
         for key in ("journeys", "records", "notes")
     ):
         raise HTTPException(400, "가져올 기록을 확인해 주세요.")
+    catalog = department_list()["departments"]
+    now = int(time.time() * 1000)
     saved = commit(
-        store,
-        user_id,
-        body.operation_id,
-        lambda state: (
-            imported(
-                state, raw, department_list()["departments"], int(time.time() * 1000)
-            ),
-            [],
-        ),
+        store, user_id, body.operation_id,
+        lambda state: (imported(state, raw, catalog, now), []),
     )
-    return public_document(saved, scope)
+    confirmed_journeys = saved["state"].get("journeys", {})
+    count = sum(
+        department["id"] in raw.get("journeys", {}) and department["id"] in confirmed_journeys
+        for department in catalog
+    )
+    return {**public_document(saved, scope), "imported_department_count": count}
 
 
 @router.post("/operations")
@@ -128,7 +128,7 @@ def save_operations(
     same_origin(request)
     user_id, scope = owner(store, request)
     if not hmac.compare_digest(scope, body.scope):
-        raise HTTPException(409, "로그인한 계정이 바뀌었어요. 다시 확인해 주세요.")
+        raise HTTPException(409, {"code": "record_account_changed", "message": "로그인한 계정이 바뀌었어요. 다시 확인해 주세요."})
     # Check replay before running rules (e.g. a repeated profile update has an old expected revision).
     replay = store.call(
         "GET",
@@ -149,8 +149,18 @@ def save_operations(
 
     def change(state):
         awards = []
-        for op in body.changes:
-            state, new_awards = apply_operation(state, op, catalog, now)
+        for index, op in enumerate(body.changes):
+            try:
+                state, new_awards = apply_operation(state, op, catalog, now)
+            except HTTPException as error:
+                if error.status_code not in (400, 409):
+                    raise
+                # This batch is still uncommitted. The browser can retry its other changes.
+                raise HTTPException(error.status_code, {
+                    "code": "record_change_rejected",
+                    "change_index": index,
+                    "message": error.detail,
+                }) from None
             awards.extend(new_awards)
         return state, awards
 

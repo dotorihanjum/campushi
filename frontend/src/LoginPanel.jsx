@@ -68,14 +68,27 @@ export function LoginPanel({ auth, portalTarget }) {
               `${PROVIDER_NAMES[auth.user.provider]} 계정으로 로그인했어요.`}
           </p>
           <p className="my-secondary" role="status">
-            {auth.records?.phase === "loading"
-              ? "계정 기록을 불러오고 있어요…"
-              : auth.records?.phase === "saving"
-                ? "기록을 저장하고 있어요…"
-                : auth.records?.pending
-                  ? "연결되면 저장할게요."
-                  : "프로필과 체험 기록을 계정에 저장했어요."}
+            {auth.records?.importing
+              ? "기록을 계정으로 옮기고 있어요."
+              : auth.records?.phase === "loading"
+                ? "계정 기록을 불러오고 있어요…"
+                : auth.records?.phase === "saving"
+                  ? "기록을 저장하고 있어요…"
+                  : auth.records?.pending
+                    ? "연결되면 저장할게요."
+                    : "프로필과 체험 기록을 계정에 저장했어요."}
           </p>
+          {auth.records?.rejectedRecord && (
+            <>
+              <p role="alert" className="my-profile-error">{auth.records.rejectedRecord}</p>
+              <button
+                className="my-action"
+                onClick={auth.records.dismissRejected}
+              >
+                확인했어요
+              </button>
+            </>
+          )}
           {auth.records?.error && (
             <>
               <p role="alert" className="my-profile-error">
@@ -111,10 +124,12 @@ export function LoginPanel({ auth, portalTarget }) {
               </button>
             </>
           )}
-          {auth.records?.imported && (
+          {Number.isInteger(auth.records?.importedDepartmentCount) && (
             <p role="status" className="my-secondary">
-              기록을 가져왔어요. 크레딧은 옮겨지지 않아요. 이제부터 이수하면
-              쌓여요.
+              {auth.records.importedDepartmentCount > 0
+                ? `${auth.records.importedDepartmentCount}개 학과 기록을 가져왔어요.`
+                : "기록을 가져왔어요."}{" "}
+              크레딧은 옮겨지지 않아요. 이제부터 이수하면 쌓여요.
             </p>
           )}
           <button

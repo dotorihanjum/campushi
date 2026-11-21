@@ -317,3 +317,65 @@ test("a session rejected during periodic refresh hides the active account", asyn
   await assert.rejects(sync.refresh());
   assert.equal(phases.at(-1), "expired");
 });
+
+test("a rejected course change rolls back while valid siblings and later writes save", async () => {
+  const storage = memory();
+  const sent = [];
+  const received = [];
+  const enrollment = { kind: "enroll", department: "khu-cse" };
+  const bad = { kind: "complete", department: "khu-cse", subject: "빠진 과목" };
+  const note = { kind: "note", department: "khu-cse", subject: "이산구조", text: "계속 저장" };
+  const sync = new RecordSync({
+    storage,
+    change: (next) => received.push(next.rejectedRecord),
+    request: async (_path, _method, item) => {
+      sent.push(item);
+      if (item.changes.includes(bad)) {
+        throw Object.assign(new Error("과목을 저장할 수 없어요."), {
+          status: 400, code: "record_change_rejected", changeIndex: 1,
+        });
+      }
+      return { ...doc(), revision: sent.length,
+        state: { ...doc().state, notes: { "khu-cse|이산구조": note.text } } };
+    },
+  });
+  await sync.open(doc());
+  sync.enqueue([enrollment, bad]);
+  sync.enqueue([note]);
+  await sync.flush();
+  assert.deepEqual(sent.map((item) => item.changes), [[enrollment, bad], [enrollment], [note]]);
+  assert.equal(sent[0].operation_id, sent[1].operation_id);
+  assert.equal(sync.doc.state.notes["khu-cse|이산구조"], "계속 저장");
+  assert.equal(readAccount(storage, sync.doc.scope).queue.length, 0);
+  assert.match(received.at(-1), /빠진 과목.*과목을 저장할 수 없어요/);
+  sync.dismissRejected();
+  sync.enqueue([{ ...note, text: "다음 기록" }]);
+  await sync.flush();
+  assert.equal(received.at(-1), "");
+});
+
+test("a terminal rejection rolls back to current server state while transient 409 stays queued", async () => {
+  const storage = memory();
+  const latest = { ...doc(), revision: 2, state: { ...doc().state, nickname: "다른 기기 변경" } };
+  let transient = true;
+  let sawFetch = false;
+  const sync = new RecordSync({
+    storage,
+    change() {},
+    request: async (path) => {
+      if (path === undefined) { sawFetch = true; return latest; }
+      const error = Object.assign(new Error("저장 충돌"), { status: 409 });
+      if (!transient) Object.assign(error, { code: "record_change_rejected", changeIndex: 0 });
+      throw error;
+    },
+  });
+  await sync.open(doc());
+  sync.enqueue([{ kind: "reset" }]);
+  await assert.rejects(sync.flush(), /저장 충돌/);
+  assert.equal(readAccount(storage, sync.doc.scope).queue.length, 1);
+  transient = false;
+  await sync.flush();
+  assert.equal(sawFetch, true);
+  assert.equal(sync.doc.state.nickname, "다른 기기 변경");
+  assert.equal(readAccount(storage, sync.doc.scope).queue.length, 0);
+});
