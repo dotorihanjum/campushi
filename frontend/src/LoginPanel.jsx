@@ -38,19 +38,19 @@ export function LoginPanel({ auth, portalTarget }) {
       <button className="my-action" onClick={() => run(auth.logout)} disabled={busy}>로그아웃</button>
     </> : <>
       <p className="my-secondary">체험은 로그인 없이도 할 수 있어요.</p>
-      <button className="my-action primary mt-[12px]" onClick={() => { setOpen(true); setSent(false); }}>로그인 <span aria-hidden>→</span></button>
+      <button className="my-action primary mt-[12px]" onClick={() => { setMode("login"); setOpen(true); setSent(false); }}>로그인 <span aria-hidden>→</span></button>
     </>}
     {auth.error && <><p role="alert" className="my-profile-error">{auth.error}</p><button className="my-action" disabled={busy} onClick={() => run(auth.refresh)}>다시 확인하기</button></>}
     {error && !open && <p role="alert" className="my-profile-error">{error}</p>}
     {open && portalTarget && createPortal(<Dialog title={mode === "signup" && !auth.linkProvider ? "처음 가입하기" : "로그인"} onClose={close} actions={<button className="button ghost" disabled={busy} onClick={close}>{mode === "signup" && signupBlocked() ? "로그인 없이 체험하기" : "체험 계속하기"}</button>}>
-      {mode === "signup" && !auth.linkProvider && auth.policy ? <SignupForm key={auth.pending ? "verified" : "new"} auth={auth} onBusy={setBusy} onAuthenticated={() => { setOpen(false); auth.clearResult(); }} onNeedsLogin={() => setMode("login")} /> : <>
+      {mode === "signup" && !auth.linkProvider && auth.signup_notice ? <p role="status">{auth.signup_notice}</p> : mode === "signup" && !auth.linkProvider && auth.policy ? <SignupForm key={auth.pending ? "verified" : "new"} auth={auth} onBusy={setBusy} onAuthenticated={() => { setOpen(false); auth.clearResult(); }} onNeedsLogin={() => setMode("login")} /> : <>
       <p>체험은 로그인 없이도 할 수 있어요.</p>
       {auth.result === "cancelled" && <p role="status" className="my-secondary mt-[10px]">로그인을 취소했어요. 다시 시도할 수 있어요.</p>}
       {auth.result === "error" && <p role="alert" className="my-profile-error">로그인을 마치지 못했어요. 처음 요청한 브라우저에서 다시 시도해 주세요.</p>}
       {auth.pending && <p className="my-secondary mt-[10px]">{auth.linkProvider ? `같은 이메일의 계정이 있어요. 기존 ${PROVIDER_NAMES[auth.linkProvider]} 계정으로 한 번 더 로그인해야 안전하게 연결할 수 있어요.` : "처음 오셨네요. 가입 내용을 확인해 주세요."}</p>}
       <div className="my-login-options">
-        {providers.map((p) => <button key={p} className="button" disabled={busy} onClick={() => { if (signupBlocked()) { setMode("signup"); return; } run(() => auth.login(p, !!auth.linkProvider)); }}>{PROVIDER_NAMES[p]}로 {auth.linkProvider ? "다시 로그인" : "계속하기"}</button>)}
-        {emailAllowed && <form onSubmit={(e) => { e.preventDefault(); if (signupBlocked()) { setMode("signup"); return; } run(async () => { await auth.sendEmail(email.trim(), !!auth.linkProvider); setSent(true); }); }}>
+        {providers.map((p) => <button key={p} className="button" disabled={busy} onClick={() => { if (auth.policy && signupBlocked()) { setMode("signup"); return; } run(() => auth.login(p, !!auth.linkProvider)); }}>{PROVIDER_NAMES[p]}로 {auth.linkProvider ? "다시 로그인" : "계속하기"}</button>)}
+        {emailAllowed && <form onSubmit={(e) => { e.preventDefault(); if (auth.policy && signupBlocked()) { setMode("signup"); return; } run(async () => { await auth.sendEmail(email.trim(), !!auth.linkProvider); setSent(true); }); }}>
           <label htmlFor="login-email">이메일 주소</label>
           <input id="login-email" data-autofocus type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={254} required disabled={busy} placeholder="이메일을 입력해 주세요" className="my-login-input" />
           <button className="button" type="submit" disabled={busy || !email.trim()}>{busy ? "요청 중…" : sent ? "로그인 링크 다시 받기" : "이메일로 로그인 링크 받기"}</button>
@@ -58,7 +58,8 @@ export function LoginPanel({ auth, portalTarget }) {
         {!providers.length && !emailAllowed && <p role="status">로그인 연결을 준비하고 있어요. 체험은 바로 계속할 수 있어요.</p>}
         {sent && <p role="status" className="my-login-notice">메일함과 스팸함을 확인해 주세요. 요청한 이 브라우저에서 10분 안에 링크를 열어 주세요.</p>}
       </div>
-      {!auth.linkProvider && <button className="my-signup-entry" onClick={() => setMode("signup")}>처음이신가요? 가입 안내 보기</button>}
+      {auth.signup_notice && !auth.linkProvider && <p role="status" className="my-secondary">{auth.signup_notice}</p>}
+      {!auth.linkProvider && auth.policy && <button className="my-signup-entry" onClick={() => setMode("signup")}>처음이신가요? 가입 안내 보기</button>}
       </>}
       {error && <p role="alert" className="my-profile-error mt-[12px]">{error}</p>}
     </Dialog>, portalTarget)}

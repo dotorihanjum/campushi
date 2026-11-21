@@ -1,10 +1,12 @@
 import { cleanGame } from "./lessonGames.js";
 
 export class ApiError extends Error {
-  constructor(status, detail) {
+  constructor(status, detail, { code, changeIndex } = {}) {
     super(detail);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
+    this.changeIndex = changeIndex;
   }
 }
 const FAILED = "학과 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.";
@@ -31,13 +33,15 @@ export async function request(path, init, signal, failed = FAILED) {
   } catch {
     throw new ApiError(response.status, failed);
   }
-  if (!response.ok)
+  if (!response.ok) {
+    const detail = data?.detail;
+    const message = typeof detail === "string" ? detail : detail?.message;
     throw new ApiError(
       response.status,
-      typeof data.detail === "string"
-        ? data.detail
-        : "요청을 처리하지 못했어요.",
+      typeof message === "string" ? message : "요청을 처리하지 못했어요.",
+      { code: data?.code ?? detail?.code, changeIndex: detail?.change_index },
     );
+  }
   return data;
 }
 // 학과 데이터(경희대 컴퓨터공학과·산업디자인학과). 형식은 model.js의 createDepartment가 검사한다.

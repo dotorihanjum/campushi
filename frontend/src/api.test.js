@@ -29,3 +29,17 @@ test("서버 오류와 연결 실패는 한국어 메시지로 알린다", async
   reply = () => new Response("<html>", { status: 502 });
   await assert.rejects(getDepartments(), (error) => error.status === 502);
 });
+
+test("가입 제한과 저장 거절 이유를 서버 응답에서 유지한다", async (t) => {
+  const { request } = await import("./api.js");
+  let payload = { detail: "나이 제한", code: "signup_age_restricted" };
+  let status = 403;
+  t.mock.method(globalThis, "fetch", async () => Response.json(payload, { status }));
+  await assert.rejects(request("/auth/register"), { status, code: "signup_age_restricted", message: "나이 제한" });
+
+  payload = { detail: { code: "record_change_rejected", change_index: 1, message: "과목이 닫혔어요." } };
+  status = 400;
+  await assert.rejects(request("/me/records/operations"), {
+    status, code: "record_change_rejected", changeIndex: 1, message: "과목이 닫혔어요.",
+  });
+});
