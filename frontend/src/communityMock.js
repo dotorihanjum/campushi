@@ -1,6 +1,6 @@
 // 커뮤니티 탭 미리보기용 예시 데이터. 서버·DB가 없어서 화면 디자인을 검토하려고 넣은 예시이고, 실제 사용자의 글이 아니다.
 // 닉네임은 모두 지어낸 것이고 실명·사진·연락처는 넣지 않는다. 학과는 앱에 실제로 있는 두 학과(khu-cse, khu-id)만 쓴다.
-// minutesAgo: 화면을 연 때로부터 몇 분 전에 쓴 글처럼 보일지.
+// minutesAgo: 화면을 연 때로부터 몇 분 전에 쓴 글처럼 보일지. 댓글의 mentor: 그 댓글을 쓴 예시 재학생(MOCK_MENTORS의 id).
 // (미리보기 브랜치 전용. 실제 커뮤니티를 열 때는 이 파일을 지우고 서버 데이터로 바꾼다.)
 
 export const MOCK_QUESTIONS = [
@@ -12,7 +12,7 @@ export const MOCK_QUESTIONS = [
     title: "컴공 1학년 수학 진짜 많이 해요?",
     body: "미분적분학, 선형대수, 이산구조가 다 1학년에 있던데 수학을 잘 못하면 많이 힘들까요? 코딩은 좋아하는데 수학은 중간 정도예요.",
     comments: [
-      { id: "q1c1", author: "코딩하는수달", minutesAgo: 12, body: "1학년은 수학 비중이 꽤 커요. 대신 다들 처음 배우는 거라 따라가면 돼요!" },
+      { id: "q1c1", author: "공대생도토리", mentor: "m1", minutesAgo: 12, body: "1학년은 수학 비중이 꽤 커요. 대신 다들 처음 배우는 거라 따라가면 돼요!" },
       { id: "q1c2", author: "고2진로탐색", minutesAgo: 5, body: "저도 궁금했어요. 앱에서 이산구조 퀴즈 풀어 봤는데 생각보다 재밌었어요." },
     ],
   },
@@ -23,17 +23,17 @@ export const MOCK_QUESTIONS = [
     minutesAgo: 70,
     title: "산업디자인과는 실기 못 해도 갈 수 있나요?",
     body: "그림은 좋아하는데 학원은 안 다녀 봤어요. 산업디자인학과 들어가면 처음부터 다 배우는 건지 궁금해요.",
-    comments: [{ id: "q2c1", author: "스케치북곰", minutesAgo: 40, body: "입시 방식은 학교 입학처 요강을 꼭 확인해 보세요. 학교마다 달라요." }],
+    comments: [{ id: "q2c1", author: "스케치하는부엉이", mentor: "m2", minutesAgo: 40, body: "입시 방식은 학교 입학처 요강을 꼭 확인해 보세요. 학교마다 달라요." }],
   },
   {
     id: "q3",
     dept: "khu-cse",
     author: "고1진로고민중",
     minutesAgo: 180,
-    title: "버블 정렬 체험 해 봤는데 이게 실제 수업이랑 비슷해요?",
-    body: "앱에서 버블 정렬 3라운드 해 봤는데 재밌었어요. 실제 알고리즘 수업도 이런 걸 배우나요?",
+    title: "정렬 체험 해 봤는데 이게 실제 수업이랑 비슷해요?",
+    body: "앱에서 정렬 5라운드 해 봤는데 재밌었어요. 실제 알고리즘 수업도 이런 걸 배우나요?",
     comments: [
-      { id: "q3c1", author: "밤샘개발자", minutesAgo: 150, body: "정렬은 알고리즘 수업 초반에 나와요. 실제로는 코드로 짜고 시간이 얼마나 걸리는지도 따져요." },
+      { id: "q3c1", author: "공대생도토리", mentor: "m1", minutesAgo: 150, body: "정렬은 알고리즘 수업 초반에 나와요. 실제로는 코드로 짜고 시간이 얼마나 걸리는지도 따져요." },
     ],
   },
   {
@@ -53,7 +53,7 @@ export const MOCK_QUESTIONS = [
     title: "문과인데 컴공 가도 괜찮을까요?",
     body: "고등학교는 문과 과목 위주로 들었는데 프로그래밍이 재밌어서 컴공을 생각 중이에요. 따라갈 수 있을지 걱정돼요.",
     comments: [
-      { id: "q5c1", author: "코딩하는수달", minutesAgo: 540, body: "1학년 수학만 잘 버티면 돼요. 미리 기초 수학을 조금 보고 가면 좋아요." },
+      { id: "q5c1", author: "새내기탈출판다", mentor: "m5", minutesAgo: 540, body: "1학년 수학만 잘 버티면 돼요. 미리 기초 수학을 조금 보고 가면 좋아요." },
       { id: "q5c2", author: "고1진로고민중", minutesAgo: 500, body: "저도 문과인데 같은 고민이에요ㅠㅠ" },
     ],
   },
@@ -64,7 +64,7 @@ export const MOCK_QUESTIONS = [
     minutesAgo: 1440,
     title: "산디 과제는 주로 혼자 해요, 팀으로 해요?",
     body: "팀플이 많다고 들었는데 실제로 어떤지 궁금해요.",
-    comments: [{ id: "q6c1", author: "스케치북곰", minutesAgo: 1300, body: "학년이 올라갈수록 팀 프로젝트가 늘어난다고 들었어요." }],
+    comments: [{ id: "q6c1", author: "목업장인고슴도치", mentor: "m4", minutesAgo: 1300, body: "학년이 올라갈수록 팀 프로젝트가 늘어난다고 들었어요." }],
   },
   {
     id: "q7",
@@ -96,9 +96,58 @@ export const MOCK_QUESTIONS = [
 ];
 
 export const MOCK_MENTORS = [
-  { id: "m1", nickname: "공대생도토리", dept: "khu-cse", year: 3, intro: "알고리즘이랑 웹 개발을 좋아해요. 1학년 수학 버티는 법 알려 드릴게요." },
-  { id: "m2", nickname: "스케치하는부엉이", dept: "khu-id", year: 2, intro: "제품 디자인 과제와 포트폴리오 얘기 편하게 물어보세요." },
-  { id: "m3", nickname: "AI공부하는여우", dept: "khu-cse", year: 4, intro: "인공지능 수업과 졸업 프로젝트 준비 경험을 나눠요." },
-  { id: "m4", nickname: "목업장인고슴도치", dept: "khu-id", year: 3, intro: "모형 만들기와 팀 프로젝트가 궁금하면 물어보세요." },
-  { id: "m5", nickname: "새내기탈출판다", dept: "khu-cse", year: 2, intro: "문과에서 컴공 온 경험을 이야기해 드려요." },
+  {
+    id: "m1",
+    nickname: "공대생도토리",
+    dept: "khu-cse",
+    year: 3,
+    intro: "알고리즘이랑 웹 개발을 좋아해요. 1학년 수학 버티는 법 알려 드릴게요.",
+    topics: [["수업", "1학년 수학 공부하는 법"], ["과제", "알고리즘·웹 개발 과제"]],
+  },
+  {
+    id: "m2",
+    nickname: "스케치하는부엉이",
+    dept: "khu-id",
+    year: 2,
+    intro: "제품 디자인 과제와 포트폴리오 얘기 편하게 물어보세요.",
+    topics: [["과제", "제품 디자인 과제"], ["준비", "포트폴리오 시작하기"]],
+  },
+  {
+    id: "m3",
+    nickname: "AI공부하는여우",
+    dept: "khu-cse",
+    year: 4,
+    intro: "인공지능 수업과 졸업 프로젝트 준비 경험을 나눠요.",
+    topics: [["수업", "인공지능 수업"], ["졸업", "졸업 프로젝트 준비"]],
+  },
+  {
+    id: "m4",
+    nickname: "목업장인고슴도치",
+    dept: "khu-id",
+    year: 3,
+    intro: "모형 만들기와 팀 프로젝트가 궁금하면 물어보세요.",
+    topics: [["실습", "모형 만들기"], ["과제", "팀 프로젝트"]],
+  },
+  {
+    id: "m5",
+    nickname: "새내기탈출판다",
+    dept: "khu-cse",
+    year: 2,
+    intro: "문과에서 컴공 온 경험을 이야기해 드려요.",
+    topics: [["진로", "문과에서 컴공 오기"], ["생활", "1학년 생활"]],
+  },
+];
+
+// 쪽지함 예시 대화 하나. 학생(나)이 먼저 보내고 재학생이 답장한 모습이다. post: 쪽지를 시작한 질문.
+export const MOCK_THREADS = [
+  {
+    id: "t1",
+    mentor: "m2",
+    post: "q2",
+    read: false,
+    messages: [
+      { id: "t1a", from: "me", minutesAgo: 60, body: "선배님 안녕하세요! 실기 질문 글 보고 쪽지 드려요. 학원을 안 다녀도 1학년 수업을 따라갈 수 있을까요?" },
+      { id: "t1b", from: "mentor", minutesAgo: 30, body: "반가워요! 저도 처음엔 걱정이 많았어요. 입시 방식은 학교마다 달라서 입학처 요강을 꼭 확인해 보세요. 궁금한 과제가 있으면 편하게 물어봐요." },
+    ],
+  },
 ];
