@@ -135,6 +135,7 @@ export function LoginPanel({ auth, portalTarget }) {
           <button
             className="my-action primary mt-[12px]"
             onClick={() => {
+              setMode("login");
               setOpen(true);
               setSent(false);
             }}
@@ -240,7 +241,9 @@ export function LoginPanel({ auth, portalTarget }) {
               </button>
             }
           >
-            {mode === "signup" && !auth.linkProvider && auth.policy ? (
+            {mode === "signup" && !auth.linkProvider && auth.signup_notice ? (
+              <p role="status">{auth.signup_notice}</p>
+            ) : mode === "signup" && !auth.linkProvider && auth.policy ? (
               <SignupForm
                 key={auth.pending ? "verified" : "new"}
                 auth={auth}
@@ -279,7 +282,7 @@ export function LoginPanel({ auth, portalTarget }) {
                       className="button"
                       disabled={busy}
                       onClick={() => {
-                        if (signupBlocked()) {
+                        if (auth.policy && signupBlocked()) {
                           setMode("signup");
                           return;
                         }
@@ -294,7 +297,7 @@ export function LoginPanel({ auth, portalTarget }) {
                     <form
                       onSubmit={(e) => {
                         e.preventDefault();
-                        if (signupBlocked()) {
+                        if (auth.policy && signupBlocked()) {
                           setMode("signup");
                           return;
                         }
@@ -347,7 +350,10 @@ export function LoginPanel({ auth, portalTarget }) {
                     </p>
                   )}
                 </div>
-                {!auth.linkProvider && (
+                {auth.signup_notice && !auth.linkProvider && (
+                  <p role="status" className="my-secondary">{auth.signup_notice}</p>
+                )}
+                {!auth.linkProvider && auth.policy && (
                   <button
                     className="my-signup-entry"
                     onClick={() => setMode("signup")}
