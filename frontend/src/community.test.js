@@ -162,9 +162,9 @@ test("검색: 띄어쓰기·대소문자 무시, 낱말이 모두 들어간 질�
   assert.deepEqual(design.mentors.map((m) => m.id), ["m2", "m4"]);
   assert.equal(design.questions.length, questions.filter((x) => x.dept === "khu-id").length);
   assert.deepEqual(find("ai").mentors.map((m) => m.id), ["m3"], "대소문자 무시");
-  assert.deepEqual(find("버블 정렬").questions.map((x) => x.id), ["q3"]);
+  assert.deepEqual(find("정렬 체험").questions.map((x) => x.id), ["q3"]);
   assert.deepEqual(find("포트폴리오").mentors.map((m) => m.id), ["m2"], "주제로도 찾는다");
-  assert.deepEqual(find("버블 포트폴리오"), { questions: [], mentors: [] }, "낱말이 모두 들어가야 한다");
+  assert.deepEqual(find("정렬 포트폴리오"), { questions: [], mentors: [] }, "낱말이 모두 들어가야 한다");
   assert.deepEqual(find("없는말없는말"), { questions: [], mentors: [] });
 });
 
