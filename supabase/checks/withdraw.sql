@@ -102,7 +102,7 @@ end $$;
 insert into public.auth_challenges(token_hash,purpose,expires_at) values(repeat('9',64),'signup',now()+interval '10 minutes');
 set local role service_role;
 do $$ declare again jsonb; begin
-  again := public.register_login_account('email','leaver@example.test','leaver@example.test',2008,'student','development-placeholder-v1',false,repeat('9',64));
+  again := public.register_login_account('email','leaver@example.test','leaver@example.test',2008,'student','development-placeholder-v1',repeat('9',64));
   if again->>'id' = '00000000-0000-0000-0000-0000000000a1' then raise exception '탈퇴한 계정이 되살아남'; end if;
   if public.account_credit_balance((again->>'id')::uuid) <> 0 then raise exception '새 계정에 이전 크레딧이 보임'; end if;
 end $$;

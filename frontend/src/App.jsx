@@ -288,11 +288,14 @@ export default function App() {
   // #36 탈퇴를 마치면 시작 화면에서 잠깐 알린다.
   const [farewell, setFarewell] = useState("");
   useEffect(() => {
-    if (!records.withdrawnAt) return;
-    setFarewell("회원 탈퇴를 마쳤어요. 계정과 기록을 모두 지웠어요.");
+    if (records.withdrawnAt) setFarewell("회원 탈퇴를 마쳤어요. 계정과 기록을 모두 지웠어요.");
+  }, [records.withdrawnAt]);
+  // 지우는 타이머는 안내에 묶는다. 탈퇴 뒤 로그인 상태가 다시 계산되며 withdrawnAt이 사라져도 안내는 4초 뒤 사라진다.
+  useEffect(() => {
+    if (!farewell) return;
     const timer = window.setTimeout(() => setFarewell(""), 4000);
     return () => window.clearTimeout(timer);
-  }, [records.withdrawnAt]);
+  }, [farewell]);
   const accountLocked =
     auth.loading ||
     (!auth.user && !!records.context.current) ||
