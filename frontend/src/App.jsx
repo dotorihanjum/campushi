@@ -216,7 +216,8 @@ export default function App() {
     const map = { [top.key]: enter };
     if (exitKey !== null) map[exitKey] = exitCls;
     setAnim(map);
-    if (ghost) setGhosts((g) => [...g, { route: ghost, cls: exitCls }]);
+    // 화면이 다시 그려지기 전에 이동이 두 번 불려도 같은 화면을 사라지는 화면에 두 번 넣지 않는다(같은 key 경고).
+    if (ghost) setGhosts((g) => (g.some((x) => x.route.key === ghost.key) ? g : [...g, { route: ghost, cls: exitCls }]));
     setStack(next);
     setBusy(true);
     window.setTimeout(() => {
