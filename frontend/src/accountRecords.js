@@ -187,6 +187,7 @@ export class RecordSync {
     this.inflight = null;
     this.active = true;
     this.memoryOnly = false;
+    this.rejectedRecord = "";
   }
   notify(phase, error = "") {
     if (this.active)
@@ -195,6 +196,7 @@ export class RecordSync {
         error,
         pending: this.queue.length,
         memoryOnly: this.memoryOnly,
+        rejectedRecord: this.rejectedRecord,
         doc: this.doc,
         queue: this.queue,
       });
@@ -239,43 +241,79 @@ export class RecordSync {
     });
     return this.inflight;
   }
+  removeHead(item) {
+    this.queue.shift();
+    try {
+      this.storage?.removeItem(ACCOUNT_PREFIX + item.scope + ":" + item.operation_id);
+    } catch {
+      /* The delivery ID still makes any retry of an acknowledged write safe. */
+    }
+  }
   async drain() {
     if (!this.active) return;
+    let needsRefresh = false;
     try {
-      while (this.active && this.queue.length) {
+      while (this.active && (this.queue.length || needsRefresh)) {
+        if (!this.queue.length) {
+          const latest = await this.request();
+          if (!this.active) return;
+          this.adoptForAccount(latest);
+          needsRefresh = false;
+          this.notify(this.queue.length ? "waiting" : "saved");
+          continue;
+        }
         this.notify("saving");
         const item = this.queue[0];
-        const saved = await this.request(
-          "/operations",
-          "POST",
-          this.delivery(item),
-        );
-        if (!this.active) return;
-        if (saved.scope !== this.doc.scope)
-          throw new Error("로그인한 계정이 바뀌었어요.");
-        this.adopt(saved);
-        this.queue.shift();
+        let saved;
         try {
-          this.storage?.removeItem(
-            ACCOUNT_PREFIX + this.doc.scope + ":" + item.operation_id,
-          );
-        } catch {
-          /* acknowledged record is safe on server */
+          saved = await this.request("/operations", "POST", this.delivery(item));
+        } catch (error) {
+          if (!this.active) return;
+          const index = error.changeIndex;
+          if (
+            error.code !== "record_change_rejected" ||
+            !Number.isInteger(index) ||
+            index < 0 ||
+            index >= item.changes.length
+          ) throw error;
+
+          const subject = item.changes[index].subject;
+          const remaining = item.changes.filter((_, i) => i !== index);
+          // The server rejected the batch before committing anything. Keep the
+          // same delivery ID so a second tab cannot commit the batch twice.
+          if (remaining.length) this.queue[0] = { ...item, changes: remaining };
+          else this.removeHead(item);
+          this.persist();
+          this.rejectedRecord = subject
+            ? `${subject} 기록을 저장하지 못했어요. ${error.message}`
+            : `변경 사항을 저장하지 못했어요. ${error.message}`;
+          needsRefresh = true;
+          this.notify(this.queue.length ? "saving" : "saved");
+          continue;
         }
+        if (!this.active) return;
+        this.adoptForAccount(saved);
+        this.removeHead(item);
         this.persist();
+        needsRefresh = false;
         this.notify(this.queue.length ? "saving" : "saved");
       }
     } catch (error) {
-      this.notify(
-        error.status === 401
-          ? "expired"
-          : error.status === 400 || error.status === 409
-            ? "error"
-            : "waiting",
-        error.message,
-      );
+      const expired = error.status === 401 || error.code === "record_account_changed";
+      this.notify(expired ? "expired" : "waiting", error.message);
       throw error;
     }
+  }
+  dismissRejected() {
+    this.rejectedRecord = "";
+  }
+  adoptForAccount(saved) {
+    if (saved.scope !== this.doc.scope) {
+      const error = new Error("로그인한 계정이 바뀌었어요. 다시 로그인해 주세요.");
+      error.code = "record_account_changed";
+      throw error;
+    }
+    this.adopt(saved);
   }
   async refresh() {
     await this.flush();
@@ -371,31 +409,16 @@ export class RecordSync {
       /* memory-only visit */
     }
   }
-  // #36 탈퇴: 서버 계정이 통째로 지워지므로 대기 중인 변경은 보내지 않는다. 다른 창이 새 변경을 더하지 못하게 먼저 잠그고,
-  // 서버가 탈퇴를 마친 뒤에만 이 계정의 기기 사본을 지운다. 실패하면 잠금을 풀고 아무것도 지우지 않는다.
-  async withdraw(deleteAccount) {
-    this.signal("lock");
-    try {
-      await deleteAccount();
-    } catch (error) {
-      this.signal("release");
-      throw error;
-    }
-    this.close();
-    try {
-      clearAccountCache(this.storage, this.doc.scope);
-    } catch {
-      /* UI is still cleared */
-    }
-    this.signal("ended");
-  }
   async logout(endSession, { discard = false } = {}) {
     this.signal("lock");
     try {
       try {
         await this.flush();
-        for (const item of readAccount(this.storage, this.doc.scope).queue)
-          await this.request("/operations", "POST", this.delivery(item));
+        const knownIds = new Set(this.queue.map((item) => item.operation_id));
+        this.queue.push(...readAccount(this.storage, this.doc.scope).queue.filter(
+          (item) => !knownIds.has(item.operation_id),
+        ));
+        if (this.queue.length) await this.flush();
       } catch (error) {
         if (!discard) {
           const warning = new Error(

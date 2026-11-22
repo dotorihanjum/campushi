@@ -366,3 +366,34 @@ class RecordTest(unittest.TestCase):
         )
         self.assertEqual(state["credits"], 10)
         self.assertEqual(len(awards), 1)
+
+
+    def test_import_count_excludes_existing_unrelated_and_unknown_departments(self):
+        other = next(d["id"] for d in self.catalog if d["id"] != self.id)
+        self.assertEqual(self.operation([{"kind": "enroll", "department": other}]).status_code, 200)
+        raw = self.guest()
+        raw["journeys"]["unknown"] = {}
+        operation_id = str(uuid4())
+        for _ in range(2):
+            result = self.import_request(raw, operation_id).json()
+            self.assertEqual(result["imported_department_count"], 1)
+            self.assertEqual(set(result["state"]["journeys"]), {self.id, other})
+
+    def test_failed_change_is_identified_without_committing_its_batch(self):
+        changes = [
+            {"kind": "enroll", "department": self.id},
+            {"kind": "complete", "department": self.id, "subject": "없는 과목", "score": "P"},
+        ]
+        operation_id = str(uuid4())
+        response = self.operation(changes, operation_id)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"]["code"], "record_change_rejected")
+        self.assertEqual(response.json()["detail"]["change_index"], 1)
+        self.assertEqual(self.client.get("/api/me/records").json()["state"]["journeys"], {})
+        self.assertEqual(self.operation(changes[:1], operation_id).status_code, 200)
+
+    def test_save_contention_is_not_an_item_rejection(self):
+        self.store.conflicts = 5
+        response = self.operation([{"kind": "enroll", "department": self.id}])
+        self.assertEqual(response.status_code, 409)
+        self.assertIsInstance(response.json()["detail"], str)

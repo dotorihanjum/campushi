@@ -318,52 +318,64 @@ test("a session rejected during periodic refresh hides the active account", asyn
   assert.equal(phases.at(-1), "expired");
 });
 
-test("withdrawal locks other tabs, skips unsent changes and clears only after the server deleted the account", async () => {
+test("a rejected course change rolls back while valid siblings and later writes save", async () => {
   const storage = memory();
   const sent = [];
+  const received = [];
+  const enrollment = { kind: "enroll", department: "khu-cse" };
+  const bad = { kind: "complete", department: "khu-cse", subject: "빠진 과목" };
+  const note = { kind: "note", department: "khu-cse", subject: "이산구조", text: "계속 저장" };
   const sync = new RecordSync({
     storage,
-    change() {},
-    request: async (path, method, body) => {
-      sent.push(body);
-      throw Error("offline");
+    change: (next) => received.push(next.rejectedRecord),
+    request: async (_path, _method, item) => {
+      sent.push(item);
+      if (item.changes.includes(bad)) {
+        throw Object.assign(new Error("과목을 저장할 수 없어요."), {
+          status: 400, code: "record_change_rejected", changeIndex: 1,
+        });
+      }
+      return { ...doc(), revision: sent.length,
+        state: { ...doc().state, notes: { "khu-cse|이산구조": note.text } } };
     },
   });
-  const other = new RecordSync({ storage, change() {} });
   await sync.open(doc());
-  await other.open(doc());
-  sync.enqueue([{ kind: "enroll", department: "khu-cse" }]);
-  sent.length = 0;
-  let lockedDuring = null;
-  await sync.withdraw(async () => {
-    lockedDuring = other.enqueue([{ kind: "reset" }]);
-  });
-  assert.equal(lockedDuring, false, "다른 창은 탈퇴 중 새 변경을 더하지 못한다");
-  assert.deepEqual(sent, [], "지워질 계정에 대기 변경을 보내지 않는다");
-  assert.equal(sync.active, false);
-  assert.deepEqual(readAccount(storage, "account-A").queue, []);
-  assert.equal(JSON.parse(storage.getItem("campushi-account-logout-v1")).phase, "ended");
+  sync.enqueue([enrollment, bad]);
+  sync.enqueue([note]);
+  await sync.flush();
+  assert.deepEqual(sent.map((item) => item.changes), [[enrollment, bad], [enrollment], [note]]);
+  assert.equal(sent[0].operation_id, sent[1].operation_id);
+  assert.equal(sync.doc.state.notes["khu-cse|이산구조"], "계속 저장");
+  assert.equal(readAccount(storage, sync.doc.scope).queue.length, 0);
+  assert.match(received.at(-1), /빠진 과목.*과목을 저장할 수 없어요/);
+  sync.dismissRejected();
+  sync.enqueue([{ ...note, text: "다음 기록" }]);
+  await sync.flush();
+  assert.equal(received.at(-1), "");
 });
-test("failed withdrawal keeps the account copy and queue and releases the lock", async () => {
+
+test("a terminal rejection rolls back to current server state while transient 409 stays queued", async () => {
   const storage = memory();
+  const latest = { ...doc(), revision: 2, state: { ...doc().state, nickname: "다른 기기 변경" } };
+  let transient = true;
+  let sawFetch = false;
   const sync = new RecordSync({
     storage,
     change() {},
-    request: async () => {
-      throw Error("offline");
+    request: async (path) => {
+      if (path === undefined) { sawFetch = true; return latest; }
+      const error = Object.assign(new Error("저장 충돌"), { status: 409 });
+      if (!transient) Object.assign(error, { code: "record_change_rejected", changeIndex: 0 });
+      throw error;
     },
   });
   await sync.open(doc());
-  sync.enqueue([{ kind: "enroll", department: "khu-cse" }]);
-  const failure = Object.assign(Error("서버에 연결하지 못했어요."), { status: 0 });
-  await assert.rejects(
-    sync.withdraw(async () => {
-      throw failure;
-    }),
-    (e) => e === failure,
-  );
-  assert.equal(sync.active, true);
-  assert.equal(readAccount(storage, "account-A").queue.length, 1);
-  assert.equal(JSON.parse(storage.getItem("campushi-account-logout-v1")).phase, "release");
-  assert.notEqual(sync.enqueue([{ kind: "reset" }]), false);
+  sync.enqueue([{ kind: "reset" }]);
+  await assert.rejects(sync.flush(), /저장 충돌/);
+  assert.equal(readAccount(storage, sync.doc.scope).queue.length, 1);
+  transient = false;
+  await sync.flush();
+  assert.equal(sawFetch, true);
+  assert.equal(sync.doc.state.nickname, "다른 기기 변경");
+  assert.equal(readAccount(storage, sync.doc.scope).queue.length, 0);
 });

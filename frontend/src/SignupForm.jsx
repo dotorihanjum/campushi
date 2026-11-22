@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { ageAllowed, blockSignup, signupBlocked, signupBody, refreshSignupConsent } from "./signup.js";
+import { blockSignup, signupBlocked, signupBody, refreshSignupConsent } from "./signup.js";
 
 export function SignupForm({ auth, onAuthenticated, onNeedsLogin, onBusy }) {
   const preset = auth.preflight;
-  const [form, setForm] = useState({ year: preset?.birth_year || "", role: preset?.role || "student", terms: !!preset?.terms_agreed, privacy: !!preset?.privacy_agreed, marketing: !!preset?.marketing_agreed, version: auth.policy.version });
+  const [form, setForm] = useState({ year: preset?.birth_year || "", role: preset?.role || "student", terms: !!preset?.terms_agreed, privacy: !!preset?.privacy_agreed, version: auth.policy.version });
   const [blocked, setBlocked] = useState(signupBlocked);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -12,19 +12,21 @@ export function SignupForm({ auth, onAuthenticated, onNeedsLogin, onBusy }) {
   useEffect(() => setForm((f) => refreshSignupConsent(f, auth.policy.version)), [auth.policy.version]);
   useEffect(() => birthField.current?.focus({ preventScroll: true }), []);
   const change = (key, value) => { setForm((f) => ({ ...f, [key]: value })); setError(""); };
-  const allowed = ageAllowed(Number(form.year), auth.year);
+  const canSubmit = form.year && form.terms && form.privacy;
   const policy = auth.policy;
   if (blocked) return <div className="my-signup-blocked" role="status"><p className="font-semibold text-navy">만 14세 이상부터 가입할 수 있어요.</p><p className="mt-[8px]">학과 체험은 로그인 없이 계속할 수 있어요.</p></div>;
   const submit = async (event) => {
     event.preventDefault();
-    if (lock.current || !form.year) return;
+    if (lock.current || !canSubmit) return;
     lock.current = true; setBusy(true); onBusy(true); setError("");
-    if (!allowed) { blockSignup(); setBlocked(true); }
     try {
       const body = signupBody(form, form.version);
       if (auth.pending) { await auth.register(body); onAuthenticated(); }
       else { await auth.checkEligibility(body); onNeedsLogin(); }
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      if (e.code === "signup_age_restricted") { blockSignup(); setBlocked(true); }
+      else setError(e.message);
+    }
     finally { lock.current = false; setBusy(false); onBusy(false); }
   };
   return <form onSubmit={submit} className="my-signup-form">
@@ -46,10 +48,9 @@ export function SignupForm({ auth, onAuthenticated, onNeedsLogin, onBusy }) {
       <div className="my-signup-consents">
         <div><label><input type="checkbox" checked={form.terms} onChange={(e) => change("terms", e.target.checked)} /> 이용약관 동의 (필수)</label><a href={policy.terms_url} target="_blank" rel="noopener noreferrer">보기</a></div>
         <div><label><input type="checkbox" checked={form.privacy} onChange={(e) => change("privacy", e.target.checked)} /> 개인정보 처리방침 확인 (필수)</label><a href={policy.privacy_url} target="_blank" rel="noopener noreferrer">보기</a></div>
-        <div><label><input type="checkbox" checked={form.marketing} onChange={(e) => change("marketing", e.target.checked)} /> {policy.marketing_label}</label></div>
       </div>
     </fieldset>
     {error && <p role="alert" className="my-profile-error">{error}</p>}
-    <button className="button w-full" type="submit" disabled={busy || !form.year || (allowed && (!form.terms || !form.privacy))}>{busy ? "확인 중…" : !allowed ? "가입 가능 여부 확인" : auth.pending ? "동의하고 가입 완료" : "동의하고 인증하기"}</button>
+    <button className="button w-full" type="submit" disabled={busy || !canSubmit}>{busy ? "확인 중…" : auth.pending ? "동의하고 가입 완료" : "동의하고 인증하기"}</button>
   </form>;
 }

@@ -27,6 +27,7 @@ import {
   recordOf,
   refreshCatalog,
   savePlay,
+  serverCreditOf,
   skippedYears,
   sourceNote,
   yearOf,
@@ -471,4 +472,29 @@ test("그만둔 학과에 다시 입학하면 1학년부터 새로 시작하고,
   // 7일이 지나면 받는다.
   state = take(state, RAW_CSE.id, "미분적분학", 10, 10, t0 + CREDIT_COOLDOWN_DAYS * DAY);
   assert.equal(state.credits, CREDIT_PER_PASS * 2);
+});
+
+test("로그인 결과 화면: 서버가 확정한 뒤에만 이번에 받은 크레딧을 알린다(#98)", () => {
+  const key = courseKey(RAW_CSE.id, "미분적분학");
+  const before = { at: null, attempts: 0 };
+  // 보낼 기록이 남아 있거나 저장 중·연결 대기면 아직 확정 전이다.
+  const none = { confirmed: false, accepted: false, credits: 0, wait: 0 };
+  const took = (attempts, at, credits = 15) => ({ credits, creditedAt: at ? { [key]: at } : {}, records: { [key]: { grade: "A0", attempts } } });
+  for (const sync of [{ phase: "waiting", pending: 1 }, { phase: "saving", pending: 1 }, { phase: "saved", pending: 1 }, { phase: "expired", pending: 0 }, null])
+    assert.deepEqual(serverCreditOf(before, took(1, 1), key, sync), none);
+  const saved = { phase: "saved", pending: 0 };
+  const now = 1700000000000;
+  // 서버가 이번에 지급했다(기록을 받고 지급 시각이 생겼다).
+  assert.deepEqual(serverCreditOf(before, took(1, now), key, saved, now), { confirmed: true, accepted: true, credits: 5, wait: 0 });
+  // 다른 과목 지급이 같은 동기화에 섞여 잔액이 10 늘어도 이 과목은 +5다(서버는 한 번에 5만 준다).
+  assert.deepEqual(serverCreditOf(before, took(1, now, 20), key, saved, now).credits, 5);
+  // 7일 규칙으로 지급하지 않았다(지급 시각이 그대로). 남은 날은 서버의 지급 시각으로 센다.
+  const earlier = { credits: 10, at: now - 2 * DAY, attempts: 1 };
+  assert.deepEqual(serverCreditOf(earlier, took(2, now - 2 * DAY, 10), key, saved, now), { confirmed: true, accepted: true, credits: 0, wait: 5 });
+  // 지급 시각이 그대로면 다른 기기에서 늘어난 잔액은 이 과목의 지급으로 보지 않는다.
+  assert.equal(serverCreditOf(earlier, took(2, now - 2 * DAY, 15), key, saved, now).credits, 0);
+  // 서버가 기록을 거부했다(들은 횟수가 그대로): 크레딧도 7일 안내도 없다.
+  assert.deepEqual(serverCreditOf(earlier, took(1, now - 2 * DAY, 10), key, saved, now), { confirmed: true, accepted: false, credits: 0, wait: 0 });
+  // 확정 전 값이 없으면(비로그인) 확정하지 않는다.
+  assert.deepEqual(serverCreditOf(null, { credits: 15 }, key, saved), none);
 });

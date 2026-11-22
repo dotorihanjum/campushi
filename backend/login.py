@@ -152,8 +152,10 @@ def flow_context(request, body, store):
 @router.get("/options")
 def options(request: Request):
     providers, email, configured = enabled_providers(request)
-    from backend.signup import registration_policy, current_year
-    return {"providers": providers, "email": email, "configured": configured, "policy": registration_policy(), "year": current_year()}
+    from backend.signup import SIGNUP_UNAVAILABLE, registration_policy, current_year
+    policy = registration_policy()
+    return {"providers": providers, "email": email, "configured": configured, "policy": policy,
+            "signup_notice": SIGNUP_UNAVAILABLE if policy is None else None, "year": current_year()}
 
 
 @router.post("/start")
@@ -358,11 +360,12 @@ def pending_signup(request: Request, store=Depends(accounts.account_store)):
     try:
         from backend.signup import REGISTRATION, registration_policy
         preflight = unseal(request.cookies.get(REGISTRATION), "registration")
-        if preflight["policy_version"] != registration_policy()["version"]:
+        policy = registration_policy()
+        if policy is None or preflight["policy_version"] != policy["version"]:
             preflight = None
     except HTTPException:
         preflight = None
-    return {"pending": True, "link_provider": target["provider"] if target else None, "preflight": {k: preflight[k] for k in ("birth_year", "role", "terms_agreed", "privacy_agreed", "marketing_agreed")} if preflight else None}
+    return {"pending": True, "link_provider": target["provider"] if target else None, "preflight": {k: preflight[k] for k in ("birth_year", "role", "terms_agreed", "privacy_agreed")} if preflight else None}
 
 
 @router.post("/logout")

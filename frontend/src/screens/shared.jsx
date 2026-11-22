@@ -6,7 +6,7 @@ import { Mask } from "../ui.jsx";
 import { departmentsOf, courseKey, progressOf } from "../model.js";
 import { averagePoint } from "../grades.js";
 import { lessonTypes } from "../lessonGames.js";
-import { templates } from "../experiences.js";
+import { experienceTitle } from "../experiences.js";
 
 // 학과 목록.
 export const all = (state) => departmentsOf(state);
@@ -107,7 +107,7 @@ export const experienceName = (d, id) =>
     : id.startsWith("lab:")
       ? "실습 과제"
       : id.startsWith("group:") && d.practice
-        ? `전공 실습(${templates[d.practice.template].title})`
+        ? `전공 실습(${experienceTitle(d.practice)})`
         : lessonTypes[id]?.title || "";
 
 /** 과목 카드. 구현 예정·이수(성적, 다시 듣기)·재수강이 필요한 과목·안 들은 과목을 배지로 알린다. */

@@ -13,7 +13,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.records import router as records_router
-from backend.withdraw import router as withdraw_router
 from backend import accounts
 from backend.login import router as login_router
 from backend import signup  # 가입 경로를 같은 인증 라우터에 등록한다.
@@ -198,7 +197,6 @@ def me(request: Request, store=Depends(accounts.account_store)):
 
 app.include_router(login_router)
 app.include_router(records_router)
-app.include_router(withdraw_router)
 
 
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)

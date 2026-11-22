@@ -5,11 +5,8 @@ import copy
 import io
 import math
 import json
+import re
 from pathlib import Path
-
-CONDITIONS = json.loads(
-    (Path(__file__).parent / "data" / "record_conditions.json").read_text()
-)
 from PIL import Image, UnidentifiedImageError
 from fastapi import HTTPException
 
@@ -29,6 +26,55 @@ GRADES = [
     ("F", 0),
 ]
 NAMES = [g for g, _ in GRADES]
+LAB_ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
+
+def check_conditions(value):
+    """Shared condition registry, read by frontend/src/labs/index.js too.
+
+    version: current condition version. restored: {department: {subject: since}} for re-published quizzes.
+    labs: {department: {subject: {"id", "status": "verified" | "draft", "since"}}} for real-class labs.
+    A malformed registry stops the server instead of silently rejecting or accepting records.
+    """
+
+    def since(n):
+        return type(n) == int and 1 <= n <= value["version"]
+
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"version", "restored", "labs"}
+        or type(value["version"]) != int
+        or value["version"] < 0
+    ):
+        raise ValueError("record_conditions.json: version·restored·labs가 필요해요.")
+    for name in ("restored", "labs"):
+        if not isinstance(value[name], dict) or not all(
+            isinstance(subjects, dict) for subjects in value[name].values()
+        ):
+            raise ValueError(f"record_conditions.json: {name}는 학과별 과목 표여야 해요.")
+    for department, subjects in value["restored"].items():
+        if not all(since(n) for n in subjects.values()):
+            raise ValueError(f"record_conditions.json: restored.{department}의 버전이 잘못됐어요.")
+    ids = set()
+    for department, subjects in value["labs"].items():
+        for subject, lab in subjects.items():
+            if (
+                not isinstance(lab, dict)
+                or set(lab) != {"id", "status", "since"}
+                or not isinstance(lab["id"], str)
+                or not LAB_ID.match(lab["id"])
+                or lab["id"] in ids
+                or lab["status"] not in ("verified", "draft")
+                or not since(lab["since"])
+            ):
+                raise ValueError(f"record_conditions.json: labs.{department}.{subject}가 잘못됐어요.")
+            ids.add(lab["id"])
+    return value
+
+
+CONDITIONS = check_conditions(
+    json.loads((Path(__file__).parent / "data" / "record_conditions.json").read_text())
+)
 
 
 def empty_state():
@@ -42,7 +88,7 @@ def empty_state():
         "profilePhoto": None,
         "credits": 0,
         "creditedAt": {},
-        "conditions": 3,
+        "conditions": CONDITIONS["version"],
         "campus": "khu-global",
         "studying": None,
     }
@@ -116,29 +162,99 @@ def better(a, b):
     )
 
 
-def available(d, subject):
-    return subject in d.get("games", {}) or subject in (d.get("practice"), d["final"])
+def lab(d, subject):
+    """Published real-class lab of the course (frontend labOf/labFor). Final and practice courses keep their own experience."""
+    if subject in (d.get("practice"), d["final"]):
+        return None
+    entry = CONDITIONS["labs"].get(d["id"], {}).get(subject)
+    return entry if entry and entry["status"] == "verified" else None
 
 
-def open_years(state, d):
+def available(d, subject, ignore=()):
+    """Whether the course has an experience (frontend !isPlanned). ignore: treat as not yet published."""
+    if subject in ignore:
+        return False
+    return (
+        subject in d.get("games", {})
+        or subject in (d.get("practice"), d["final"])
+        or lab(d, subject) is not None
+    )
+
+
+def required_of(d):
+    return set(d["kinds"].get("전공기초", []) + d["kinds"].get("전공필수", []))
+
+
+def year_of(d, subject):
+    return next(y for y in range(1, 5) if subject in d["years"][str(y)])
+
+
+def left_in(state, d, year, ignore=()):
+    """Required courses with an experience still blocking the next year (or graduation)."""
+    required = required_of(d)
+    return [
+        s
+        for s in d["years"][str(year)]
+        if s in required
+        and available(d, s, ignore)
+        and not passes(state["records"].get(d["id"] + "|" + s, {}).get("grade"))
+        and not state["exempt"].get(d["id"] + "|" + s)
+    ]
+
+
+def open_years(state, d, ignore=()):
     opened = []
     for year in range(1, 5):
-        if year > 1:
-            required = set(
-                d["kinds"].get("전공기초", []) + d["kinds"].get("전공필수", [])
-            )
-            left = [
-                s
-                for s in d["years"][str(year - 1)]
-                if s in required
-                and available(d, s)
-                and not passes(state["records"].get(d["id"] + "|" + s, {}).get("grade"))
-                and not state["exempt"].get(d["id"] + "|" + s)
-            ]
-            if left:
-                break
+        if year > 1 and left_in(state, d, year - 1, ignore):
+            break
         opened.append(year)
     return opened
+
+
+def graduated(state, d, ignore=()):
+    return (
+        4 in open_years(state, d, ignore)
+        and not left_in(state, d, 4, ignore)
+        and passes(state["records"].get(d["id"] + "|" + d["final"], {}).get("grade"))
+    )
+
+
+def added_since(d, version):
+    """Courses whose experience was (re)published after condition version `version` (frontend addedSince)."""
+    restored = CONDITIONS["restored"].get(d["id"], {})
+    labs = CONDITIONS["labs"].get(d["id"], {})
+    return {
+        **{s: n for s, n in restored.items() if n > version},
+        **{s: lab["since"] for s, lab in labs.items() if lab["since"] > version},
+    }
+
+
+def grandfather(state, d, version):
+    """frontend model.js grandfather: new required courses do not re-lock a year (or graduation) opened before them."""
+    if d["id"] not in state["journeys"]:
+        return {}
+    added = [
+        s for s in added_since(d, version) if s in required_of(d) and available(d, s)
+    ]
+    if not added:
+        return {}
+    opened = open_years(state, d, ignore=set(added))
+    done = graduated(state, d, ignore=set(added))
+    return {
+        d["id"] + "|" + s: True
+        for s in added
+        if (year_of(d, s) + 1 in opened if year_of(d, s) < 4 else done)
+    }
+
+
+def upgraded(state, catalog):
+    """Bring a saved account state to the current condition version before applying any rule."""
+    version = state.get("conditions")
+    if type(version) == int and 0 <= version < CONDITIONS["version"]:
+        for d in catalog:
+            state["exempt"].update(grandfather(state, d, version))
+    state["conditions"] = CONDITIONS["version"]
+    return state
 
 
 def course(state, catalog, department, subject):
@@ -159,7 +275,7 @@ def course(state, catalog, department, subject):
 
 
 def imported(state, raw, catalog, now):
-    result = copy.deepcopy(state)
+    result = upgraded(copy.deepcopy(state), catalog)
     ids = {d["id"] for d in catalog}
     for id, item in raw.get("journeys", {}).items():
         if id in ids:
@@ -170,18 +286,19 @@ def imported(state, raw, catalog, now):
                 if type(at) in (int, float) and 0 < at <= now
                 else {},
             )
-    # Recover historical exceptions only for server-known restored required courses.
+    # Validate lower years first, so a forged high-year grade cannot unlock itself.
+    # Recover historical exceptions only for server-known re-published quizzes and published labs on required courses,
+    # year by year with the imported grades (frontend grandfather): a new course does not re-lock a year opened before it.
     # Legacy browser records are claims, not proof of completion; no other exception is accepted.
     for d in catalog:
         if d["id"] not in result["journeys"]:
             continue
-        restored = CONDITIONS["restored"].get(d["id"], {})
-        required = set(d["kinds"].get("전공기초", []) + d["kinds"].get("전공필수", []))
         version = raw.get("conditions", CONDITIONS["version"])
         historical = {
             d["id"] + "|" + s: True
-            for s, since in restored.items()
-            if s in required
+            for s, since in added_since(d, 0).items()
+            if s in required_of(d)
+            and available(d, s)
             and (
                 type(version) == int
                 and 0 <= version < since
@@ -189,18 +306,17 @@ def imported(state, raw, catalog, now):
                 and raw["exempt"].get(d["id"] + "|" + s) is True
             )
         }
-        probe = {**result, "exempt": {**result["exempt"], **historical}}
-        opened = open_years(probe, d)
-        for key in historical:
-            subject = key.split("|", 1)[1]
-            year = next(y for y in range(1, 5) if subject in d["years"][str(y)])
-            if year < 4 and year + 1 in opened:
-                result["exempt"][key] = True
-    # Validate lower years first, so a forged high-year grade cannot unlock itself.
-    for d in catalog:
-        if d["id"] not in result["journeys"]:
-            continue
+
+        def recover(year, opened):
+            for key in historical:
+                if year_of(d, key.split("|", 1)[1]) == year and opened(
+                    {**result, "exempt": {**result["exempt"], **historical}}
+                ):
+                    result["exempt"][key] = True
+
         for year in range(1, 5):
+            if year > 1:
+                recover(year - 1, lambda probe: year in open_years(probe, d))
             if year not in open_years(result, d):
                 break
             for subject in d["years"][str(year)]:
@@ -242,6 +358,7 @@ def imported(state, raw, catalog, now):
                     and key not in result["notes"]
                 ):
                     result["notes"][key] = note
+        recover(4, lambda probe: graduated(probe, d))
     if not result["nickname"] and isinstance(raw.get("nickname"), str):
         result["nickname"] = " ".join(raw["nickname"].split())[:12]
     if not result["profilePhoto"] and raw.get("profilePhoto"):
@@ -272,7 +389,7 @@ def apply_operation(state, op, catalog, now):
         fail()
     if op.get("studying") is not None and not isinstance(op["studying"], str):
         fail()
-    result = copy.deepcopy(state)
+    result = upgraded(copy.deepcopy(state), catalog)
     awards = []
     if kind == "profile":
         if type(op.get("expected")) != int or op["expected"] != state.get(
@@ -335,6 +452,7 @@ def apply_operation(state, op, catalog, now):
                 got["grade"] == "P"
                 and op["subject"] in d.get("games", {})
                 and op["subject"] not in (d.get("practice"), d["final"])
+                and not lab(d, op["subject"])
             ):
                 fail()
             old = result["records"].get(key)

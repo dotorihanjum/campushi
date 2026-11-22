@@ -104,14 +104,6 @@ export function useLogin() {
         () =>
           setAuth((a) => ({ ...a, user: null, pending: false, result: null })),
       ),
-    // #36 탈퇴: 서버가 계정을 지우고 세션 쿠키를 지운 뒤에만 로그아웃 상태로 바꾼다.
-    withdrawSummary: () => loginRequest("/me/withdraw"),
-    withdraw: () =>
-      mutate(
-        () => loginRequest("/me/withdraw", "POST", { confirm: true }),
-        () =>
-          setAuth((a) => ({ ...a, user: null, pending: false, result: null })),
-      ),
     register: (body) =>
       mutate(
         () => loginRequest("/auth/register", "POST", body),

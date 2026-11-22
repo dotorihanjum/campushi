@@ -52,10 +52,16 @@ export function useAccountRecords(
           catalog: local.current.catalog,
         });
       }
-      setStatus((s) => ({ ...s, phase: "guest", error: "", pending: 0 }));
+      setStatus((s) => ({
+        phase: "guest",
+        error: "",
+        pending: 0,
+        importAvailable: false,
+        loggedOutAt: s.loggedOutAt,
+      }));
       return;
     }
-    setStatus((s) => ({ ...s, phase: "loading", error: "" }));
+    setStatus({ phase: "loading", error: "", pending: 0, importAvailable: false });
     let sync;
     const change = ({ doc, queue, ...next }) => {
       if (request !== generation.current) return;
@@ -164,42 +170,47 @@ export function useAccountRecords(
     if (!sync?.active) throw new Error("계정 기록을 먼저 불러와 주세요.");
     if (sync.isLocked())
       throw new Error("다른 창에서 로그아웃을 진행하고 있어요.");
-    await sync.flush();
-    let operation_id;
+    setStatus((s) => ({ ...s, importing: true, importedDepartmentCount: null }));
     try {
-      operation_id = storage?.getItem(IMPORT_KEY);
-    } catch {
-      /* memory-only visit */
+      await sync.flush();
+      let operation_id;
+      try {
+        operation_id = storage?.getItem(IMPORT_KEY);
+      } catch {
+        /* memory-only visit */
+      }
+      operation_id ||= crypto.randomUUID();
+      try {
+        storage?.setItem(IMPORT_KEY, operation_id);
+      } catch {
+        /* no durable guest storage */
+      }
+      const saved = await recordsRequest("/import", "POST", {
+        scope: sync.doc.scope,
+        operation_id,
+        state: guest.current,
+      });
+      if (!sync.active) return;
+      sync.adopt(saved);
+      guest.current = structuredClone(initialState);
+      try {
+        storage?.removeItem(STORAGE_KEY);
+        storage?.removeItem(IMPORT_KEY);
+      } catch {
+        /* local storage is blocked */
+      }
+      display(pendingView(local.current, sync.doc, sync.queue, true));
+      context.current = sync.doc;
+      setStatus((s) => ({
+        ...s,
+        phase: "saved",
+        error: "",
+        importAvailable: false,
+        importedDepartmentCount: saved.imported_department_count,
+      }));
+    } finally {
+      if (sync.active) setStatus((s) => ({ ...s, importing: false }));
     }
-    operation_id ||= crypto.randomUUID();
-    try {
-      storage?.setItem(IMPORT_KEY, operation_id);
-    } catch {
-      /* no durable guest storage */
-    }
-    const saved = await recordsRequest("/import", "POST", {
-      scope: sync.doc.scope,
-      operation_id,
-      state: guest.current,
-    });
-    if (!sync.active) return;
-    sync.adopt(saved);
-    guest.current = structuredClone(initialState);
-    try {
-      storage?.removeItem(STORAGE_KEY);
-      storage?.removeItem(IMPORT_KEY);
-    } catch {
-      /* local storage is blocked */
-    }
-    display(pendingView(local.current, sync.doc, sync.queue, true));
-    context.current = sync.doc;
-    setStatus((s) => ({
-      ...s,
-      phase: "saved",
-      error: "",
-      importAvailable: false,
-      imported: true,
-    }));
   }, [display, storage]);
   const logout = async (options) => {
     const sync = engine.current;
@@ -226,10 +237,6 @@ export function useAccountRecords(
         /* UI still clears */
       }
     }
-    signedOut();
-  };
-  // 로그아웃·탈퇴 공통: 계정 사본·프로필·화면 스택을 비운다. 아직 옮기지 않은 게스트 원본(STORAGE_KEY)은 남긴다.
-  const signedOut = (extra) => {
     context.current = null;
     try {
       sessionStorage.removeItem("campushi-stack-v2");
@@ -246,22 +253,7 @@ export function useAccountRecords(
       pending: 0,
       importAvailable: false,
       loggedOutAt: Date.now(),
-      ...extra,
     });
-  };
-  const withdraw = async () => {
-    const sync = engine.current;
-    if (sync?.active) await sync.withdraw(auth.withdraw);
-    else {
-      // 계정 기록을 불러오지 못한 상태에서도 탈퇴할 수 있다. 서버가 지운 뒤에만 이 기기의 모든 계정 사본을 지운다.
-      await auth.withdraw();
-      try {
-        clearAccountCache(storage);
-      } catch {
-        /* UI still clears */
-      }
-    }
-    signedOut({ withdrawnAt: Date.now() });
   };
   return {
     ...status,
@@ -271,12 +263,15 @@ export function useAccountRecords(
     importGuest,
     update,
     logout,
-    withdraw,
     preserveGuest: hasGuestRecords(guest.current) && !!status.loggedOutAt,
     retry: () =>
       engine.current?.active
         ? engine.current.refresh()
         : setRetryCount((n) => n + 1),
     saveProfile: (name, photo) => engine.current.saveProfile(name, photo),
+    dismissRejected: () => {
+      engine.current?.dismissRejected();
+      setStatus((s) => ({ ...s, rejectedRecord: "" }));
+    },
   };
 }
