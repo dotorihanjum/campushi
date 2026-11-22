@@ -434,6 +434,7 @@ class AccountTest(unittest.TestCase):
 
 
 from backend.test_login import LoginTest
+from backend.test_signup import SignupTest
 
 
 if __name__ == "__main__":

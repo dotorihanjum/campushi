@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend import accounts
 from backend.login import router as login_router
+from backend import signup  # 가입 경로를 같은 인증 라우터에 등록한다.
 
 logger = logging.getLogger("uvicorn.error")
 DATA_DIR = Path(__file__).parent / "data"
@@ -69,6 +70,8 @@ async def guard(request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     if path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
+        if path.startswith("/api/auth/"):
+            response.headers["Referrer-Policy"] = "no-referrer"
     elif HASHED_ASSET.match(path):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     elif path not in ("/docs", "/redoc", "/openapi.json"):

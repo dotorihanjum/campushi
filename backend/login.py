@@ -110,7 +110,7 @@ def identity_for(store, identity):
 def matching_account(store, identity):
     if not identity.get("email"):
         return None
-    rows = body_of(store.call("GET", "users", params={"select": "id,provider", "email": "eq." + identity["email"], "limit": "2"}))
+    rows = rpc(store, "find_login_account", {"p_email": identity["email"]})
     if len(rows) > 1:
         raise HTTPException(409, "같은 이메일의 계정이 여러 개 있어요. 기존에 사용한 로그인 방식으로 로그인해 주세요.")
     return rows[0] if rows else None
@@ -122,10 +122,10 @@ def enabled_providers(request):
         signing_key()
         accounts.store_from_env()
     except HTTPException:
-        return [], False
+        return [], False, False
     providers = [p for p in PROVIDERS if os.getenv(p.upper() + "_CLIENT_ID") and os.getenv(p.upper() + "_CLIENT_SECRET") and (p != "apple" or origin.startswith("https:"))]
     email = all(os.getenv(k) for k in ("SMTP_HOST", "SMTP_FROM", "SMTP_USERNAME", "SMTP_PASSWORD"))
-    return providers, bool(email)
+    return providers, bool(email), True
 
 
 class LoginRequest(BaseModel):
@@ -151,8 +151,11 @@ def flow_context(request, body, store):
 
 @router.get("/options")
 def options(request: Request):
-    providers, email = enabled_providers(request)
-    return {"providers": providers, "email": email}
+    providers, email, configured = enabled_providers(request)
+    from backend.signup import SIGNUP_UNAVAILABLE, registration_policy, current_year
+    policy = registration_policy()
+    return {"providers": providers, "email": email, "configured": configured, "policy": policy,
+            "signup_notice": SIGNUP_UNAVAILABLE if policy is None else None, "year": current_year()}
 
 
 @router.post("/start")
@@ -318,7 +321,7 @@ def email_start(body: EmailRequest, request: Request, response: Response, store=
     digest = accounts.hash_token(token)
     accepted = rpc(store, "begin_email_login", {"p_hash": digest, "p_mailbox_hash": hmac.new(signing_key(), address.encode(), "sha256").hexdigest()})
     if not accepted:
-        raise HTTPException(429, "메일을 이미 보냈어요. 1분 뒤 다시 시도해 주세요.")
+        raise HTTPException(429, "메일 요청이 많아요. 잠시 후 다시 시도해 주세요.")
     try:
         send_email(address, app_origin(request) + "/api/auth/email/callback?token=" + token)
     except HTTPException:
@@ -354,7 +357,15 @@ def pending_signup(request: Request, store=Depends(accounts.account_store)):
             raise
         return {"pending": False}
     target = matching_account(store, pending["identity"])
-    return {"pending": True, "link_provider": target["provider"] if target else None}
+    try:
+        from backend.signup import REGISTRATION, registration_policy
+        preflight = unseal(request.cookies.get(REGISTRATION), "registration")
+        policy = registration_policy()
+        if policy is None or preflight["policy_version"] != policy["version"]:
+            preflight = None
+    except HTTPException:
+        preflight = None
+    return {"pending": True, "link_provider": target["provider"] if target else None, "preflight": {k: preflight[k] for k in ("birth_year", "role", "terms_agreed", "privacy_agreed")} if preflight else None}
 
 
 @router.post("/logout")
@@ -364,3 +375,27 @@ def logout(request: Request, response: Response, store=Depends(accounts.account_
     clear_ticket(response, FLOW)
     clear_ticket(response, PENDING)
     return {"ok": True}
+
+
+def discard_pending(request, response, store=None):
+    for name, kind, field, purpose in ((PENDING, "signup", "nonce", "signup"), (FLOW, "flow", "email_hash", "email")):
+        if request.cookies.get(name):
+            try:
+                ticket = unseal(request.cookies[name], kind)
+                if field in ticket:
+                    digest = accounts.hash_token(ticket[field]) if field == "nonce" else ticket[field]
+                    rpc(store or accounts.account_store(), "consume_auth_challenge", {"p_hash": digest, "p_purpose": purpose})
+            except HTTPException as error:
+                if error.status_code != 401:
+                    raise
+        clear_ticket(response, name)
+
+
+@router.post("/cancel")
+def cancel(request: Request, store=Depends(accounts.account_store)):
+    same_origin(request)
+    response = JSONResponse({"ok": True})
+    discard_pending(request, response, store)
+    from backend.signup import REGISTRATION
+    clear_ticket(response, REGISTRATION)
+    return response
