@@ -53,3 +53,13 @@
 | `facts` | 문장(60자)·참거짓·해설(80자) 5~40개, 맞는 문장과 틀린 문장 2개 이상씩. OX에 쓴다 |
 | `sequences` | 순서가 하나로 정해지는 과정 0~10개: 질문(40자), 단계 4~5개(24자), 해설(120자). 순서 맞추기에 쓴다 |
 | `status`, `check` | 검증 상태(`draft`·`verified`·`rejected`)와 검증 기록 |
+
+## 이수 조건 등록부 (`data/record_conditions.json`)
+
+프론트(`frontend/src/labs/index.js`)와 서버(`record_rules.py`)가 같이 읽는 한 파일이다. 서버는 이 파일로 로그인한 학생의 이수 기록을 검사하므로, 체험을 공개하거나 내릴 때 이 파일만 고치면 양쪽이 같이 바뀐다(#99).
+
+- `version`: 지금 이수 조건 버전. 필수과목에 체험을 새로 공개할 때 1 올린다.
+- `restored`: 다시 공개한 이론 퀴즈 과목과 그 버전(`{학과: {과목: since}}`).
+- `labs`: 진짜 수업 체험(`{학과: {과목: {"id", "status": "verified" | "draft", "since"}}}`). `verified`인 것만 서버가 이수를 받는다. `draft`·미등록 과목의 이수는 "아직 체험이 없는 과목이에요."로 거부한다. 졸업 과제·학과군 실습 과목에는 두지 않는다.
+- 형식이 틀리면(모르는 칸, `since`가 `version`보다 큼, 같은 체험 id 두 번 등) 서버가 뜨지 않는다. 등록부의 학과·과목이 `departments.json`에 있는지는 `test_labs.py`가 검사한다.
+- 계정 기록의 `conditions`가 `version`보다 낮으면 서버가 다음 변경 때 프론트 `grandfather`와 같은 규칙으로 예외(`exempt`)를 남기고 `conditions`를 올린다. 이미 열린 학년·졸업은 새 체험 때문에 다시 잠기지 않는다.
