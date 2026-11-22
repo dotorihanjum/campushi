@@ -491,7 +491,7 @@ test("입학 완료 화면 안내: 넘어간 학년이 없으면 예전 그대�
   const bare = { ...RAW_ID, games: {} };
   const all = guide(bare);
   assert.deepEqual(skippedYears(all.p), [1, 2, 3]);
-  assert.equal(all.skipped, "1·2·3학년은 바로 넘어갔어요.");
+  assert.equal(all.skipped, "체험할 필수과목이 없어 1·2·3학년은 바로 넘어갔어요.");
   assert.equal(all.title, "4학년 과목 3개 · 필수 1개");
   assert.equal(all.body, "졸업 과제를 이수하면 졸업해요.");
   const step = nextStepOf(all.p);
@@ -507,7 +507,7 @@ test("입학 완료 화면 안내: 넘어간 학년이 없으면 예전 그대�
   // 1학년만 넘어가는 학과: 2학년 기준, 다음 학년 안내는 한 줄로.
   const firstOnly = { ...RAW_CSE, games: { 운영체제: "sort", 컴퓨터구조: "match" } };
   const one = guide(firstOnly);
-  assert.deepEqual([one.skipped, one.title, one.body], ["1학년은 바로 넘어갔어요.", "2학년 과목 3개 · 필수 1개", "필수과목을 B- 이상으로 이수하면 다음 학년이 열려요."]);
+  assert.deepEqual([one.skipped, one.title, one.body], ["체험할 필수과목이 없어 1학년은 바로 넘어갔어요.", "2학년 과목 3개 · 필수 1개", "필수과목을 B- 이상으로 이수하면 다음 학년이 열려요."]);
 
   // 2학년만 넘어간 경우(1학년을 이수한 컴공 테스트 데이터): 학과 홈과 같은 [2]와 3학년 기준.
   let state = enrolled();
@@ -515,7 +515,7 @@ test("입학 완료 화면 안내: 넘어간 학년이 없으면 예전 그대�
   state = take(state, RAW_CSE.id, "미분적분학", 8);
   const two = guide(RAW_CSE, state);
   assert.deepEqual(skippedYears(two.p), [2]);
-  assert.equal(two.skipped, "2학년은 바로 넘어갔어요.");
+  assert.equal(two.skipped, "체험할 필수과목이 없어 2학년은 바로 넘어갔어요.");
   assert.equal(two.title, `3학년 과목 3개 · 필수 ${nextStepOf(two.p).total}개`);
 });
 
@@ -526,7 +526,7 @@ test("실제 학과 데이터의 입학 완료 안내: 1~3학년에 체험 있�
   const state = enrolled([id], [id.id]);
   const d = departmentsOf(state).find((item) => item.id === id.id);
   const g = welcomeGuide(d, progressOf(state, d));
-  assert.equal(g.skipped, "1·2·3학년은 바로 넘어갔어요.");
+  assert.equal(g.skipped, "체험할 필수과목이 없어 1·2·3학년은 바로 넘어갔어요.");
   assert.equal(g.title, `4학년 과목 ${id.years[4].length}개 · 필수 1개`);
 });
 

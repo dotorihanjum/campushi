@@ -349,7 +349,7 @@ export function welcomeGuide(d, progress) {
   const courses = progress.years[year - 1].courses;
   const requiredLabs = courses.filter((course) => course.required && !course.planned && !course.exempt && !course.final).length;
   return {
-    skipped: `${skipped.join("·")}학년은 바로 넘어갔어요.`,
+    skipped: `체험할 필수과목이 없어 ${skipped.join("·")}학년은 바로 넘어갔어요.`,
     title: `${year}학년 과목 ${courses.length}개 · 필수 ${nextStepOf(progress).total}개`,
     body: year < 4 ? "필수과목을 B- 이상으로 이수하면 다음 학년이 열려요." : requiredLabs ? "필수과목과 졸업 과제를 이수하면 졸업해요." : "졸업 과제를 이수하면 졸업해요.",
   };
