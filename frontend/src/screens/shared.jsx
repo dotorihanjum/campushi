@@ -7,6 +7,7 @@ import { departmentsOf, courseKey, progressOf } from "../model.js";
 import { averagePoint } from "../grades.js";
 import { lessonTypes } from "../lessonGames.js";
 import { experienceTitle } from "../experiences.js";
+import { createTapGuard } from "../tapGuard.js";
 
 // 학과 목록.
 export const all = (state) => departmentsOf(state);
@@ -149,7 +150,12 @@ export function reportText(state, d) {
 
 export { reportFileName } from "./reportFileName.js";
 
+// 같은 파일을 짧은 시간 안에 다시 내려받으면(버튼 연타) 한 번으로 묶는다. 잠시 뒤에는 다시 받아진다.
+const DOWNLOAD_WINDOW_MS = 1500;
+const downloadGuard = createTapGuard(DOWNLOAD_WINDOW_MS);
+
 export function download(name, text) {
+  if (!downloadGuard(name)) return;
   const url = URL.createObjectURL(new Blob(["﻿", text], { type: "text/plain;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
