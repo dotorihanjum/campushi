@@ -32,6 +32,19 @@ export function creditWaitDays(state, id, subject, now = Date.now()) {
   const left = last + CREDIT_COOLDOWN_DAYS * DAY_MS - now;
   return left > 0 ? Math.ceil(left / DAY_MS) : 0;
 }
+/**
+ * 로그인한 학생의 수업 결과에서 서버가 확정한 크레딧(#98). 서버가 확정하기 전에는 지급을 알리지 않는다.
+ * before: 수업을 마칠 때의 서버 값 { credits, at }(at: 그 과목의 마지막 지급 시각, 없으면 null),
+ * state: 지금 화면 상태(로그인 중에는 credits·creditedAt이 서버 문서 값이다), key: 과목 키,
+ * sync: 기록 동기화 상태 { phase, pending }(useAccountRecords). 보낼 기록이 남아 있거나 저장 중이면 아직 확정 전이다.
+ * 반환: { confirmed, credits } — 확정 뒤 그 과목의 지급 시각이 바뀌었으면 이번에 받은 크레딧(서버 잔액의 차이), 아니면 0.
+ */
+export function serverCreditOf(before, state, key, sync) {
+  if (!before || !sync || sync.pending > 0 || sync.phase !== "saved") return { confirmed: false, credits: 0 };
+  const at = state.creditedAt?.[key] ?? null;
+  const gained = (state.credits || 0) - (before.credits || 0);
+  return { confirmed: true, credits: at !== before.at && gained > 0 ? gained : 0 };
+}
 // 마이페이지 프로필에 쓰는 이름(이 브라우저에만 저장, 계정과 상관없다)의 최대 글자 수.
 export const NICKNAME_MAX = 12;
 // 앞뒤 공백과 줄바꿈을 지우고 NICKNAME_MAX자(한글 한 글자 = 1자)까지 자른다. 이름으로 쓸 수 없으면 "".

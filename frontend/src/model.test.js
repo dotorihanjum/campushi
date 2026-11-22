@@ -27,6 +27,7 @@ import {
   recordOf,
   refreshCatalog,
   savePlay,
+  serverCreditOf,
   skippedYears,
   sourceNote,
   yearOf,
@@ -471,4 +472,22 @@ test("그만둔 학과에 다시 입학하면 1학년부터 새로 시작하고,
   // 7일이 지나면 받는다.
   state = take(state, RAW_CSE.id, "미분적분학", 10, 10, t0 + CREDIT_COOLDOWN_DAYS * DAY);
   assert.equal(state.credits, CREDIT_PER_PASS * 2);
+});
+
+test("로그인 결과 화면: 서버가 확정한 뒤에만 이번에 받은 크레딧을 알린다(#98)", () => {
+  const key = courseKey(RAW_CSE.id, "미분적분학");
+  const before = { credits: 10, at: null };
+  // 보낼 기록이 남아 있거나 저장 중·연결 대기면 아직 확정 전이다.
+  for (const sync of [{ phase: "waiting", pending: 1 }, { phase: "saving", pending: 1 }, { phase: "saved", pending: 1 }, { phase: "expired", pending: 0 }, null])
+    assert.deepEqual(serverCreditOf(before, { credits: 15, creditedAt: { [key]: 1 } }, key, sync), { confirmed: false, credits: 0 });
+  const saved = { phase: "saved", pending: 0 };
+  // 서버가 이번에 지급했다(지급 시각이 생기고 잔액이 5 늘었다).
+  assert.deepEqual(serverCreditOf(before, { credits: 15, creditedAt: { [key]: 1700000000000 } }, key, saved), { confirmed: true, credits: 5 });
+  // 7일 규칙 등으로 지급하지 않았다(지급 시각이 그대로).
+  const earlier = { credits: 10, at: 1600000000000 };
+  assert.deepEqual(serverCreditOf(earlier, { credits: 10, creditedAt: { [key]: 1600000000000 } }, key, saved), { confirmed: true, credits: 0 });
+  // 지급 시각이 그대로면 다른 기기에서 늘어난 잔액은 이 과목의 지급으로 보지 않는다.
+  assert.deepEqual(serverCreditOf(earlier, { credits: 15, creditedAt: { [key]: 1600000000000 } }, key, saved), { confirmed: true, credits: 0 });
+  // 확정 전 값이 없으면(비로그인) 확정하지 않는다.
+  assert.deepEqual(serverCreditOf(null, { credits: 15 }, key, saved), { confirmed: false, credits: 0 });
 });
