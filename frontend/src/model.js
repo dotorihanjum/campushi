@@ -108,6 +108,13 @@ const isoDate = (value) => {
 export const sourceNote = (source) =>
   [source?.year ? `${source.year}년 교육과정` : "", source?.checkedAt ? `${source.checkedAt} 확인` : ""].filter(Boolean).join(" · ");
 
+/** 마이페이지 "자료 출처"의 학과 줄. 학과 상세와 같은 sourceNote를 쓴다("컴퓨터공학과 2026년 교육과정 · 2026-11-03 확인"). */
+export const sourceLabel = (name, source) => {
+  if (source?.year) return `${name} ${sourceNote(source)}`;
+  const note = sourceNote(source);
+  return `${name} 교육과정${note ? ` · ${note}` : ""}`;
+};
+
 /** 서버의 학과 데이터를 화면에서 쓰는 학과로 만든다. 형식이 틀리면 null. */
 export function createDepartment(raw) {
   if (!raw || typeof raw !== "object") return null;
