@@ -26,31 +26,12 @@ export const LABS = {};
 
 // 진짜 수업 체험이 아닌 체험이 다시 생긴 과목과 그 이수 조건 버전. 2026-11-10에 내렸던 이론 퀴즈 15과목을 2026-11-12 사용자 결정으로
 // 다시 공개했다(backend/data/theory_banks.jsonl). 그사이 다음 학년이 열린 사용자를 다시 잠그지 않도록 since를 둔다.
-export const RESTORED = {
-  "khu-cse": Object.fromEntries(
-    [
-      "이산구조",
-      "미분적분학",
-      "미분방정식",
-      "선형대수",
-      "실감미디어컴퓨팅기초",
-      "신호와시스템",
-      "회로와신호",
-      "확률및랜덤변수",
-      "컴퓨터구조",
-      "논리회로",
-      "기계학습",
-      "게임프로그래밍입문",
-      "풀스택서비스네트워킹",
-      "마이크로서비스프로그래밍",
-      "오픈소스SW개발방법및도구",
-    ].map((subject) => [subject, 3]),
-  ),
-};
+import recordConditions from '../../../backend/data/record_conditions.json' with { type: 'json' };
+export const RESTORED = recordConditions.restored;
 
 // 지금 이수 조건 버전. 필수과목에 체험을 새로 공개할 때마다 1씩 올리고, 그 체험의 since(또는 RESTORED의 값)를 이 값으로 둔다.
 // 1: 웹/파이선 체험, 2: 자료구조 체험(둘 다 2026-11-12에 뺐다), 3: 이론 퀴즈 15과목 다시 공개.
-export const CONDITIONS = 3;
+export const CONDITIONS = recordConditions.version;
 
 // 검증 기록(checks.js)이 있는 체험 id. 체험을 공개할 때 checks.js에 기록을 넣고 그 id를 여기에도 적는다.
 export const CHECKED = [];

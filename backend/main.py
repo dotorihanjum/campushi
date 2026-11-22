@@ -12,7 +12,10 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.records import router as records_router
 from backend import accounts
+from backend.login import router as login_router
+from backend import signup  # 가입 경로를 같은 인증 라우터에 등록한다.
 
 logger = logging.getLogger("uvicorn.error")
 DATA_DIR = Path(__file__).parent / "data"
@@ -59,7 +62,8 @@ async def guard(request, call_next):
         length = request.headers.get("content-length", "")
         if not length.isdigit():
             return JSONResponse(status_code=411, content={"detail": "요청 본문의 길이를 확인할 수 없습니다."})
-        if int(length) > MAX_BODY_BYTES:
+        limit = 384 * 1024 if request.url.path in ("/api/me/records/import", "/api/me/records/operations") else MAX_BODY_BYTES
+        if int(length) > limit:
             return JSONResponse(status_code=413, content={"detail": "요청이 너무 큽니다."})
     response = await call_next(request)
     path = request.url.path
@@ -68,6 +72,8 @@ async def guard(request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     if path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
+        if path.startswith("/api/auth/"):
+            response.headers["Referrer-Policy"] = "no-referrer"
     elif HASHED_ASSET.match(path):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     elif path not in ("/docs", "/redoc", "/openapi.json"):
@@ -187,6 +193,10 @@ def lesson_game(body: GameRequest):
 def me(request: Request, store=Depends(accounts.account_store)):
     """지금 로그인한 사용자. 로그인하지 않았거나 세션이 만료·위조됐으면 401."""
     return {"user": accounts.current_user(store, request)}
+
+
+app.include_router(login_router)
+app.include_router(records_router)
 
 
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
