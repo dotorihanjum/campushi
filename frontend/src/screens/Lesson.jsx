@@ -266,7 +266,7 @@ export function Lesson({ active, nav, route, state, setState }) {
     if (after === base) return false;
     const got = gradeOf(base.plays[key].score);
     const progress = progressOf(after, d);
-    setState(after);
+    setState(after, { completion: { department: d.id, subject, score: base.plays[key].score, note: text } });
     moved.current = true;
     setResult({
       ...got,
