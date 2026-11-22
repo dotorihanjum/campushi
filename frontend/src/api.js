@@ -8,7 +8,7 @@ export class ApiError extends Error {
   }
 }
 const FAILED = "학과 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.";
-async function request(path, init, signal, failed = FAILED) {
+export async function request(path, init, signal, failed = FAILED) {
   // AbortSignal.any는 iOS 17.4 미만 Safari에 없어서 직접 묶는다.
   const controller = new AbortController();
   const cancel = () => controller.abort();

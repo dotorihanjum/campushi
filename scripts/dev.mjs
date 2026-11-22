@@ -3,9 +3,15 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import net from "node:net";
+import { parseEnv } from "node:util";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const frontend = path.join(root, "frontend");
+const localEnv = path.join(frontend, ".env.local");
+if (existsSync(localEnv))
+  for (const [key, value] of Object.entries(parseEnv(readFileSync(localEnv, "utf8"))))
+    if (process.env[key] === undefined) process.env[key] = value;
+
 const windows = process.platform === "win32";
 const python = path.join(
   root,

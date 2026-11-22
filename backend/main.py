@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend import accounts
+from backend.login import router as login_router
 
 logger = logging.getLogger("uvicorn.error")
 DATA_DIR = Path(__file__).parent / "data"
@@ -187,6 +188,9 @@ def lesson_game(body: GameRequest):
 def me(request: Request, store=Depends(accounts.account_store)):
     """지금 로그인한 사용자. 로그인하지 않았거나 세션이 만료·위조됐으면 401."""
     return {"user": accounts.current_user(store, request)}
+
+
+app.include_router(login_router)
 
 
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
