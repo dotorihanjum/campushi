@@ -20,7 +20,6 @@ import {
   filterMentors,
   filterQuestions,
   fromMock,
-  fromMockThreads,
   hasMentorAnswer,
   lastMessage,
   markRead,
@@ -33,7 +32,7 @@ import {
   timeAgo,
   unreadCount,
 } from "./community.js";
-import { MOCK_MENTORS, MOCK_QUESTIONS, MOCK_THREADS } from "./communityMock.js";
+import { MOCK_MENTORS, MOCK_QUESTIONS } from "./communityMock.js";
 import { createDepartment } from "./model.js";
 
 const { departments: raw } = JSON.parse(readFileSync(new URL("../../backend/data/departments.json", import.meta.url), "utf8"));
@@ -45,16 +44,11 @@ test("예시 데이터: 앱에 있는 학과만 쓰고, 질문 8~10개·재학�
   assert.ok(MOCK_QUESTIONS.length >= 8 && MOCK_QUESTIONS.length <= 10);
   assert.equal(MOCK_MENTORS.length, 5);
   for (const item of [...MOCK_QUESTIONS, ...MOCK_MENTORS]) assert.ok(ids.has(item.dept), item.id);
-  // 재학생 댓글·예시 쪽지는 있는 재학생·질문만 가리키고, 댓글 이름이 그 재학생 닉네임과 같다.
+  // 재학생 댓글은 있는 재학생만 가리키고, 댓글 이름이 그 재학생 닉네임과 같다.
   const mentors = new Map(MOCK_MENTORS.map((m) => [m.id, m]));
   for (const c of MOCK_QUESTIONS.flatMap((q) => q.comments).filter((c) => c.mentor)) assert.equal(mentors.get(c.mentor)?.nickname, c.author, c.id);
-  for (const t of MOCK_THREADS) {
-    assert.ok(mentors.has(t.mentor), t.id);
-    assert.ok(MOCK_QUESTIONS.some((q) => q.id === t.post), t.id);
-    assert.equal(t.messages[0].from, "me", "쪽지는 학생이 먼저 보낸다");
-  }
   for (const m of MOCK_MENTORS) assert.ok(m.topics.length > 0 && m.topics.every((x) => x.length === 2), m.id);
-  const text = JSON.stringify([MOCK_QUESTIONS, MOCK_MENTORS, MOCK_THREADS]);
+  const text = JSON.stringify([MOCK_QUESTIONS, MOCK_MENTORS]);
   assert.doesNotMatch(text, /\d{2,3}-\d{3,4}-\d{4}|@[\w-]+\.|https?:\/\//);
   assert.equal(new Set([...MOCK_QUESTIONS, ...MOCK_MENTORS].map((x) => x.id)).size, MOCK_QUESTIONS.length + MOCK_MENTORS.length);
 });
@@ -173,7 +167,15 @@ test("쪽지: 학생이 먼저 보내고, 이어 쓰기·읽음·차단", () => 
   assert.match(checkMessage("가".repeat(MESSAGE_MAX + 1)), /500자/);
   assert.equal(checkMessage("안녕하세요"), null);
 
-  const threads = fromMockThreads(MOCK_THREADS, NOW);
+  assert.deepEqual(messageStore.get(), [], "쪽지함은 예시 대화 없이 빈 채로 시작한다");
+  // 내가 보내고 재학생이 답장해 아직 읽지 않은 대화(서버가 생기면 이런 모양으로 온다).
+  const threads = [{
+    id: "t1", mentor: "m2", post: "q2", read: false, blocked: false,
+    messages: [
+      { id: "a", from: "me", at: NOW - 60 * 60000, body: "안녕하세요" },
+      { id: "b", from: "mentor", at: NOW - 30 * 60000, body: "반가워요" },
+    ],
+  }];
   assert.equal(unreadCount(threads), 1);
   assert.equal(threads[0].blocked, false);
   assert.equal(lastMessage(threads[0]).from, "mentor");
@@ -201,6 +203,5 @@ test("쪽지: 학생이 먼저 보내고, 이어 쓰기·읽음·차단", () => 
   assert.equal(sendMessage(blocked, "m2", "안녕하세요", null, NOW), blocked);
   assert.equal(sendMessage(setBlocked(blocked, "t1", false), "m2", "안녕하세요", null, NOW)[0].messages.length, 3);
 
-  assert.equal(messageStore.get(), messageStore.get());
-  assert.equal(messageStore.get()[0].id, "t1");
+  assert.equal(messageStore.get(), messageStore.get(), "같은 값을 돌려줘야 화면이 쓸데없이 다시 그려지지 않는다");
 });

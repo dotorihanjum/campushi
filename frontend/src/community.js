@@ -1,6 +1,6 @@
 // 커뮤니티 탭(미리보기)의 규칙: 글·댓글·쪽지 만들기와 검사, 학과 필터, 많이 본 글·추천 선배 고르기, 검색, 시간 표시, 메모리 저장소.
 // 서버·DB가 없어서 새로 쓴 글·댓글·쪽지는 이 탭을 연 동안 메모리에만 남는다(새로고침하면 사라진다, localStorage도 쓰지 않는다).
-import { MOCK_QUESTIONS, MOCK_THREADS } from "./communityMock.js";
+import { MOCK_QUESTIONS } from "./communityMock.js";
 
 export const TITLE_MAX = 60;
 export const BODY_MAX = 1000;
@@ -127,10 +127,6 @@ export function addComment(questions, questionId, body, now = Date.now()) {
   );
 }
 
-/** 예시 쪽지 대화의 "몇 분 전"을 실제 시각으로 바꾼다. */
-export const fromMockThreads = (items, now = Date.now()) =>
-  items.map(({ messages, ...rest }) => ({ blocked: false, ...rest, messages: fromMock(messages, now) }));
-
 /**
  * 재학생에게 쪽지를 보낸다. 쪽지는 학생(나)만 먼저 보낼 수 있어서 보내는 사람은 항상 나다.
  * 그 재학생과의 대화가 있으면 이어 붙이고(시작한 글이 없었으면 postId로 채운다), 없으면 새 대화를 만든다. 보낸 대화는 맨 위로 온다.
@@ -189,4 +185,5 @@ function memoryStore(load) {
   };
 }
 export const communityStore = memoryStore(() => fromMock(MOCK_QUESTIONS));
-export const messageStore = memoryStore(() => fromMockThreads(MOCK_THREADS));
+// 쪽지함은 비어 있는 채로 시작한다. 학생이 보내지 않은 예시 쪽지를 넣으면 내가 보낸 것처럼 보이고, 미리보기에서는 선배가 답장하지 않는다.
+export const messageStore = memoryStore(() => []);

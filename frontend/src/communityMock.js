@@ -137,17 +137,3 @@ export const MOCK_MENTORS = [
     topics: [["진로", "문과에서 컴공 오기"], ["생활", "1학년 생활"]],
   },
 ];
-
-// 쪽지함 예시 대화 하나. 학생(나)이 먼저 보내고 재학생이 답장한 모습이다. post: 쪽지를 시작한 질문.
-export const MOCK_THREADS = [
-  {
-    id: "t1",
-    mentor: "m2",
-    post: "q2",
-    read: false,
-    messages: [
-      { id: "t1a", from: "me", minutesAgo: 60, body: "선배님 안녕하세요! 실기 질문 글 보고 쪽지 드려요. 학원을 안 다녀도 1학년 수업을 따라갈 수 있을까요?" },
-      { id: "t1b", from: "mentor", minutesAgo: 30, body: "반가워요! 저도 처음엔 걱정이 많았어요. 입시 방식은 학교마다 달라서 입학처 요강을 꼭 확인해 보세요. 궁금한 과제가 있으면 편하게 물어봐요." },
-    ],
-  },
-];
