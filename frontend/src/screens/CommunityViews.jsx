@@ -651,6 +651,15 @@ export function Chat({ mentor, thread, post, onSend, onBlock, onOpenPost, onBack
     if (body.current) body.current.scrollTop = body.current.scrollHeight;
   }, [count]);
   const blocked = Boolean(thread?.blocked);
+  // 차단하면 대화 메뉴가, 차단을 풀면 "차단 풀기"가 사라진다. 초점이 body로 빠지지 않게 바뀐 자리의 다음 조작으로 옮긴다.
+  const unblock = useRef(null);
+  const input = useRef(null);
+  const wasBlocked = useRef(blocked);
+  useEffect(() => {
+    if (wasBlocked.current === blocked) return;
+    wasBlocked.current = blocked;
+    (blocked ? unblock : input).current?.focus({ preventScroll: true });
+  }, [blocked]);
   const send = (e) => {
     e.preventDefault();
     const problem = checkMessage(draft);
@@ -662,7 +671,7 @@ export function Chat({ mentor, thread, post, onSend, onBlock, onOpenPost, onBack
   const footer = blocked ? (
     <div className="flex items-center justify-between gap-[10px] border-t border-track px-[20px] py-[14px]">
       <p className="text-[13px] text-ink-3">차단한 선배예요. 쪽지를 보낼 수 없어요.</p>
-      <button onClick={() => onBlock(false)} className="button ghost min-h-[36px] shrink-0 text-[13px]">
+      <button ref={unblock} onClick={() => onBlock(false)} className="button ghost min-h-[36px] shrink-0 text-[13px]">
         차단 풀기
       </button>
     </div>
@@ -673,6 +682,7 @@ export function Chat({ mentor, thread, post, onSend, onBlock, onOpenPost, onBack
           쪽지
         </label>
         <input
+          ref={input}
           id="message-input"
           value={draft}
           maxLength={MESSAGE_MAX}
