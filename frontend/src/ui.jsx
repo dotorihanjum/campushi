@@ -127,7 +127,7 @@ export function Screen({ children, footer, foot = 740, veil = true, h, resetOn, 
  * 확인 창. 화면을 어둡게 덮고 가운데에 띄운다. 열리면 data-autofocus가 붙은 것(없으면 첫 버튼)에 초점을 두고,
  * Tab은 창 안의 버튼·입력·링크 사이에서만 돌며, Esc나 바깥을 누르면 닫힌다. 닫히면 열기 전에 초점이 있던 곳으로 돌려준다.
  */
-const FOCUSABLE = "button:not([disabled]), input:not([disabled]), a[href]";
+const FOCUSABLE = "button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href]";
 export function Dialog({ title, children, actions, onClose }) {
   const box = useRef(null);
   const titleId = useId();

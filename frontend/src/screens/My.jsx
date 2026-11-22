@@ -35,6 +35,7 @@ function MenuGroup({ title, children, d = 0 }) {
 export function My({ nav, state, setState, auth }) {
   // 열려 있는 창: profile, credit, storage, help, sources, reset, record:<학과id>.
   const [sheet, setSheet] = useState(null);
+  const [loginLayer, setLoginLayer] = useState(null);
   const [name, setName] = useState("");
   const [photo, setPhoto] = useState(null);
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -260,6 +261,7 @@ export function My({ nav, state, setState, auth }) {
       footer={<TabBar active="my" nav={nav} state={state} />}
       overlay={
         <>
+          <div ref={setLoginLayer} className="contents" />
           <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={choosePhoto} />
           {sheet && dialogs[sheet]}
           {selectedRecord && (
@@ -322,7 +324,7 @@ export function My({ nav, state, setState, auth }) {
           </button>
         </section>
 
-        <LoginPanel auth={auth} />
+        <LoginPanel auth={auth} portalTarget={loginLayer} />
 
         <section className="my-section a-up" aria-labelledby="my-records-title" style={delay(0.06)}>
           <div className="my-section-heading">
