@@ -1,5 +1,7 @@
 # 로그인·가입 보호 (#31 → #32)
 
+> #33~#35의 프로필·체험 기록 이전, 서버 동기화, 안전한 로그아웃은 [계정 기록](account-records.md)에 구현·검증 결과가 있습니다. 아래 브라우저 저장·후속 작업 설명은 #31/#32 당시 범위입니다.
+
 2026-11-20 구현. 최신 main `43b78b3`의 #30 계정 서버를 기준으로 한다. 예전 `feat/supabase-account-sync` 미커밋 Supabase Auth 초안은 `git stash`에 `backup: Supabase Auth draft before aligning with main issue 30`이라는 이름으로 보존했고, 활성 코드에는 적용하지 않았다.
 
 ## 구조와 범위
