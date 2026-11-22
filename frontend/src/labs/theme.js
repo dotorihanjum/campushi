@@ -4,7 +4,7 @@ export const APP_THEME = {
   panel: "#ffffff",
   line: "#e2e5e8",
   text: "#302b27",
-  sub: "#827d76",
+  sub: "#66625c",
   accent: "#087f77",
   good: "#e8faf7",
   bad: "#fdeceb",
