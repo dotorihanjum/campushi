@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { icon, img } from "../assets.js";
 import { BackButton, Center, Confetti, delay, Header, Mask, OutlineButton, Paper, PaperFold, Screen, T, SchoolLogo } from "../ui.jsx";
 import { YEARS, courseKey, welcomeGuide } from "../model.js";
-import { CERTIFICATES, isReview } from "../certificates.js";
+import { CERTIFICATES, isReview, transcriptRows } from "../certificates.js";
 import { canShareFile, isAbort, retryBy, singleFlight } from "../certificateSave.js";
 import { downloadFile, renderCertificate } from "../certificateImage.js";
 import { certificateFileName } from "./reportFileName.js";
@@ -298,9 +298,9 @@ export function Grades({ active, nav, state, route }) {
   useAutoAdvance(next, 4600, review);
   if (!ok) return null;
   const { d, progress } = v;
-  // 들은 과목을 필수부터, 학년 순서로 적는다. 종이에 다 들어가지 않으면 "외 N과목"으로 줄인다.
+  // 들은 과목을 필수부터, 학년 순서로 적는다. 종이에 다 들어가지 않으면 "외 N과목" 줄까지 7줄로 줄인다(서명 줄과 붙지 않게).
   const taken = [...progress.taken].sort((a, b) => b.required - a.required || a.year - b.year);
-  const shown = taken.slice(0, 7);
+  const { shown, more } = transcriptRows(taken);
   const average = averagePoint(taken.map((course) => course.record.grade));
   const perfect = taken.every((course) => course.record.grade === "A+" || course.record.grade === PASS);
   return (
@@ -323,7 +323,7 @@ export function Grades({ active, nav, state, route }) {
               <span className="shrink-0 font-semibold text-ink-2">{course.record.grade}</span>
             </li>
           ))}
-          {taken.length > shown.length && <li className="text-[10px] leading-[16px] text-gray">{`외 ${taken.length - shown.length}과목`}</li>}
+          {more > 0 && <li className="text-[10px] leading-[16px] text-gray">{`외 ${more}과목`}</li>}
         </ul>
         <BottomSign d={d} wait={0.7} />
         <SchoolSeal d={d} className="a-fade" style={delay(0.8)} />
