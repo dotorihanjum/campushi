@@ -272,8 +272,8 @@ export function Lesson({ active, nav, route, state, setState, auth }) {
       ...got,
       best: recordOf(after, d.id, subject),
       credits: auth?.user ? 0 : (after.credits || 0) - (base.credits || 0),
-      // 로그인 중이면 크레딧은 서버가 확정한 뒤에 알린다(#98). 마칠 때의 서버 잔액과 이 과목의 마지막 지급 시각을 남겨 두고 비교한다.
-      accountCredit: auth?.user ? { credits: base.credits || 0, at: base.creditedAt?.[key] ?? null } : null,
+      // 로그인 중이면 크레딧은 서버가 확정한 뒤에 알린다(#98). 마칠 때 이 과목의 마지막 지급 시각과 들은 횟수를 남겨 두고 비교한다.
+      accountCredit: auth?.user ? { at: base.creditedAt?.[key] ?? null, attempts: base.records?.[key]?.attempts || 0 } : null,
       // 이수했지만 7일 규칙 때문에 이번엔 크레딧을 받지 못했으면, 다시 받을 수 있기까지 남은 날.
       creditWait: passes(got.grade) ? creditWaitDays(base, d.id, subject) : 0,
       // 새로 열린 학년들(체험이 있는 필수과목이 없는 학년은 함께 열린다).
@@ -295,9 +295,11 @@ export function Lesson({ active, nav, route, state, setState, auth }) {
   if (result) {
     const passed = passes(result.grade);
     // 로그인 중이면 서버가 확정한 지급(서버 잔액·지급 시각)으로, 아니면 이 기기에서 계산한 값으로 크레딧을 알린다.
-    const account = result.accountCredit ? serverCreditOf(result.accountCredit, state, key, auth?.records) : { confirmed: true, credits: result.credits };
+    // 7일 안내도 로그인 중이면 서버 결과로만 한다(서버가 기록을 거부했으면 띄우지 않는다).
+    const account = result.accountCredit ? serverCreditOf(result.accountCredit, state, key, auth?.records) : { confirmed: true, credits: result.credits, wait: result.creditWait };
     const credits = account.credits;
     const creditSettled = account.confirmed;
+    const creditWait = passed ? account.wait : 0;
     return (
       <Screen
         foot={700}
@@ -335,9 +337,9 @@ export function Lesson({ active, nav, route, state, setState, auth }) {
             )}
             {credits > 0 && <CreditPill credits={credits} className="a-pop mt-[12px] inline-flex" style={delay(0.2)} />}
             {credits > 0 && <span className="sr-only">{`크레딧 ${josa(String(credits), "을", "를")} 받았어요`}</span>}
-            {creditSettled && credits === 0 && result.creditWait > 0 && (
+            {creditSettled && credits === 0 && creditWait > 0 && (
               <p className="a-up mt-[8px] text-[13px] leading-[20px] text-gray" style={delay(0.2)}>
-                {`같은 과목 크레딧은 ${CREDIT_COOLDOWN_DAYS}일에 한 번 받아요. ${result.creditWait}일 뒤에 이수하면 다시 받아요.`}
+                {`같은 과목 크레딧은 ${CREDIT_COOLDOWN_DAYS}일에 한 번 받아요. ${creditWait}일 뒤에 이수하면 다시 받아요.`}
               </p>
             )}
           </div>
