@@ -12,9 +12,12 @@ import {
   addQuestion,
   checkComment,
   checkPost,
+  MENTOR_LABEL,
   communityStore,
+  filterMentors,
   filterQuestions,
   fromMock,
+  hasMentorAnswer,
   timeAgo,
 } from "./community.js";
 import { MOCK_MENTORS, MOCK_QUESTIONS } from "./communityMock.js";
@@ -29,6 +32,10 @@ test("예시 데이터: 앱에 있는 학과만 쓰고, 질문 8~10개·재학�
   assert.ok(MOCK_QUESTIONS.length >= 8 && MOCK_QUESTIONS.length <= 10);
   assert.equal(MOCK_MENTORS.length, 5);
   for (const item of [...MOCK_QUESTIONS, ...MOCK_MENTORS]) assert.ok(ids.has(item.dept), item.id);
+  // 재학생 댓글은 있는 재학생만 가리키고, 댓글 이름이 그 재학생 닉네임과 같다.
+  const mentors = new Map(MOCK_MENTORS.map((m) => [m.id, m]));
+  for (const c of MOCK_QUESTIONS.flatMap((q) => q.comments).filter((c) => c.mentor)) assert.equal(mentors.get(c.mentor)?.nickname, c.author, c.id);
+  for (const m of MOCK_MENTORS) assert.ok(m.topics.length > 0 && m.topics.every((x) => x.length === 2), m.id);
   const text = JSON.stringify([MOCK_QUESTIONS, MOCK_MENTORS]);
   assert.doesNotMatch(text, /\d{2,3}-\d{3,4}-\d{4}|@[\w-]+\.|https?:\/\//);
   assert.equal(new Set([...MOCK_QUESTIONS, ...MOCK_MENTORS].map((x) => x.id)).size, MOCK_QUESTIONS.length + MOCK_MENTORS.length);
@@ -54,7 +61,9 @@ test("글쓰기: 학과·제목·내용을 검사하고, 통과하면 목록 맨
   assert.equal(checkPost({ ...empty, dept: "khu-cse" }, departments), "제목을 적어 주세요.");
   assert.equal(checkPost({ dept: "khu-cse", title: "   ", body: "내용" }, departments), "제목을 적어 주세요.");
   assert.equal(checkPost({ dept: "khu-cse", title: "제목", body: " " }, departments), "내용을 적어 주세요.");
-  assert.match(checkPost({ dept: "khu-cse", title: "가".repeat(TITLE_MAX + 1), body: "내용" }, departments), /60자/);
+  assert.match(checkPost({ dept: "khu-cse", title: "가".repeat(TITLE_MAX + 1), body: "내용" }, departments), /40자/);
+  assert.equal(TITLE_MAX, 40, "manyfast F-DPIKIB·S-GHOVXR의 제목 40자");
+  assert.equal(checkPost({ dept: "khu-cse", title: "가".repeat(TITLE_MAX), body: "내용" }, departments), null);
   assert.match(checkPost({ dept: "khu-cse", title: "제목", body: "가".repeat(BODY_MAX + 1) }, departments), /1,000자/);
   assert.equal(checkPost({ dept: "없는학과", title: "제목", body: "내용" }, departments), "학과를 골라 주세요.");
   assert.equal(checkPost({ dept: "khu-id", title: " 제목 ", body: " 내용 " }, departments), null);
@@ -100,4 +109,24 @@ test("시간 표시와 메모리 저장소", () => {
   off();
   communityStore.set(first);
   assert.equal(calls, 1);
+});
+
+test("재학생 답변 표시와 재학생 필터", () => {
+  const questions = fromMock(MOCK_QUESTIONS, NOW);
+  const q = (id) => questions.find((x) => x.id === id);
+  assert.equal(hasMentorAnswer(q("q1")), true);
+  assert.equal(hasMentorAnswer(q("q4")), false);
+  assert.deepEqual(filterMentors(MOCK_MENTORS, ALL, departments).map((m) => m.id), MOCK_MENTORS.map((m) => m.id), "예시 순서 그대로");
+  assert.deepEqual(filterMentors(MOCK_MENTORS, "design", departments).map((m) => m.id), ["m2", "m4"]);
+  assert.deepEqual(filterMentors(MOCK_MENTORS, "khu-cse", departments).map((m) => m.id), ["m1", "m3", "m5"]);
+  assert.deepEqual(filterMentors(MOCK_MENTORS, MINE, departments, {}), []);
+  assert.deepEqual(filterMentors(MOCK_MENTORS, MINE, departments, { "khu-id": {} }).map((m) => m.id), ["m2", "m4"]);
+});
+
+test("예시 데이터: 가상 선배는 예시로 표시하고, 제목은 40자 안, 가상 선배가 수업을 겪은 것처럼 말하지 않는다", () => {
+  // 승인된 멘토에게만 붙는 '재학생'·'인증' 표시를 예시 선배에게 그대로 쓰지 않는다.
+  assert.match(MENTOR_LABEL, /예시/);
+  for (const item of MOCK_QUESTIONS) assert.ok(item.title.length <= TITLE_MAX, item.id);
+  const said = [...MOCK_QUESTIONS.flatMap((x) => x.comments).filter((c) => c.mentor).map((c) => c.body), ...MOCK_MENTORS.flatMap((m) => [m.intro, ...m.topics.flat()])].join(" ");
+  assert.doesNotMatch(said, /수업|학년은|학년 수학|올라갈수록|초반에/);
 });

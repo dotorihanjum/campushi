@@ -2,26 +2,36 @@
 // 서버·DB가 없어서 새로 쓴 글과 댓글은 이 탭을 연 동안 메모리에만 남는다(새로고침하면 사라진다, localStorage도 쓰지 않는다).
 import { MOCK_QUESTIONS } from "./communityMock.js";
 
-export const TITLE_MAX = 60;
+// 제목 글자 수는 manyfast F-DPIKIB·S-GHOVXR의 40자(2026-11-22 PM 결정).
+export const TITLE_MAX = 40;
 export const BODY_MAX = 1000;
 export const COMMENT_MAX = 300;
 // 내가 쓴 글·댓글에 붙는 이름(계정이 없어서 하나로 쓴다).
 export const ME = "나";
+// 예시 선배에게 붙이는 이름표. '재학생' 표시는 운영자가 승인한 멘토에게만 붙으므로(manyfast F-TQHCMN·S-YPURJU) 미리보기의 가상 선배는 예시임을 드러낸다.
+export const MENTOR_LABEL = "예시 재학생";
 
 // 학과 필터: 전체, 내가 체험한 학과, 학과군(groups.js의 id), 학과 하나(학과 id).
 export const ALL = "all";
 export const MINE = "mine";
 
-/**
- * 질문 목록을 필터에 맞게 거른다. departments: 학과 목록(model.js의 학과, studyGroup 포함), journeys: 입학한 학과 { id: {} }.
- */
-export function filterQuestions(questions, filter, departments, journeys = {}) {
-  if (!filter || filter === ALL) return questions;
-  if (filter === MINE) return questions.filter((q) => journeys[q.dept]);
+/** 학과 하나(dept)가 필터에 걸리는지. departments: 학과 목록(model.js의 학과, studyGroup 포함), journeys: 입학한 학과 { id: {} }. */
+export function inFilter(dept, filter, departments, journeys = {}) {
+  if (!filter || filter === ALL) return true;
+  if (filter === MINE) return Boolean(journeys[dept]);
   const group = departments.filter((d) => d.studyGroup === filter).map((d) => d.id);
-  if (group.length) return questions.filter((q) => group.includes(q.dept));
-  return questions.filter((q) => q.dept === filter);
+  if (group.length) return group.includes(dept);
+  return dept === filter;
 }
+
+/** 질문 목록을 필터에 맞게 거른다. */
+export const filterQuestions = (questions, filter, departments, journeys = {}) => questions.filter((q) => inFilter(q.dept, filter, departments, journeys));
+
+/** 재학생 목록을 필터에 맞게 거른다. */
+export const filterMentors = (mentors, filter, departments, journeys = {}) => mentors.filter((m) => inFilter(m.dept, filter, departments, journeys));
+
+/** 재학생이 댓글을 단 질문인지. */
+export const hasMentorAnswer = (question) => question.comments.some((c) => c.mentor);
 
 /** 글을 검사한다. 문제가 없으면 null, 있으면 사용자에게 보여줄 문장. */
 export function checkPost({ dept, title, body }, departments) {
@@ -72,19 +82,22 @@ export function timeAgo(at, now = Date.now()) {
 }
 
 // 메모리 저장소: 탭을 옮겨 다녀도 쓴 글이 남게 화면 밖에 둔다(useSyncExternalStore로 구독).
-let questions = null;
-const listeners = new Set();
-export const communityStore = {
-  get() {
-    if (!questions) questions = fromMock(MOCK_QUESTIONS);
-    return questions;
-  },
-  set(next) {
-    questions = next;
-    listeners.forEach((listener) => listener());
-  },
-  subscribe(listener) {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
-  },
-};
+function memoryStore(load) {
+  let value = null;
+  const listeners = new Set();
+  return {
+    get() {
+      if (!value) value = load();
+      return value;
+    },
+    set(next) {
+      value = next;
+      listeners.forEach((listener) => listener());
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+export const communityStore = memoryStore(() => fromMock(MOCK_QUESTIONS));
