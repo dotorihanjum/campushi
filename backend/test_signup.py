@@ -124,7 +124,10 @@ class SignupTest(unittest.TestCase):
                 options = self.client.get("/api/auth/options").json()
                 self.assertIsNone(options["policy"])
                 self.assertIn("google", options["providers"])
-                self.assertTrue(options["signup_notice"])
+                self.assertEqual(
+                    options["signup_notice"],
+                    "새로 가입하기는 아직 준비 중이에요. 기존 계정으로 로그인하거나 체험을 계속할 수 있어요.",
+                )
                 for endpoint in ("eligibility", "register"):
                     response = self.client.post("/api/auth/" + endpoint, json=body, headers=HEADERS)
                     self.assertEqual(response.status_code, 503)

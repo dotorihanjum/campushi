@@ -15,7 +15,7 @@ REGISTRATION = "__Host-campushi_registration"
 DEFAULT_TERMS_URL = "https://example.com/terms"
 DEFAULT_PRIVACY_URL = "https://example.com/privacy"
 DEFAULT_POLICY_VERSION = "development-placeholder-v1"
-SIGNUP_UNAVAILABLE = "신규 가입을 준비하고 있어요. 기존 계정으로 로그인하거나 체험을 계속할 수 있어요."
+SIGNUP_UNAVAILABLE = "새로 가입하기는 아직 준비 중이에요. 기존 계정으로 로그인하거나 체험을 계속할 수 있어요."
 
 
 def current_year():
