@@ -27,7 +27,9 @@ import {
   recordOf,
   refreshCatalog,
   savePlay,
+  serverCreditOf,
   skippedYears,
+  welcomeGuide,
   sourceNote,
   yearOf,
   yearSubjects,
@@ -471,4 +473,84 @@ test("그만둔 학과에 다시 입학하면 1학년부터 새로 시작하고,
   // 7일이 지나면 받는다.
   state = take(state, RAW_CSE.id, "미분적분학", 10, 10, t0 + CREDIT_COOLDOWN_DAYS * DAY);
   assert.equal(state.credits, CREDIT_PER_PASS * 2);
+});
+
+test("입학 완료 화면 안내: 넘어간 학년이 없으면 예전 그대로, 있으면 처음 들을 학년 기준이고 학과 홈과 같은 학년·필수 수를 말한다(#40)", () => {
+  const guide = (raw, state = enrolled([raw], [raw.id])) => {
+    const d = departmentsOf(state).find((item) => item.id === raw.id);
+    const p = progressOf(state, d);
+    return { ...welcomeGuide(d, p), p };
+  };
+  const OLD_BODY = "필수과목을 B- 이상으로 이수하면 다음 학년이 열려요.\n4학년에는 졸업 과제에 도전해요.";
+
+  // 넘어간 학년이 없는 학과(컴공 테스트 데이터)는 예전 안내와 글자까지 같다.
+  const cse = guide(RAW_CSE);
+  assert.deepEqual([cse.skipped, cse.title, cse.body], [null, "1학년 과목 3개 · 필수 2개", OLD_BODY]);
+
+  // 체험을 모두 뺀 학과: 1·2·3학년을 넘어 4학년. 필수 수는 학과 홈의 남은 필수(졸업 과제)와 같다.
+  const bare = { ...RAW_ID, games: {} };
+  const all = guide(bare);
+  assert.deepEqual(skippedYears(all.p), [1, 2, 3]);
+  assert.equal(all.skipped, "체험할 필수과목이 없어 1·2·3학년은 바로 넘어갔어요.");
+  assert.equal(all.title, "4학년 과목 3개 · 필수 1개");
+  assert.equal(all.body, "졸업 과제를 이수하면 졸업해요.");
+  const step = nextStepOf(all.p);
+  assert.equal(step.total - step.done, 1, "학과 홈의 남은 필수와 같은 숫자");
+
+  // 4학년에 체험이 있는 필수과목도 있으면 그것과 졸업 과제를 함께 말한다.
+  const withLab = { ...bare, kinds: { ...bare.kinds, 전공필수: [...bare.kinds.전공필수, "산업디자인종합설계1"] }, games: { 산업디자인종합설계1: "match" } };
+  const lab = guide(withLab);
+  assert.equal(lab.title, "4학년 과목 3개 · 필수 2개");
+  assert.equal(lab.body, "필수과목과 졸업 과제를 이수하면 졸업해요.");
+  assert.equal(nextStepOf(lab.p).total, 2);
+
+  // 1학년만 넘어가는 학과: 2학년 기준, 다음 학년 안내는 한 줄로.
+  const firstOnly = { ...RAW_CSE, games: { 운영체제: "sort", 컴퓨터구조: "match" } };
+  const one = guide(firstOnly);
+  assert.deepEqual([one.skipped, one.title, one.body], ["체험할 필수과목이 없어 1학년은 바로 넘어갔어요.", "2학년 과목 3개 · 필수 1개", "필수과목을 B- 이상으로 이수하면 다음 학년이 열려요."]);
+
+  // 2학년만 넘어간 경우(1학년을 이수한 컴공 테스트 데이터): 학과 홈과 같은 [2]와 3학년 기준.
+  let state = enrolled();
+  state = take(state, RAW_CSE.id, "객체지향프로그래밍", 8);
+  state = take(state, RAW_CSE.id, "미분적분학", 8);
+  const two = guide(RAW_CSE, state);
+  assert.deepEqual(skippedYears(two.p), [2]);
+  assert.equal(two.skipped, "체험할 필수과목이 없어 2학년은 바로 넘어갔어요.");
+  assert.equal(two.title, `3학년 과목 3개 · 필수 ${nextStepOf(two.p).total}개`);
+});
+
+test("실제 학과 데이터의 입학 완료 안내: 1~3학년에 체험 있는 필수가 없는 산디는 4학년 기준이고 넘어간 학년을 알린다(#40)", () => {
+  const { departments } = JSON.parse(readFileSync(new URL("../../backend/data/departments.json", import.meta.url), "utf8"));
+  // 서버의 games(공개 체험)는 문제 은행에서 붙는다. 지금 산디에 공개된 체험은 졸업 과제뿐이라 games를 비워 같은 상황을 만든다.
+  const id = { ...departments.find((d) => d.id === "khu-id"), games: {} };
+  const state = enrolled([id], [id.id]);
+  const d = departmentsOf(state).find((item) => item.id === id.id);
+  const g = welcomeGuide(d, progressOf(state, d));
+  assert.equal(g.skipped, "체험할 필수과목이 없어 1·2·3학년은 바로 넘어갔어요.");
+  assert.equal(g.title, `4학년 과목 ${id.years[4].length}개 · 필수 1개`);
+});
+
+test("로그인 결과 화면: 서버가 확정한 뒤에만 이번에 받은 크레딧을 알린다(#98)", () => {
+  const key = courseKey(RAW_CSE.id, "미분적분학");
+  const before = { at: null, attempts: 0 };
+  // 보낼 기록이 남아 있거나 저장 중·연결 대기면 아직 확정 전이다.
+  const none = { confirmed: false, accepted: false, credits: 0, wait: 0 };
+  const took = (attempts, at, credits = 15) => ({ credits, creditedAt: at ? { [key]: at } : {}, records: { [key]: { grade: "A0", attempts } } });
+  for (const sync of [{ phase: "waiting", pending: 1 }, { phase: "saving", pending: 1 }, { phase: "saved", pending: 1 }, { phase: "expired", pending: 0 }, null])
+    assert.deepEqual(serverCreditOf(before, took(1, 1), key, sync), none);
+  const saved = { phase: "saved", pending: 0 };
+  const now = 1700000000000;
+  // 서버가 이번에 지급했다(기록을 받고 지급 시각이 생겼다).
+  assert.deepEqual(serverCreditOf(before, took(1, now), key, saved, now), { confirmed: true, accepted: true, credits: 5, wait: 0 });
+  // 다른 과목 지급이 같은 동기화에 섞여 잔액이 10 늘어도 이 과목은 +5다(서버는 한 번에 5만 준다).
+  assert.deepEqual(serverCreditOf(before, took(1, now, 20), key, saved, now).credits, 5);
+  // 7일 규칙으로 지급하지 않았다(지급 시각이 그대로). 남은 날은 서버의 지급 시각으로 센다.
+  const earlier = { credits: 10, at: now - 2 * DAY, attempts: 1 };
+  assert.deepEqual(serverCreditOf(earlier, took(2, now - 2 * DAY, 10), key, saved, now), { confirmed: true, accepted: true, credits: 0, wait: 5 });
+  // 지급 시각이 그대로면 다른 기기에서 늘어난 잔액은 이 과목의 지급으로 보지 않는다.
+  assert.equal(serverCreditOf(earlier, took(2, now - 2 * DAY, 15), key, saved, now).credits, 0);
+  // 서버가 기록을 거부했다(들은 횟수가 그대로): 크레딧도 7일 안내도 없다.
+  assert.deepEqual(serverCreditOf(earlier, took(1, now - 2 * DAY, 10), key, saved, now), { confirmed: true, accepted: false, credits: 0, wait: 0 });
+  // 확정 전 값이 없으면(비로그인) 확정하지 않는다.
+  assert.deepEqual(serverCreditOf(null, { credits: 15 }, key, saved), none);
 });

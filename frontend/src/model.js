@@ -32,6 +32,25 @@ export function creditWaitDays(state, id, subject, now = Date.now()) {
   const left = last + CREDIT_COOLDOWN_DAYS * DAY_MS - now;
   return left > 0 ? Math.ceil(left / DAY_MS) : 0;
 }
+/**
+ * 로그인한 학생의 수업 결과에서 서버가 확정한 크레딧(#98). 서버가 확정하기 전에는 지급을 알리지 않는다.
+ * before: 수업을 마칠 때의 서버 값 { at, attempts }(at: 그 과목의 마지막 지급 시각, 없으면 null. attempts: 그 과목을 들은 횟수),
+ * state: 지금 화면 상태(로그인 중에 보낼 기록이 없으면 records·creditedAt이 서버 문서 값이다), key: 과목 키,
+ * sync: 기록 동기화 상태 { phase, pending }(useAccountRecords). 보낼 기록이 남아 있거나 저장 중이면 아직 확정 전이다.
+ * 반환: { confirmed, accepted, credits, wait }
+ *   accepted: 서버가 이번 기록을 받았는지(그 과목을 들은 횟수가 늘었는지). 거부됐으면 크레딧도 7일 안내도 없다.
+ *   credits: 그 과목의 지급 시각이 바뀌었으면 CREDIT_PER_PASS. 서버는 한 번에 한 과목 5만 주므로 잔액 차이로 세지 않는다
+ *            (다른 과목 지급이 같은 동기화에 섞여도 +10이 되지 않게).
+ *   wait: 받았는데 지급하지 않았으면 서버의 지급 시각 기준으로 다시 받기까지 남은 날(이수하지 못한 성적인지는 부르는 쪽이 본다).
+ */
+export function serverCreditOf(before, state, key, sync, now = Date.now()) {
+  if (!before || !sync || sync.pending > 0 || sync.phase !== "saved") return { confirmed: false, accepted: false, credits: 0, wait: 0 };
+  const accepted = (state.records?.[key]?.attempts || 0) > (before.attempts || 0);
+  const at = state.creditedAt?.[key];
+  const granted = accepted && (at ?? null) !== before.at;
+  const left = accepted && !granted && Number.isFinite(at) ? at + CREDIT_COOLDOWN_DAYS * DAY_MS - now : 0;
+  return { confirmed: true, accepted, credits: granted ? CREDIT_PER_PASS : 0, wait: left > 0 ? Math.ceil(left / DAY_MS) : 0 };
+}
 // 마이페이지 프로필에 쓰는 이름(이 브라우저에만 저장, 계정과 상관없다)의 최대 글자 수.
 export const NICKNAME_MAX = 12;
 // 앞뒤 공백과 줄바꿈을 지우고 NICKNAME_MAX자(한글 한 글자 = 1자)까지 자른다. 이름으로 쓸 수 없으면 "".
@@ -311,6 +330,30 @@ export function nextStepOf(progress) {
  */
 export const skippedYears = (progress) =>
   progress.years.filter((item) => item.year < 4 && item.open && !item.courses.some((course) => course.required && !course.planned)).map((item) => item.year);
+
+/**
+ * 체험 입학 완료 화면(Welcome)의 학년 안내(#40). 해금 규칙은 progressOf·skippedYears·nextStepOf를 읽기만 한다.
+ * 바로 넘어간 학년이 없으면 예전 안내 그대로(1학년 과목 수·편성표 필수 수).
+ * 넘어간 학년이 있으면 그 사실과, 처음 들을 학년(넘어간 학년 다음의 열린 학년 = openYear)의 과목 수·필수 수를 알린다.
+ * 이때 필수 수는 학과 홈의 "남은 필수"와 같은 기준(nextStepOf: 체험이 있는 필수, 4학년은 졸업 과제 포함)이다.
+ */
+export function welcomeGuide(d, progress) {
+  const skipped = skippedYears(progress);
+  if (!skipped.length)
+    return {
+      skipped: null,
+      title: `1학년 과목 ${d.years[1].length}개 · 필수 ${d.years[1].filter((subject) => isRequired(d, subject)).length}개`,
+      body: "필수과목을 B- 이상으로 이수하면 다음 학년이 열려요.\n4학년에는 졸업 과제에 도전해요.",
+    };
+  const year = progress.openYear;
+  const courses = progress.years[year - 1].courses;
+  const requiredLabs = courses.filter((course) => course.required && !course.planned && !course.exempt && !course.final).length;
+  return {
+    skipped: `체험할 필수과목이 없어 ${skipped.join("·")}학년은 바로 넘어갔어요.`,
+    title: `${year}학년 과목 ${courses.length}개 · 필수 ${nextStepOf(progress).total}개`,
+    body: year < 4 ? "필수과목을 B- 이상으로 이수하면 다음 학년이 열려요." : requiredLabs ? "필수과목과 졸업 과제를 이수하면 졸업해요." : "졸업 과제를 이수하면 졸업해요.",
+  };
+}
 
 // 수업 중 체험을 끝냈을 때 결과를 남긴다(완료 전까지는 마지막 결과만 둔다).
 export function savePlay(state, id, subject, game, summary, score) {

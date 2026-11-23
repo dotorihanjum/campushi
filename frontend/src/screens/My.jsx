@@ -1,5 +1,6 @@
 // 마이페이지: 프로필, 나의 학과 체험, 설정, 도움말.
 import { LoginPanel } from "../LoginPanel.jsx";
+import { WithdrawDialog } from "../WithdrawDialog.jsx";
 import { useEffect, useRef, useState } from "react";
 import { prepareProfilePhoto } from "../profilePhoto.js";
 import { openStorage, writeProfile } from "../storage.js";
@@ -33,7 +34,7 @@ function MenuGroup({ title, children, d = 0 }) {
 }
 
 export function My({ nav, state, setState, auth }) {
-  // 열려 있는 창: profile, credit, storage, help, sources, reset, record:<학과id>.
+  // 열려 있는 창: profile, credit, storage, help, sources, reset, withdraw, record:<학과id>.
   const [sheet, setSheet] = useState(null);
   const [loginLayer, setLoginLayer] = useState(null);
   const [name, setName] = useState("");
@@ -259,6 +260,7 @@ export function My({ nav, state, setState, auth }) {
         {auth.user ? "계정의 입학한 학과, 성적, 한 줄 기록, 이름, 프로필 사진을 지워요. 크레딧 잔액과 지급 내역은 남아요. 연결되지 않으면 삭제 요청도 저장 대기 상태가 돼요. 남겨 둘 리포트는 먼저 내려받아 주세요." : <>입학한 학과, 성적, 한 줄 기록, 크레딧, 이름, 프로필 사진이 모두 지워지고 되돌릴 수 없어요. 과목별로 크레딧을 받은 날은 남아서, 같은 과목은 그날부터 {CREDIT_COOLDOWN_DAYS}일이 지나야 다시 받아요. 남겨 둘 리포트는 먼저 내려받아 주세요.</>}
       </Dialog>
     ),
+    withdraw: <WithdrawDialog auth={auth} onClose={close} />,
   };
 
   return (
@@ -391,6 +393,12 @@ export function My({ nav, state, setState, auth }) {
           <button onClick={() => setSheet("reset")}>처음부터 다시 시작하기</button>
           <p>프로필과 모든 체험 기록을 지워요.</p>
         </div>
+        {auth.user && (
+          <div className="my-reset">
+            <button onClick={() => setSheet("withdraw")}>회원 탈퇴</button>
+            <p>계정과 계정에 저장한 기록, 크레딧을 모두 지워요.</p>
+          </div>
+        )}
       </div>
     </Screen>
   );

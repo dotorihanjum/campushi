@@ -2,10 +2,19 @@
 // 화면 코드는 과목 모듈(labs/<id>/Lab.jsx)에 있고 components.js가 그 과목에 들어갈 때만 불러온다(첫 화면 번들을 키우지 않는다).
 // 이 파일은 React를 쓰지 않아 model.js와 테스트(node)에서도 읽는다.
 //
+// 어느 과목에 어떤 체험이 있고 공개했는지(id·status·since)는 backend/data/record_conditions.json의 labs 한 곳에만 둔다(#103).
+// 서버도 같은 파일을 읽어 verified 체험의 이수만 받으므로, 화면과 서버가 같은 체험을 공개한다. 형식:
+//   "labs": { "<학과 id>": { "<과목>": { "id": "kebab-case", "status": "verified" | "draft", "since": 이수 조건 버전 } } }
+// 체험 문구(title·task·source·learn·takeaway)는 과목 모듈의 데이터(labs/<id>/data.js)에 두고 아래 LAB_DATA에 id로 붙인다.
+//
+// 공개 순서(QA 재현 규칙):
+//   1. 검토 전에는 status: "draft"로 넣고 version은 올리지 않는다(since는 지금 version 이하).
+//   2. 별도 에이전트 검토를 통과해 verified로 바꾸는 커밋에서 version을 1 올리고, 그 체험의 since를 그 값으로 둔다.
+//      필수과목에 체험이 생기면 다음 학년이 열리는 조건이 되므로, since로 그때 이미 열려 있던 학년을 다시 잠그지 않는다(아래 since 설명).
 // 공개 규칙: 과제 문구·채점 항목은 AI가 쓰고 쓰지 않은 별도 에이전트의 검토를 통과한 것만 status: "verified"로 등록한다.
 // 웹/파이선프로그래밍(파이썬 함수 블록)과 자료구조(스택·큐) 체험은 2026-11-12 사용자 결정으로 뺐다(지난 코드는 git 기록에 있다).
 //
-// 체험 하나의 형식(labProblems가 검사한다. 형식이 틀리면 verified여도 공개하지 않고, 테스트가 실패한다):
+// 체험 하나의 형식(등록부 + 문구를 합친 것. labProblems가 검사한다. 형식이 틀리면 verified여도 공개하지 않고, 테스트가 실패한다):
 //   { id: "kebab-case", status: "verified" | "draft", since: 이수 조건 버전, title, task, source(근거 한 줄), learn?(배우기 단계 설명),
 //     takeaway: { summary: "이 수업은 ○○를 하는 수업이에요" 한 문장, highSchool: 고등학교 내용과의 연결,
 //                 terms: [{ name: 대학 용어, meaning: 방금 해본 것으로 풀어 쓴 뜻 }] } }
@@ -22,14 +31,36 @@
 // since: 이 체험이 생긴 "이수 조건 버전". 필수과목에 체험이 생기면 다음 학년이 열리는 조건이 되는데, 이미 다음 학년이 열린
 // 사용자는 다시 잠그지 않는다(2026-11-10 사용자 결정). 저장된 기록의 조건 버전(state.conditions)이 since보다 낮으면
 // 그때 이미 열려 있던 학년의 새 조건 과목을 예외(state.exempt)로 남긴다(model.js의 normalize).
-export const LABS = {};
+import recordConditions from '../../../backend/data/record_conditions.json' with { type: 'json' };
+
+// 체험 문구(과목 모듈의 데이터). 키는 등록부의 체험 id다. 새 체험은 import <이름> from "./<id>/data.js";로 불러와
+// "<id>": <이름> 꼴로 넣는다. 등록부에 있는데 여기에 없으면 형식이 틀린 것으로 보아 공개하지 않고, 테스트가 실패한다.
+export const LAB_DATA = {};
+
+/** 등록부(record_conditions.json의 labs)에 문구를 붙인 체험. { 학과: { 과목: 체험 } }. registry·data는 테스트에서만 준다. */
+export function labsFrom(registry = recordConditions.labs, data = LAB_DATA) {
+  return Object.fromEntries(
+    Object.entries(registry).map(([department, subjects]) => [
+      department,
+      Object.fromEntries(
+        Object.entries(subjects).map(([subject, entry]) => [
+          subject,
+          // 공개 여부·since는 등록부의 값이 이긴다(문구 모듈에 같은 이름이 있어도 덮는다).
+          { ...(Object.hasOwn(data, entry.id) ? data[entry.id] : {}), id: entry.id, status: entry.status, since: entry.since },
+        ]),
+      ),
+    ]),
+  );
+}
+
+export const LABS = labsFrom();
 
 // 진짜 수업 체험이 아닌 체험이 다시 생긴 과목과 그 이수 조건 버전. 2026-11-10에 내렸던 이론 퀴즈 15과목을 2026-11-12 사용자 결정으로
 // 다시 공개했다(backend/data/theory_banks.jsonl). 그사이 다음 학년이 열린 사용자를 다시 잠그지 않도록 since를 둔다.
-import recordConditions from '../../../backend/data/record_conditions.json' with { type: 'json' };
 export const RESTORED = recordConditions.restored;
 
-// 지금 이수 조건 버전. 필수과목에 체험을 새로 공개할 때마다 1씩 올리고, 그 체험의 since(또는 RESTORED의 값)를 이 값으로 둔다.
+// 지금 이수 조건 버전. 필수과목에 체험을 새로 공개할 때마다 등록부(record_conditions.json)의 version을 1씩 올리고,
+// 그 체험의 since(또는 RESTORED의 값)를 이 값으로 둔다.
 // 1: 웹/파이선 체험, 2: 자료구조 체험(둘 다 2026-11-12에 뺐다), 3: 이론 퀴즈 15과목 다시 공개.
 export const CONDITIONS = recordConditions.version;
 
