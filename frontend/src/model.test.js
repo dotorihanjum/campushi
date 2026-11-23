@@ -475,17 +475,26 @@ test("그만둔 학과에 다시 입학하면 1학년부터 새로 시작하고,
   assert.equal(state.credits, CREDIT_PER_PASS * 2);
 });
 
-test("입학 완료 화면 안내: 넘어간 학년이 없으면 예전 그대로, 있으면 처음 들을 학년 기준이고 학과 홈과 같은 학년·필수 수를 말한다(#40)", () => {
+test("입학 완료 화면 안내: 처음 들을 학년 기준이고, 필수 수는 학과 홈과 같이 체험이 있는 필수과목만 센다(#40, #107)", () => {
   const guide = (raw, state = enrolled([raw], [raw.id])) => {
     const d = departmentsOf(state).find((item) => item.id === raw.id);
     const p = progressOf(state, d);
     return { ...welcomeGuide(d, p), p };
   };
-  const OLD_BODY = "필수과목을 B- 이상으로 이수하면 다음 학년이 열려요.\n4학년에는 졸업 과제에 도전해요.";
+  const RULE = "체험이 있는 필수과목을 B- 이상으로 이수하면 다음 학년이 열려요.";
 
-  // 넘어간 학년이 없는 학과(컴공 테스트 데이터)는 예전 안내와 글자까지 같다.
+  // 넘어간 학년이 없는 학과(컴공 테스트 데이터): 1학년 기준, 다음 학년 조건과 졸업 과제 안내 두 줄.
   const cse = guide(RAW_CSE);
-  assert.deepEqual([cse.skipped, cse.title, cse.body], [null, "1학년 과목 3개 · 필수 2개", OLD_BODY]);
+  assert.deepEqual([cse.skipped, cse.title, cse.body], [null, "1학년 과목 3개 · 필수 2개", `${RULE}\n4학년에는 졸업 과제에 도전해요.`]);
+
+  // #107 체험이 없는 필수과목(미분적분학)은 세지 않는다. 편성표 필수는 2개지만 학과 홈의 남은 필수와 같은 1개.
+  const noCalc = guide({ ...RAW_CSE, games: { 객체지향프로그래밍: "match", 운영체제: "sort" } });
+  const cseDept = departmentsOf(enrolled()).find((d) => d.id === RAW_CSE.id);
+  assert.equal(cseDept.years[1].filter((subject) => isRequired(cseDept, subject)).length, 2);
+  assert.equal(noCalc.skipped, null);
+  assert.equal(noCalc.title, "1학년 과목 3개 · 필수 1개");
+  const fresh = nextStepOf(noCalc.p);
+  assert.equal(fresh.total - fresh.done, 1, "학과 홈의 남은 필수와 같은 숫자");
 
   // 체험을 모두 뺀 학과: 1·2·3학년을 넘어 4학년. 필수 수는 학과 홈의 남은 필수(졸업 과제)와 같다.
   const bare = { ...RAW_ID, games: {} };
@@ -501,13 +510,13 @@ test("입학 완료 화면 안내: 넘어간 학년이 없으면 예전 그대�
   const withLab = { ...bare, kinds: { ...bare.kinds, 전공필수: [...bare.kinds.전공필수, "산업디자인종합설계1"] }, games: { 산업디자인종합설계1: "match" } };
   const lab = guide(withLab);
   assert.equal(lab.title, "4학년 과목 3개 · 필수 2개");
-  assert.equal(lab.body, "필수과목과 졸업 과제를 이수하면 졸업해요.");
+  assert.equal(lab.body, "체험이 있는 필수과목과 졸업 과제를 이수하면 졸업해요.");
   assert.equal(nextStepOf(lab.p).total, 2);
 
   // 1학년만 넘어가는 학과: 2학년 기준, 다음 학년 안내는 한 줄로.
   const firstOnly = { ...RAW_CSE, games: { 운영체제: "sort", 컴퓨터구조: "match" } };
   const one = guide(firstOnly);
-  assert.deepEqual([one.skipped, one.title, one.body], ["체험할 필수과목이 없어 1학년은 바로 넘어갔어요.", "2학년 과목 3개 · 필수 1개", "필수과목을 B- 이상으로 이수하면 다음 학년이 열려요."]);
+  assert.deepEqual([one.skipped, one.title, one.body], ["체험할 필수과목이 없어 1학년은 바로 넘어갔어요.", "2학년 과목 3개 · 필수 1개", RULE]);
 
   // 2학년만 넘어간 경우(1학년을 이수한 컴공 테스트 데이터): 학과 홈과 같은 [2]와 3학년 기준.
   let state = enrolled();
