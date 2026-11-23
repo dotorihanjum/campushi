@@ -340,26 +340,25 @@ export const skippedYears = (progress) =>
 
 /**
  * 체험 입학 완료 화면(Welcome)의 학년 안내(#40). 해금 규칙은 progressOf·skippedYears·nextStepOf를 읽기만 한다.
- * 바로 넘어간 학년이 없으면 예전 안내 그대로(1학년 과목 수·편성표 필수 수).
- * 넘어간 학년이 있으면 그 사실과, 처음 들을 학년(넘어간 학년 다음의 열린 학년 = openYear)의 과목 수·필수 수를 알린다.
- * 이때 필수 수는 학과 홈의 "남은 필수"와 같은 기준(nextStepOf: 체험이 있는 필수, 4학년은 졸업 과제 포함)이다.
+ * 필수 수는 학과 홈("남은 필수 N개")과 같은 nextStepOf로 센다: 체험이 있는 필수과목만(4학년은 졸업 과제 포함, #107).
+ * 바로 넘어간 학년이 있으면 그 사실을 한 줄 더 알린다.
  */
 export function welcomeGuide(d, progress) {
   const skipped = skippedYears(progress);
-  if (!skipped.length)
-    return {
-      skipped: null,
-      title: `1학년 과목 ${d.years[1].length}개 · 필수 ${d.years[1].filter((subject) => isRequired(d, subject)).length}개`,
-      body: "필수과목을 B- 이상으로 이수하면 다음 학년이 열려요.\n4학년에는 졸업 과제에 도전해요.",
-    };
   const year = progress.openYear;
   const courses = progress.years[year - 1].courses;
   const requiredLabs = courses.filter((course) => course.required && !course.planned && !course.exempt && !course.final).length;
-  return {
-    skipped: `체험할 필수과목이 없어 ${skipped.join("·")}학년은 바로 넘어갔어요.`,
-    title: `${year}학년 과목 ${courses.length}개 · 필수 ${nextStepOf(progress).total}개`,
-    body: year < 4 ? "필수과목을 B- 이상으로 이수하면 다음 학년이 열려요." : requiredLabs ? "필수과목과 졸업 과제를 이수하면 졸업해요." : "졸업 과제를 이수하면 졸업해요.",
-  };
+  const title = `${year}학년 과목 ${courses.length}개 · 필수 ${nextStepOf(progress).total}개`;
+  const rule = "체험이 있는 필수과목을 B- 이상으로 이수하면 다음 학년이 열려요.";
+  const body =
+    year < 4
+      ? skipped.length
+        ? rule
+        : `${rule}\n4학년에는 졸업 과제에 도전해요.`
+      : requiredLabs
+        ? "체험이 있는 필수과목과 졸업 과제를 이수하면 졸업해요."
+        : "졸업 과제를 이수하면 졸업해요.";
+  return { skipped: skipped.length ? `체험할 필수과목이 없어 ${skipped.join("·")}학년은 바로 넘어갔어요.` : null, title, body };
 }
 
 // 수업 중 체험을 끝냈을 때 결과를 남긴다(완료 전까지는 마지막 결과만 둔다).
