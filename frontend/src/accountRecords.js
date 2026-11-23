@@ -275,6 +275,26 @@ export class RecordSync {
     this.queue[this.queue.length - 1] = { ...tail, changes: merged };
     return true;
   }
+
+  // #97 Ask the server for a lesson attempt. Credit is granted only to a pass
+  // that carries one. Pending changes (e.g. the enrollment just made) go first
+  // so the server knows the course is open. Returns null when it cannot get
+  // one; the lesson still saves the grade, without credit.
+  async startAttempt(department, subject) {
+    if (!this.active) return null;
+    try {
+      await this.flush();
+    } catch {
+      /* The queue keeps waiting; the server may still know the course. */
+    }
+    if (!this.active) return null;
+    try {
+      const reply = await this.request("/attempts", "POST", { department, subject });
+      return typeof reply?.attempt === "string" ? reply.attempt : null;
+    } catch {
+      return null;
+    }
+  }
   flush() {
     if (this.inflight) return this.inflight;
     this.inflight = this.drain().finally(() => {

@@ -94,6 +94,9 @@ def empty_state():
     }
 
 
+ATTEMPT_PATTERN = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
 def fail(message="저장할 기록의 형식이 올바르지 않아요."):
     raise HTTPException(400, message)
 
@@ -373,7 +376,7 @@ def apply_operation(state, op, catalog, now):
     allowed = {
         "enroll": {"kind", "department", "enrolledAt"},
         "leave": {"kind", "department"},
-        "complete": {"kind", "department", "subject", "score", "note"},
+        "complete": {"kind", "department", "subject", "score", "note", "attempt"},
         "profile": {"kind", "nickname", "photo", "expected"},
         "note": {"kind", "department", "subject", "text"},
         "draft": {"kind", "department", "subject", "text"},
@@ -388,6 +391,11 @@ def apply_operation(state, op, catalog, now):
     if "subject" in op and not isinstance(op["subject"], str):
         fail()
     if op.get("studying") is not None and not isinstance(op["studying"], str):
+        fail()
+    # #97 체험 시도 번호(서버가 수업을 열 때 발급). 없으면 성적만 남고 크레딧은 없다.
+    if op.get("attempt") is not None and not (
+        isinstance(op["attempt"], str) and ATTEMPT_PATTERN.match(op["attempt"])
+    ):
         fail()
     result = upgraded(copy.deepcopy(state), catalog)
     awards = []
@@ -467,11 +475,14 @@ def apply_operation(state, op, catalog, now):
             if note:
                 result["notes"][key] = note
             result["drafts"].pop(key, None)
+            # 크레딧은 서버가 발급한 시도로 마친 이수에만 준다(#97). 시도가 맞는지(주인·과목·한 번·20초·하루)는
+            # 기록 확정 함수(commit_account_records)가 같은 트랜잭션에서 확인하고, 잔액·지급 시각도 장부로 다시 계산한다.
             if (
                 passes(got["grade"])
+                and op.get("attempt")
                 and now - result["creditedAt"].get(key, -7 * 86400000) >= 7 * 86400000
             ):
                 result["credits"] += 5
                 result["creditedAt"][key] = now
-                awards.append({"course_key": key, "awarded_at": now})
+                awards.append({"course_key": key, "awarded_at": now, "attempt_id": op["attempt"]})
     return result, awards

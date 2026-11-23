@@ -31,13 +31,18 @@ insert into public.auth_email_limits values
   (repeat('3',64),now()-interval '2 hours',now()-interval '2 hours',1),
   (repeat('4',64),now(),now(),1);
 
+-- #97 크레딧은 서버가 발급한 시도로만 준다. 두 사용자 모두 1분 전에 시작한 시도를 둔다.
+insert into public.lesson_attempts(id,user_id,course_key,started_at) values
+  ('21000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-0000000000a1','khu-cse|이산구조',now()-interval '1 minute'),
+  ('21000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-0000000000b2','khu-id|기초디자인',now()-interval '1 minute');
+
 set local role service_role;
 select public.commit_account_records('00000000-0000-0000-0000-0000000000a1',0,'20000000-0000-0000-0000-000000000001',
   '{"nickname":"떠날 학생","journeys":{"khu-cse":{}},"records":{"khu-cse|이산구조":{"grade":"A+"}}}',
-  jsonb_build_array(jsonb_build_object('course_key','khu-cse|이산구조','awarded_at',(extract(epoch from now())*1000)::bigint)));
+  jsonb_build_array(jsonb_build_object('course_key','khu-cse|이산구조','awarded_at',(extract(epoch from now())*1000)::bigint,'attempt_id','21000000-0000-0000-0000-000000000001')));
 select public.commit_account_records('00000000-0000-0000-0000-0000000000b2',0,'20000000-0000-0000-0000-000000000002',
   '{"nickname":"남을 학생","journeys":{"khu-id":{}}}',
-  jsonb_build_array(jsonb_build_object('course_key','khu-id|기초디자인','awarded_at',(extract(epoch from now())*1000)::bigint)));
+  jsonb_build_array(jsonb_build_object('course_key','khu-id|기초디자인','awarded_at',(extract(epoch from now())*1000)::bigint,'attempt_id','21000000-0000-0000-0000-000000000002')));
 
 -- 서버 역할도 users를 직접 지울 수 없다(함수로만).
 select pg_temp.must_fail('delete from public.users where id=''00000000-0000-0000-0000-0000000000a1''');
@@ -76,7 +81,8 @@ declare a uuid := '00000000-0000-0000-0000-0000000000a1'; b uuid := '00000000-00
 begin
   if exists(select 1 from public.users where id=a) or exists(select 1 from public.sessions where user_id=a)
     or exists(select 1 from public.user_identities where user_id=a) or exists(select 1 from public.account_records where user_id=a)
-    or exists(select 1 from public.record_operations where user_id=a) or exists(select 1 from public.account_credit_ledger where user_id=a) then
+    or exists(select 1 from public.record_operations where user_id=a) or exists(select 1 from public.account_credit_ledger where user_id=a)
+    or exists(select 1 from public.lesson_attempts where user_id=a) then
     raise exception 'cascade로 지워지지 않은 행이 있음';
   end if;
   if (select count(*) from public.users where id=b)<>1 or (select count(*) from public.sessions where user_id=b)<>1
