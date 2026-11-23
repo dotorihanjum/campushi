@@ -234,6 +234,11 @@ export class RecordSync {
     }
     if (!this.active || !this.doc)
       throw new Error("계정 기록을 먼저 불러와 주세요.");
+    if (this.mergeDrafts(changes)) {
+      this.persist();
+      this.notify("waiting");
+      return;
+    }
     for (let at = 0; at < changes.length; at += 20)
       this.queue.push({
         operation_id: crypto.randomUUID(),
@@ -243,6 +248,32 @@ export class RecordSync {
       });
     this.persist();
     this.notify("waiting");
+  }
+  // #96 Typing a note saves a draft every 400ms. While the last queued item
+  // holds only drafts and has never been sent, fold new draft text into it so
+  // the server records one operation per pause instead of one per keystroke.
+  // A sent item keeps its delivery ID and content: a retry must stay identical.
+  mergeDrafts(changes) {
+    const tail = this.queue.at(-1);
+    if (
+      !changes.length ||
+      !changes.every((op) => op.kind === "draft") ||
+      !tail ||
+      tail.sent ||
+      !tail.changes.every((op) => op.kind === "draft")
+    )
+      return false;
+    const merged = [...tail.changes];
+    for (const op of changes) {
+      const at = merged.findIndex(
+        (old) => old.department === op.department && old.subject === op.subject,
+      );
+      if (at >= 0) merged[at] = op;
+      else merged.push(op);
+    }
+    if (merged.length > 20) return false;
+    this.queue[this.queue.length - 1] = { ...tail, changes: merged };
+    return true;
   }
   flush() {
     if (this.inflight) return this.inflight;
@@ -273,6 +304,10 @@ export class RecordSync {
           continue;
         }
         this.notify("saving");
+        if (!this.queue[0].sent) {
+          this.queue[0] = { ...this.queue[0], sent: true };
+          this.persist();
+        }
         const item = this.queue[0];
         let saved;
         try {

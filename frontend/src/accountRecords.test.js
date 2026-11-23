@@ -448,3 +448,46 @@ test("#95 login check covers the screen only on a device that signed in before",
   // After logout the account copy stays hidden until it is cleared.
   assert.equal(accountLocked({ loading: false, user: null }, { ...guest, context: { current: {} } }, false), true);
 });
+
+test("#96 note drafts typed before sending become one operation with the latest text", async () => {
+  const storage = memory();
+  const sent = [];
+  let online = false;
+  const sync = new RecordSync({
+    storage,
+    change: () => {},
+    request: async (_path, method, item) => {
+      if (method !== "POST") return doc();
+      if (!online) throw new Error("offline");
+      sent.push(item);
+      return { ...doc(), revision: sent.length };
+    },
+  });
+  await sync.open(doc());
+  const draft = (subject, text) => ({ kind: "draft", department: "khu-cse", subject, text });
+  for (const text of ["한", "한 줄", "한 줄 기록"]) sync.enqueue([draft("이산구조", text)]);
+  sync.enqueue([draft("미분적분학", "다른 과목")]);
+  assert.equal(sync.queue.length, 1);
+  assert.deepEqual(sync.queue[0].changes, [draft("이산구조", "한 줄 기록"), draft("미분적분학", "다른 과목")]);
+  // The merged item is stored, so a reload still sends the latest text once.
+  assert.deepEqual(readAccount(storage, "account-A").queue[0].changes.map((op) => op.text), ["한 줄 기록", "다른 과목"]);
+
+  // A failed attempt marks the item as sent: later typing must not change a delivery the server may already hold.
+  await assert.rejects(sync.flush());
+  const firstId = sync.queue[0].operation_id;
+  sync.enqueue([draft("이산구조", "한 줄 기록 더")]);
+  assert.equal(sync.queue.length, 2);
+  assert.equal(sync.queue[0].changes[0].text, "한 줄 기록");
+
+  // A non-draft change is never folded into drafts, and drafts are not folded into it.
+  sync.enqueue([{ kind: "enroll", department: "khu-id" }]);
+  sync.enqueue([draft("이산구조", "마지막")]);
+  assert.equal(sync.queue.length, 4);
+
+  online = true;
+  await sync.flush();
+  assert.equal(sent.length, 4);
+  assert.equal(sent[0].operation_id, firstId);
+  assert.ok(sent.every((item) => !("sent" in item)), "the local sent mark is not part of the delivery");
+  assert.equal(readAccount(storage, "account-A").queue.length, 0);
+});
