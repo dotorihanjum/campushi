@@ -85,6 +85,16 @@ export function clearAccountCache(storage, scope) {
       storage.removeItem(key);
   }
 }
+// 계정 기록이 준비될 때까지 화면을 가릴지. 로그인 확인 중에는 이 기기에서 로그인한 적이 있을 때만 가린다(#95).
+export function accountLocked(auth, records, expectAccount) {
+  if (auth.loading) return expectAccount;
+  if (!auth.user) return !!records.context.current;
+  return (
+    records.loadedUser !== auth.user ||
+    ["checking", "loading", "expired", "locking"].includes(records.phase) ||
+    (records.phase === "error" && !records.context.current)
+  );
+}
 export const recordsRequest = (path = "", method = "GET", body) =>
   loginRequest("/me/records" + path, method, body);
 
