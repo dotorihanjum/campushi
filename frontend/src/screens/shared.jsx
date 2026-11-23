@@ -1,5 +1,5 @@
 // 여러 화면이 같이 쓰는 부품과 도우미(탭바, 과목 카드, 학년 칩, 증명서 틀, 메뉴 줄 등). 한 화면만 쓰는 것은 그 화면 파일에 둔다.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { hasBatchim } from "../korean.js";
 import { icon } from "../assets.js";
 import { Mask } from "../ui.jsx";
@@ -31,8 +31,16 @@ export function latestJourney(state) {
  * 뒤에 깔려 있는 화면은 다른 학과를 보는 중일 수 있으므로, 맨 위 화면일 때만 확인한다.
  */
 export function useGuard(ok, nav, active) {
+  // 홈으로 보낸 뒤 화면이 바뀌기 전에 효과가 다시 돌아도(개발 모드 StrictMode의 이중 실행 등) 한 번만 보낸다.
+  const sent = useRef(false);
   useEffect(() => {
-    if (active && !ok) nav.reset(["home"]);
+    if (!active || ok) {
+      sent.current = false;
+      return;
+    }
+    if (sent.current) return;
+    sent.current = true;
+    nav.reset(["home"]);
   }, [ok, nav, active]);
 }
 
