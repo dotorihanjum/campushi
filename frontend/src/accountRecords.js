@@ -284,9 +284,9 @@ export class RecordSync {
           if (remaining.length) this.queue[0] = { ...item, changes: remaining };
           else this.removeHead(item);
           this.persist();
-          this.rejectedRecord = subject
-            ? `${subject} 기록을 저장하지 못했어요. ${error.message}`
-            : `변경 사항을 저장하지 못했어요. ${error.message}`;
+          // Tell the student why their grade changed: the server refresh below
+          // replaces the rejected local record with the saved one.
+          this.rejectedRecord = `${subject ? `${subject} 기록을` : "변경 사항을"} 저장하지 못했어요. ${error.message} 저장된 기록으로 되돌렸어요.`;
           needsRefresh = true;
           this.notify(this.queue.length ? "saving" : "saved");
           continue;

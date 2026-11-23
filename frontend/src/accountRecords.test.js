@@ -347,7 +347,7 @@ test("a rejected course change rolls back while valid siblings and later writes 
   assert.equal(sent[0].operation_id, sent[1].operation_id);
   assert.equal(sync.doc.state.notes["khu-cse|이산구조"], "계속 저장");
   assert.equal(readAccount(storage, sync.doc.scope).queue.length, 0);
-  assert.match(received.at(-1), /빠진 과목.*과목을 저장할 수 없어요/);
+  assert.equal(received.at(-1), "빠진 과목 기록을 저장하지 못했어요. 과목을 저장할 수 없어요. 저장된 기록으로 되돌렸어요.");
   sync.dismissRejected();
   sync.enqueue([{ ...note, text: "다음 기록" }]);
   await sync.flush();
