@@ -251,6 +251,14 @@ class FakePostgrest:
         if request.method == "DELETE":
             self.sessions.pop(token_hash, None)
             return httpx.Response(204)
+        if request.method == "PATCH":
+            # #94 연장: and=(expires_at.gt.지금,expires_at.lt.기준)에 드는 행만 고친다.
+            row = self.sessions.get(token_hash)
+            low, high = (part.split(".", 2)[2] for part in params["and"].strip("()").split(","))
+            if not row or not parse_time(low) < parse_time(row["expires_at"]) < parse_time(high):
+                return httpx.Response(200, json=[])
+            row["expires_at"] = json.loads(request.content)["expires_at"]
+            return httpx.Response(200, json=[{"token_hash": token_hash}])
         row = self.sessions.get(token_hash)
         after = params.get("expires_at", "").removeprefix("gt.")
         if not row or not after or parse_time(row["expires_at"]) <= parse_time(after):
@@ -341,7 +349,7 @@ class AccountTest(unittest.TestCase):
         for secret in (token, accounts.hash_token(token), ACCOUNT["id"], ACCOUNT["provider_user_id"], "expires_at"):
             self.assertNotIn(secret, text)
         # DB에서도 공개 필드만 읽는다.
-        query = self.db.requests[-1].url.params
+        query = [request for request in self.db.requests if request.method == "GET"][-1].url.params
         self.assertNotIn("provider_user_id", query["select"])
         self.assertTrue(query["expires_at"].startswith("gt."))
 
@@ -372,6 +380,68 @@ class AccountTest(unittest.TestCase):
         # 형식이 맞는 위조 토큰만 DB에 물어보고(없으면 401), 형식이 틀린 것은 DB에 묻지도 않는다.
         lookups = [request for request in self.db.requests if request.method == "GET"]
         self.assertEqual(len(lookups), 1)
+
+    def test_session_renews_when_used_at_most_once_a_day(self):
+        """#94 마지막으로 쓴 때부터 30일. DB 쓰기는 하루에 한 번만, 지운 세션·만료된 세션은 늘리지 않는다."""
+        days = accounts.DEFAULT_SESSION_DAYS
+        start = datetime.now(timezone.utc) - timedelta(days=days - 1)
+        token, _ = self.login(now=start)
+        key = accounts.hash_token(token)
+        before = parse_time(self.db.sessions[key]["expires_at"])
+        response = self.me(token)
+        self.assertEqual(response.status_code, 200)
+        after = parse_time(self.db.sessions[key]["expires_at"])
+        self.assertGreater(after, before + timedelta(days=days - 2))
+        self.assertAlmostEqual((after - datetime.now(timezone.utc)).total_seconds(), days * 86400, delta=60)
+        # 쿠키도 같은 토큰으로 30일을 다시 받는다(브라우저가 처음 받은 30일에 지우지 않게).
+        cookie = response.headers["set-cookie"]
+        self.assertTrue(cookie.startswith(f"{accounts.SESSION_COOKIE}={token};"))
+        self.assertIn(f"Max-Age={days * 86400}", cookie)
+        self.assertIn("HttpOnly", cookie)
+        # 같은 날 다시 쓰면 DB를 고치지 않는다(PATCH는 가지만 조건에 드는 행이 없다) — 쿠키도 다시 보내지 않는다.
+        patches = [r for r in self.db.requests if r.method == "PATCH"]
+        response = self.me(token)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("set-cookie", response.headers)
+        self.assertEqual(parse_time(self.db.sessions[key]["expires_at"]), after)
+        self.assertEqual(len([r for r in self.db.requests if r.method == "PATCH"]), len(patches) + 1)
+        # 하루 넘게 지나면 다시 늘린다.
+        self.assertTrue(accounts.renew_session(accounts.store_from_env(transport=httpx.MockTransport(self.db)),
+                                               Request({"type": "http", "headers": [(b"cookie", f"{accounts.SESSION_COOKIE}={token}".encode())]}),
+                                               Response(), now=datetime.now(timezone.utc) + timedelta(days=1, minutes=1)))
+        self.assertGreater(parse_time(self.db.sessions[key]["expires_at"]), after + timedelta(days=1))
+
+    def test_session_is_not_renewed_after_logout_expiry_or_store_error(self):
+        days = accounts.DEFAULT_SESSION_DAYS
+        store = lambda handler=self.db: accounts.store_from_env(transport=httpx.MockTransport(handler))
+        request = lambda token: Request({"type": "http", "headers": [(b"cookie", f"{accounts.SESSION_COOKIE}={token}".encode())]})
+        # 30일 동안 안 쓰면 만료: 늘리지 않고 401.
+        old, _ = self.login(now=datetime.now(timezone.utc) - timedelta(days=days, seconds=1))
+        expired_at = self.db.sessions[accounts.hash_token(old)]["expires_at"]
+        self.assertFalse(accounts.renew_session(store(), request(old), Response()))
+        self.assertEqual(self.db.sessions[accounts.hash_token(old)]["expires_at"], expired_at)
+        self.assertEqual(self.me(old).status_code, 401)
+        # 로그아웃(탈퇴도 세션 행이 지워진다)한 세션은 고칠 행이 없다.
+        token, _ = self.login(now=datetime.now(timezone.utc) - timedelta(days=3))
+        accounts.end_session(store(), request(token), Response())
+        response = Response()
+        self.assertFalse(accounts.renew_session(store(), request(token), response))
+        self.assertNotIn("set-cookie", response.headers)
+        self.assertNotIn(accounts.hash_token(token), self.db.sessions)
+        # 형식이 틀린 쿠키는 DB에 묻지 않는다.
+        count = len(self.db.requests)
+        self.assertFalse(accounts.renew_session(store(), request("x"), Response()))
+        self.assertEqual(len(self.db.requests), count)
+        # 권한이 없거나(마이그레이션 전) 저장소가 응답하지 않아도 /api/me는 그대로 로그인 상태를 돌려준다.
+        token, _ = self.login(now=datetime.now(timezone.utc) - timedelta(days=3))
+        def no_update(req):
+            return httpx.Response(403, json={"message": "permission denied"}) if req.method == "PATCH" else self.db(req)
+        self.use(no_update)
+        with self.assertLogs("uvicorn.error", level="ERROR"):
+            response = self.me(token)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["user"]["email"], ACCOUNT["email"])
+        self.assertNotIn("set-cookie", response.headers)
 
     def test_end_session_deletes_row_and_cookie(self):
         token, _ = self.login()

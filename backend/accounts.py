@@ -20,7 +20,7 @@ logger = logging.getLogger("uvicorn.error")
 
 # __Host- 접두어: 브라우저가 Secure·Path=/·Domain 없음일 때만 받아 주므로, 다른 하위 도메인(*.vercel.app 등)이 이 쿠키를 덮어쓸 수 없다.
 SESSION_COOKIE = "__Host-campushi_session"
-# 로그인 유지 기간(일). 팀 회의 안건이라 아직 정하지 않았다(docs/PLAN.md). 정해질 때까지 쓰는 임시 기본값이고 SESSION_MAX_AGE_DAYS로 바꾼다.
+# 로그인 유지 기간(일): 마지막으로 쓴 때부터 30일(2026-11-21 원준 결정, #94). SESSION_MAX_AGE_DAYS로 바꿀 수 있다.
 DEFAULT_SESSION_DAYS = 30
 MAX_SESSION_DAYS = 365
 TOKEN_BYTES = 32
@@ -131,6 +131,50 @@ def create_session(store, response, user_id, now=None):
     )
     response.set_cookie(SESSION_COOKIE, token, max_age=days * 24 * 60 * 60, **cookie_options())
     return token
+
+
+# #94 로그인 유지: 쓸 때마다 마지막으로 쓴 때부터 session_days()일로 늘린다. DB는 마지막으로 늘린 뒤 이만큼 지났을 때만 쓴다.
+RENEW_EVERY = timedelta(days=1)
+
+
+def filter_time(moment):
+    # PostgREST의 and=(...) 필터 안에 넣는 시각. 점·더하기 기호가 없는 초 단위 UTC로 쓴다.
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def renew_session(store, request, response, now=None):
+    """쓰는 동안 로그인을 유지한다(#94). 남은 기간이 (유지 기간 - 하루)보다 짧은 살아 있는 세션만 만료 시각을 늦추고 쿠키를 다시 보낸다.
+    로그아웃·탈퇴로 지운 세션과 이미 만료된 세션은 고칠 행이 없어 늘어나지 않는다. 늘렸으면 True.
+    연장은 덤이라 저장소 오류가 나도 지금 요청은 막지 않고 기록만 남긴다(만료 시각이 그대로일 뿐이다)."""
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token or not TOKEN_PATTERN.match(token):
+        return False
+    now = now or datetime.now(timezone.utc)
+    days = session_days()
+    expires = now + timedelta(days=days)
+    try:
+        reply = store.call(
+            "PATCH",
+            "sessions",
+            params={
+                "token_hash": f"eq.{hash_token(token)}",
+                "and": f"(expires_at.gt.{filter_time(now)},expires_at.lt.{filter_time(expires - RENEW_EVERY)})",
+                "select": "token_hash",
+            },
+            body={"expires_at": utc_text(expires)},
+            prefer="return=representation",
+        )
+        rows = reply.json()
+    except AccountError:
+        logger.error("로그인 세션을 연장하지 못했습니다. sessions.expires_at의 update 권한(#94 마이그레이션)을 확인하세요.")
+        return False
+    except ValueError as error:
+        logger.error("Supabase 세션 연장 응답 형식이 예상과 다릅니다.", exc_info=error)
+        return False
+    if not isinstance(rows, list) or not rows:
+        return False
+    response.set_cookie(SESSION_COOKIE, token, max_age=days * 24 * 60 * 60, **cookie_options())
+    return True
 
 
 def clear_session_cookie(response):
