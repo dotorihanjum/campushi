@@ -6,7 +6,7 @@ import { prepareProfilePhoto } from "../profilePhoto.js";
 import { openStorage, writeProfile } from "../storage.js";
 import { yearCharacter } from "../assets.js";
 import { delay, Screen, Dialog, Toast } from "../ui.jsx";
-import { CREDIT_COOLDOWN_DAYS, CREDIT_PER_PASS, NICKNAME_MAX, STORAGE_KEY, cleanNickname, courseKey, initialState, progressOf } from "../model.js";
+import { CREDIT_COOLDOWN_DAYS, CREDIT_PER_PASS, NICKNAME_MAX, STORAGE_KEY, cleanNickname, courseKey, initialState, progressOf, sourceLabel } from "../model.js";
 import { CAMPUS } from "../campus.js";
 import { PASS_GRADE } from "../grades.js";
 import { Chevron, INPUT, ProgressBar, TAB_H, TAB_TOP, TabBar, all, download, reportFileName, gradeText, josa, latestJourney, reportText } from "./shared.jsx";
@@ -218,7 +218,7 @@ export function My({ nav, state, setState, auth }) {
           {sources.map((d) => (
             <li key={d.id}>
               <a href={d.source.url} target="_blank" rel="noopener noreferrer" className={link}>
-                {`${d.name}${d.source.year ? ` ${d.source.year} 교육과정` : " 교육과정"}`}
+                {sourceLabel(d.name, d.source)}
               </a>
             </li>
           ))}

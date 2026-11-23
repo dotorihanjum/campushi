@@ -30,6 +30,7 @@ import {
   serverCreditOf,
   skippedYears,
   welcomeGuide,
+  sourceLabel,
   sourceNote,
   yearOf,
   yearSubjects,
@@ -553,4 +554,15 @@ test("로그인 결과 화면: 서버가 확정한 뒤에만 이번에 받은 �
   assert.deepEqual(serverCreditOf(earlier, took(1, now - 2 * DAY, 10), key, saved, now), { confirmed: true, accepted: false, credits: 0, wait: 0 });
   // 확정 전 값이 없으면(비로그인) 확정하지 않는다.
   assert.deepEqual(serverCreditOf(null, { credits: 15 }, key, saved), none);
+});
+
+test("마이페이지 자료 출처는 학과 상세와 같은 연도 표기(\"2026년 교육과정\")를 쓴다", () => {
+  const { departments } = JSON.parse(readFileSync(new URL("../../backend/data/departments.json", import.meta.url), "utf8"));
+  const [cse, id] = departments.map(createDepartment);
+  assert.equal(sourceLabel(cse.name, cse.source), "컴퓨터공학과 2026년 교육과정 · 2026-11-03 확인");
+  assert.equal(sourceLabel(id.name, id.source), "산업디자인학과 2025년 교육과정 · 2026-11-03 확인");
+  const withSource = (source) => createDepartment({ ...RAW_CSE, source: { ...RAW_CSE.source, ...source } }).source;
+  assert.equal(sourceLabel("컴퓨터공학과", withSource({ checked_at: undefined })), "컴퓨터공학과 2026년 교육과정");
+  assert.equal(sourceLabel("컴퓨터공학과", withSource({ curriculum_year: undefined })), "컴퓨터공학과 교육과정 · 2026-11-03 확인");
+  assert.equal(sourceLabel("컴퓨터공학과", withSource({ curriculum_year: undefined, checked_at: undefined })), "컴퓨터공학과 교육과정");
 });
