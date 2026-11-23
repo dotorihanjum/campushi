@@ -4,9 +4,12 @@ import { BackButton, delay, OutlineButton, Screen, T, SchoolLogo } from "../ui.j
 import { enroll, isRequired, sourceNote, yearSubjects } from "../model.js";
 import { groupName } from "../groups.js";
 import { useGuard, view } from "./shared.jsx";
+import { createTapGuard } from "../tapGuard.js";
 
 // 학년마다 처음에 보여 주는 과목 칩 줄 수.
 const SHOWN_ROWS = 2;
+// "이어서 체험하기"를 이 시간 안에 다시 누르면 무시한다.
+const CONTINUE_WINDOW_MS = 1000;
 const CHIP = "max-w-full rounded-[16px] border px-[12px] py-[6px] text-[13px] leading-[19px]";
 
 /**
@@ -147,6 +150,9 @@ export function Detail({ active, nav, state, setState }) {
   const [listH, setListH] = useState(0);
   // 입학을 처리한 학과 id(입학 버튼 연타 막기).
   const entering = useRef(null);
+  // "이어서 체험하기" 연타 막기: 짧은 시간 안에 다시 누르면 화면 이동을 한 번만 한다.
+  const continuing = useRef(null);
+  continuing.current ??= createTapGuard(CONTINUE_WINDOW_MS);
   useLayoutEffect(() => {
     if (!list.current) return;
     const update = () => setListH(list.current?.offsetHeight || 0);
@@ -159,8 +165,12 @@ export function Detail({ active, nav, state, setState }) {
   const { d, journey, progress } = v;
   const finished = progress.graduated;
   const onEnroll = () => {
+    if (journey) {
+      if (!continuing.current(d.id)) return;
+      setState((s) => ({ ...s, studying: d.id }));
+      return nav.reset(["home", "experience", "major"]);
+    }
     setState((s) => ({ ...s, studying: d.id }));
-    if (journey) return nav.reset(["home", "experience", "major"]);
     // 연타하면 두 번째 클릭도 다시 그려지기 전의 journey(아직 입학 전)를 보므로, 이 학과의 입학은 한 번만 처리한다.
     if (entering.current === d.id) return;
     entering.current = d.id;
