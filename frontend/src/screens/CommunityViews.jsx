@@ -1,25 +1,13 @@
-// 커뮤니티(미리보기)의 부품과 덮는 화면들: 질문 줄·선배 줄, 전체 글, 검색, 질문 상세, 질문 쓰기, 선배 프로필, 쪽지함, 쪽지 대화.
-// 피그마 "릿톤" 파일의 커뮤니티 리디자인 페이지(node 294:350)를 따른다.
+// 커뮤니티(미리보기)의 부품과 덮는 화면들: 질문 줄·선배 줄, 질문 상세, 질문 쓰기, 선배 프로필.
+// 모양은 피그마 "릿톤" 파일의 커뮤니티 리디자인 페이지(node 294:350)를, 흐름과 문구는 manyfast(F-DPIKIB, F-TQHCMN)를 따른다.
 import { useEffect, useRef, useState } from "react";
 import { icon, yearCharacter } from "../assets.js";
-import { Dialog, Mask } from "../ui.jsx";
-import { BODY_MAX, COMMENT_MAX, MESSAGE_MAX, TITLE_MAX, answeredBy, checkComment, checkMessage, checkPost, hasMentorAnswer, lastMessage, sortThreads, timeAgo } from "../community.js";
+import { Mask } from "../ui.jsx";
+import { BODY_MAX, COMMENT_MAX, MENTOR_LABEL, TITLE_MAX, checkComment, checkPost, hasMentorAnswer, timeAgo } from "../community.js";
 import { Chevron, INPUT } from "./shared.jsx";
 
 /* ---------- 아이콘(선 아이콘, 2px) ---------- */
 const stroke = { fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
-export const SearchIcon = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden {...stroke}>
-    <circle cx="11" cy="11" r="7.5" />
-    <path d="m20.5 20.5-4-4" />
-  </svg>
-);
-export const MailIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden {...stroke} strokeWidth={1.7}>
-    <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" />
-    <path d="m3 7 9 6 9-6" />
-  </svg>
-);
 export const PencilIcon = () => (
   <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden {...stroke} strokeWidth={2.2}>
     <path d="M12 20h9" />
@@ -49,9 +37,9 @@ export function Avatar({ year, size = 52 }) {
   );
 }
 
-/** "재학생" 이름표. */
+/** 예시 선배 이름표("예시 재학생"). */
 export function MentorTag() {
-  return <span className="inline-flex h-[18px] shrink-0 items-center rounded-full border border-mint/60 px-[7px] text-[10.5px] font-medium text-mint-deep">재학생</span>;
+  return <span className="inline-flex h-[18px] shrink-0 items-center rounded-full border border-mint/60 px-[7px] text-[10.5px] font-medium text-mint-deep">{MENTOR_LABEL}</span>;
 }
 
 export function SectionTitle({ children, right, id, className = "" }) {
@@ -62,16 +50,6 @@ export function SectionTitle({ children, right, id, className = "" }) {
       </h2>
       {right && <span className="shrink-0 text-[12px] font-medium text-ink-3">{right}</span>}
     </div>
-  );
-}
-
-/** "전체 글 보기 ›"처럼 목록 끝에서 더 보러 가는 버튼. */
-export function MoreButton({ children, onClick, className = "" }) {
-  return (
-    <button onClick={onClick} className={`pressable flex h-[48px] w-full items-center justify-center gap-[6px] rounded-[10px] border border-line bg-white text-[14px] font-medium text-slate active:bg-chalk ${className}`}>
-      {children}
-      <Chevron />
-    </button>
   );
 }
 
@@ -117,7 +95,7 @@ function Meta({ q }) {
     <span className="mt-[10px] flex items-center justify-between gap-[8px] text-[12px] leading-[17px]">
       <span className="min-w-0 truncate text-gray">{`${q.author} · ${timeAgo(q.at)}`}</span>
       <span className="flex shrink-0 items-center gap-[10px]">
-        {hasMentorAnswer(q) && <span className="font-medium text-mint-deep">재학생 답변</span>}
+        {hasMentorAnswer(q) && <span className="font-medium text-mint-deep">{`${MENTOR_LABEL} 답변`}</span>}
         <span className="flex items-center gap-[4px] text-gray" aria-label={`댓글 ${q.comments.length}개`}>
           <BubbleIcon />
           <span aria-hidden>{q.comments.length}</span>
@@ -145,30 +123,11 @@ export function QuestionRow({ q, deptName, onOpen }) {
   );
 }
 
-/** 이번 주 댓글이 많은 질문(노란 안내 카드 — 기존 화면의 하이라이트 카드와 같은 모양). */
-export function FeaturedQuestion({ q, deptName, onOpen, className = "" }) {
+/** 재학생 카드 한 줄: 누르면 선배 프로필. */
+export function MentorRow({ m, deptLabel, onOpen }) {
   return (
-    <button onClick={onOpen} className={`pressable block w-full rounded-[16px] border border-cream-line bg-cream px-[18px] py-[18px] text-left active:bg-cream-2 ${className}`}>
-      <span className="flex items-center justify-between gap-[8px] text-[12px] leading-[17px]">
-        <span className="font-bold text-slate">이번 주 댓글이 많은 질문</span>
-        <span className="truncate font-medium text-mint-deep">{deptName}</span>
-      </span>
-      <span className="report-text mt-[6px] text-[17px] font-bold leading-[25px] text-navy" style={{ WebkitLineClamp: 2 }}>
-        {q.title}
-      </span>
-      <span className="report-text mt-[6px] text-[14px] leading-[21px] text-ink-3" style={{ WebkitLineClamp: 2 }}>
-        {q.body}
-      </span>
-      <Meta q={q} />
-    </button>
-  );
-}
-
-/** 재학생 한 줄: 누르면 프로필, 오른쪽 아래 "쪽지"는 바로 쪽지 쓰기. */
-export function MentorRow({ m, deptLabel, answers, onOpen, onMessage }) {
-  return (
-    <li className="relative border-b border-track">
-      <button onClick={onOpen} className="pressable flex w-full gap-[14px] py-[20px] text-left active:bg-chalk" aria-label={`${m.nickname}, ${deptLabel} ${m.year}학년 재학생 프로필`}>
+    <li className="border-b border-track">
+      <button onClick={onOpen} className="pressable flex w-full gap-[14px] py-[20px] text-left active:bg-chalk" aria-label={`${m.nickname}, ${deptLabel} ${m.year}학년 ${MENTOR_LABEL} 프로필`}>
         <Avatar year={m.year} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-[6px]">
@@ -179,15 +138,10 @@ export function MentorRow({ m, deptLabel, answers, onOpen, onMessage }) {
           <span className="report-text mt-[4px] text-[13px] leading-[19px] text-ink-3" style={{ WebkitLineClamp: 2 }}>
             {m.intro}
           </span>
-          <span className="mt-[10px] flex h-[32px] items-center gap-[4px] text-[12px] text-gray">
-            <BubbleIcon />
-            {answers ? `답변 ${answers}개` : "아직 답변이 없어요"}
-          </span>
         </span>
-      </button>
-      <button onClick={onMessage} className="pressable absolute bottom-[20px] right-0 flex h-[32px] items-center rounded-[8px] border border-mint bg-white px-[12px] text-[12px] font-bold text-mint-deep active:bg-mint-soft">
-        쪽지
-        <span className="sr-only">{` 보내기: ${m.nickname}`}</span>
+        <span className="self-center text-faint" aria-hidden>
+          <Chevron />
+        </span>
       </button>
     </li>
   );
@@ -196,14 +150,13 @@ export function MentorRow({ m, deptLabel, answers, onOpen, onMessage }) {
 /* ---------- 덮는 화면의 틀 ---------- */
 
 /**
- * 커뮤니티 안에서 위로 쌓이는 화면. 위쪽 줄(뒤로·제목·오른쪽 버튼), 가운데 스크롤, 아래 고정 영역.
+ * 커뮤니티 안에서 위로 쌓이는 화면. 위쪽 줄(뒤로·제목), 가운데 스크롤, 아래 고정 영역.
  * 열리면 제목에 초점을 두고, Esc를 누르면 닫는다. 아래에 깔린 화면은 inert라 초점이 넘어가지 않는다.
  */
-export function View({ title, onBack, right, footer, children, inert, head, bodyRef, floating }) {
+export function View({ title, onBack, footer, children, inert }) {
   const heading = useRef(null);
   useEffect(() => heading.current?.focus({ preventScroll: true }), []);
-  // Esc는 맨 위 화면만 닫는다. 초점이 사라진 뒤(버튼이 없어진 뒤 등)에도 닫히게 창 전체에서 듣는다.
-  // 확인 창은 자기 Esc를 막고(stopPropagation), 확인 창이 떠 있는 동안 이 화면은 inert라 듣지 않는다.
+  // Esc는 맨 위 화면만 닫는다. 초점이 사라진 뒤에도 닫히게 창 전체에서 듣는다.
   const back = useRef(onBack);
   back.current = onBack;
   useEffect(() => {
@@ -220,14 +173,12 @@ export function View({ title, onBack, right, footer, children, inert, head, body
           <button type="button" aria-label="뒤로" onClick={onBack} className="pressable flex h-[40px] w-[40px] shrink-0 items-center justify-center">
             <Mask src={icon.back} w={16} h={24} color="#949494" />
           </button>
-          {head || (
-            <h1 ref={heading} tabIndex={-1} className="min-w-0 flex-1 truncate px-[4px] text-center text-[14px] font-medium leading-[22px] text-mint outline-none">
-              {title}
-            </h1>
-          )}
-          <span className="flex h-[40px] w-[40px] shrink-0 items-center justify-center">{right}</span>
+          <h1 ref={heading} tabIndex={-1} className="min-w-0 flex-1 truncate px-[4px] text-center text-[14px] font-medium leading-[22px] text-mint outline-none">
+            {title}
+          </h1>
+          <span className="h-[40px] w-[40px] shrink-0" aria-hidden />
         </div>
-        <div ref={bodyRef} className="flow no-scrollbar min-h-0 flex-1 overflow-y-auto">
+        <div className="flow no-scrollbar min-h-0 flex-1 overflow-y-auto">
           {children}
         </div>
         {footer && (
@@ -235,119 +186,8 @@ export function View({ title, onBack, right, footer, children, inert, head, body
             {footer}
           </div>
         )}
-        {floating}
       </div>
     </section>
-  );
-}
-
-/* ---------- 전체 글 ---------- */
-
-export function AllQuestions({ questions, chips, filter, onFilter, deptName, onOpen, onWrite, canWrite, onBack, inert, empty }) {
-  return (
-    <View
-      title="전체 글"
-      onBack={onBack}
-      inert={inert}
-      floating={<WriteButton onClick={onWrite} disabled={!canWrite} style={{ bottom: "calc((52 - var(--bt)) * 1px)" }} />}
-    >
-      <FilterChips chips={chips} value={filter} onChange={onFilter} className="pt-[8px]" />
-      <div className="px-[20px] pb-[120px] pt-[20px]">
-        <SectionTitle right="최신순">{`전체 글 ${questions.length}개`}</SectionTitle>
-        {questions.length === 0 ? (
-          <p className="mt-[24px] text-center text-[14px] leading-[21px] text-ink-3" role="status">
-            {empty}
-          </p>
-        ) : (
-          <ul className="mt-[4px]">
-            {questions.map((q) => (
-              <QuestionRow key={q.id} q={q} deptName={deptName(q.dept)} onOpen={() => onOpen(q.id)} />
-            ))}
-          </ul>
-        )}
-      </div>
-    </View>
-  );
-}
-
-/* ---------- 검색 ---------- */
-
-export function Search({ query, onQuery, result, mentorsAll, questions, deptName, deptLabel, onOpenQuestion, onOpenMentor, onMessage, onBack, inert }) {
-  const input = useRef(null);
-  useEffect(() => input.current?.focus({ preventScroll: true }), []);
-  const typed = query.trim().length > 0;
-  const mentors = typed ? result.mentors : mentorsAll;
-  const answers = (m) => answeredBy(questions, m.id).length;
-  const head = (
-    <form role="search" onSubmit={(e) => e.preventDefault()} className="flex min-w-0 flex-1 items-center gap-[8px] rounded-[10px] border border-mint bg-white px-[14px]" style={{ height: 46 }}>
-      <span className="text-gray">
-        <SearchIcon />
-      </span>
-      <label htmlFor="community-search" className="sr-only">
-        커뮤니티 검색
-      </label>
-      <input
-        ref={input}
-        id="community-search"
-        type="search"
-        value={query}
-        onChange={(e) => onQuery(e.target.value)}
-        placeholder="궁금한 학과, 선배, 질문 검색"
-        autoComplete="off"
-        enterKeyHint="search"
-        maxLength={40}
-        className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-ink-2 outline-none placeholder:text-mute [&::-webkit-search-cancel-button]:hidden"
-      />
-      {typed && (
-        <button type="button" aria-label="검색어 지우기" onClick={() => onQuery("")} className="pressable -mr-[6px] flex h-[32px] w-[32px] items-center justify-center text-faint">
-          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
-            <circle cx="12" cy="12" r="10" fill="currentColor" />
-            <path d="m15 9-6 6M9 9l6 6" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </button>
-      )}
-    </form>
-  );
-  const nothing = typed && !result.mentors.length && !result.questions.length;
-  return (
-    <View title="검색" onBack={onBack} inert={inert} head={head}>
-      <div className="px-[20px] pb-[40px] pt-[12px]">
-        {nothing ? (
-          <p className="mt-[40px] text-center text-[14px] leading-[22px] text-ink-3" role="status">
-            {`'${query.trim()}'에 맞는 선배나 질문이 없어요.`}
-            <br />
-            학과 이름이나 다른 낱말로 찾아보세요.
-          </p>
-        ) : (
-          <>
-            <p className="sr-only" role="status">
-              {typed ? `선배 ${result.mentors.length}명, 질문 ${result.questions.length}개를 찾았어요.` : ""}
-            </p>
-            {mentors.length > 0 && (
-              <section aria-labelledby="search-mentors">
-                <SectionTitle id="search-mentors">{typed ? `선배 ${mentors.length}명` : `재학생 선배 ${mentors.length}명`}</SectionTitle>
-                {!typed && <p className="mt-[4px] text-[13px] leading-[19px] text-ink-3">학과 이름이나 궁금한 주제로 찾아볼 수도 있어요.</p>}
-                <ul className="mt-[4px]">
-                  {mentors.map((m) => (
-                    <MentorRow key={m.id} m={m} deptLabel={deptLabel(m.dept)} answers={answers(m)} onOpen={() => onOpenMentor(m.id)} onMessage={() => onMessage(m.id)} />
-                  ))}
-                </ul>
-              </section>
-            )}
-            {typed && result.questions.length > 0 && (
-              <section aria-labelledby="search-questions" className="mt-[28px]">
-                <SectionTitle id="search-questions">{`질문 ${result.questions.length}개`}</SectionTitle>
-                <ul className="mt-[4px]">
-                  {result.questions.map((q) => (
-                    <QuestionRow key={q.id} q={q} deptName={deptName(q.dept)} onOpen={() => onOpenQuestion(q.id)} />
-                  ))}
-                </ul>
-              </section>
-            )}
-          </>
-        )}
-      </div>
-    </View>
   );
 }
 
@@ -364,7 +204,7 @@ function MentorAnswer({ c, mentor, deptLabel, onProfile }) {
             <span className="truncate text-[14px] font-bold leading-[20px] text-navy">{c.author}</span>
             <span className="shrink-0 text-[12px] text-gray">{timeAgo(c.at)}</span>
           </p>
-          <p className="truncate text-[12px] font-medium leading-[17px] text-mint-deep">{`재학생 · ${deptLabel} ${mentor.year}학년`}</p>
+          <p className="truncate text-[12px] font-medium leading-[17px] text-mint-deep">{`${MENTOR_LABEL} · ${deptLabel} ${mentor.year}학년`}</p>
         </div>
       </div>
       <p className="mt-[10px] whitespace-pre-wrap text-[14px] leading-[22px] text-ink-2">{c.body}</p>
@@ -517,14 +357,25 @@ export function QuestionWrite({ departments, initialDept, onCancel, onSubmit }) 
 
 /* ---------- 선배 프로필 ---------- */
 
-export function MentorProfile({ mentor, deptLabel, questions, deptName, blocked, onOpenQuestion, onMessage, onBack, inert }) {
-  const answered = answeredBy(questions, mentor.id);
+/**
+ * 선배 프로필. 아래 안내는 manyfast S-KQJDZF: 그 학과를 졸업하지 않았으면 "졸업하면 예약할 수 있어요"와 학과 홈,
+ * 졸업했으면 예약이 아직 없어서(2단계) 누르는 버튼 없이 준비 중이라고만 적는다.
+ */
+export function MentorProfile({ mentor, deptLabel, graduated, onDeptHome, onBack, inert }) {
   const footer = (
     <div className="px-[20px] pt-[10px]">
-      <p className="pb-[8px] text-center text-[11px] text-gray">{blocked ? "차단한 선배예요. 쪽지 화면에서 차단을 풀 수 있어요." : "선배에게 먼저 쪽지를 보낼 수 있어요. 연락처는 공유되지 않아요."}</p>
-      <button onClick={onMessage} className="pressable flex h-[56px] w-full items-center justify-center rounded-[10px] bg-mint text-[16px] font-bold text-white active:brightness-95">
-        {blocked ? "쪽지 화면 열기" : "쪽지 보내기"}
-      </button>
+      {graduated ? (
+        <p className="flex h-[56px] items-center justify-center rounded-[10px] bg-[#f6f7f4] text-[14px] font-medium text-ink-3" role="note">
+          커피챗 예약은 준비 중이에요
+        </p>
+      ) : (
+        <>
+          <p className="pb-[8px] text-center text-[12.5px] text-ink-3">이 학과를 졸업하면 예약할 수 있어요</p>
+          <button onClick={onDeptHome} className="pressable flex h-[56px] w-full items-center justify-center rounded-[10px] bg-mint text-[16px] font-bold text-white active:brightness-95">
+            학과 홈
+          </button>
+        </>
+      )}
     </div>
   );
   return (
@@ -538,7 +389,6 @@ export function MentorProfile({ mentor, deptLabel, questions, deptName, blocked,
               <MentorTag />
             </p>
             <p className="text-[13px] font-medium leading-[19px] text-mint-deep">{`${deptLabel} · ${mentor.year}학년`}</p>
-            <p className="text-[12px] leading-[17px] text-gray">{`답변 ${answered.length}개`}</p>
           </div>
         </div>
         <p className="mt-[14px] text-[14px] leading-[22px] text-ink-3">{mentor.intro}</p>
@@ -553,237 +403,7 @@ export function MentorProfile({ mentor, deptLabel, questions, deptName, blocked,
             ))}
           </ul>
         </section>
-        <section aria-labelledby="mentor-answers" className="mt-[28px]">
-          <SectionTitle id="mentor-answers">{`답변한 글 ${answered.length}`}</SectionTitle>
-          {answered.length === 0 ? (
-            <p className="mt-[10px] text-[13px] text-ink-3">아직 답변한 글이 없어요.</p>
-          ) : (
-            <ul className="mt-[4px]">
-              {answered.map((q) => (
-                <QuestionRow key={q.id} q={q} deptName={deptName(q.dept)} onOpen={() => onOpenQuestion(q.id)} />
-              ))}
-            </ul>
-          )}
-        </section>
       </div>
     </View>
-  );
-}
-
-/* ---------- 쪽지함 ---------- */
-
-export function Inbox({ threads, mentorOf, questionOf, onOpen, onBack, inert }) {
-  const list = sortThreads(threads);
-  return (
-    <View
-      title="쪽지함"
-      onBack={onBack}
-      inert={inert}
-      footer={
-        <p className="px-[20px] pt-[10px] text-center text-[11px] leading-[17px] text-gray">
-          쪽지는 내가 먼저 보낼 수 있고, 선배는 답장만 할 수 있어요.
-          <br />
-          불편한 쪽지는 대화방 오른쪽 위 ··· 에서 차단해 주세요.
-        </p>
-      }
-    >
-      <div className="px-[20px] pb-[24px] pt-[4px]">
-        {list.length === 0 ? (
-          <p className="mt-[40px] text-center text-[14px] leading-[22px] text-ink-3" role="status">
-            아직 주고받은 쪽지가 없어요.
-            <br />
-            선배 프로필에서 쪽지를 보내 보세요.
-          </p>
-        ) : (
-          <ul>
-            {list.map((t) => {
-              const m = mentorOf(t.mentor);
-              if (!m) return null;
-              const last = lastMessage(t);
-              const post = questionOf(t.post);
-              const unread = !t.read && !t.blocked;
-              return (
-                <li key={t.id} className="border-b border-track">
-                  <button onClick={() => onOpen(t.mentor)} className="pressable flex w-full items-center gap-[12px] py-[16px] text-left active:bg-chalk">
-                    <Avatar year={m.year} size={44} />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-[6px]">
-                        <span className="truncate text-[14px] font-bold leading-[20px] text-navy">{m.nickname}</span>
-                        <MentorTag />
-                        <span className="ml-auto shrink-0 text-[11px] text-gray">{timeAgo(last.at)}</span>
-                      </span>
-                      <span className="mt-[2px] flex items-center gap-[8px]">
-                        <span className={`min-w-0 flex-1 truncate text-[13px] leading-[19px] ${t.blocked ? "text-mute" : "text-ink-3"}`}>{t.blocked ? "차단한 선배예요" : `${last.from === "me" ? "나: " : ""}${last.body}`}</span>
-                        {unread && (
-                          <span className="flex h-[18px] shrink-0 items-center rounded-full bg-mint px-[6px] text-[10.5px] font-bold text-white">
-                            새 쪽지
-                          </span>
-                        )}
-                      </span>
-                      {post && <span className="mt-[2px] block truncate text-[11px] font-medium leading-[16px] text-mint-deep">{`${post.title} 글에서`}</span>}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-    </View>
-  );
-}
-
-/* ---------- 쪽지 대화 ---------- */
-
-const clock = (at) => new Date(at).toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
-const day = (at) => {
-  const d = new Date(at);
-  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
-};
-
-export function Chat({ mentor, thread, post, onSend, onBlock, onOpenPost, onBack, inert }) {
-  const [draft, setDraft] = useState("");
-  const [error, setError] = useState("");
-  const [asking, setAsking] = useState(false);
-  const body = useRef(null);
-  const count = thread?.messages.length || 0;
-  useEffect(() => {
-    if (body.current) body.current.scrollTop = body.current.scrollHeight;
-  }, [count]);
-  const blocked = Boolean(thread?.blocked);
-  // 차단하면 대화 메뉴가, 차단을 풀면 "차단 풀기"가 사라진다. 초점이 body로 빠지지 않게 바뀐 자리의 다음 조작으로 옮긴다.
-  const unblock = useRef(null);
-  const input = useRef(null);
-  const wasBlocked = useRef(blocked);
-  useEffect(() => {
-    if (wasBlocked.current === blocked) return;
-    wasBlocked.current = blocked;
-    (blocked ? unblock : input).current?.focus({ preventScroll: true });
-  }, [blocked]);
-  const send = (e) => {
-    e.preventDefault();
-    const problem = checkMessage(draft);
-    setError(problem || "");
-    if (problem) return;
-    onSend(draft);
-    setDraft("");
-  };
-  const footer = blocked ? (
-    <div className="flex items-center justify-between gap-[10px] border-t border-track px-[20px] py-[14px]">
-      <p className="text-[13px] text-ink-3">차단한 선배예요. 쪽지를 보낼 수 없어요.</p>
-      <button ref={unblock} onClick={() => onBlock(false)} className="button ghost min-h-[36px] shrink-0 text-[13px]">
-        차단 풀기
-      </button>
-    </div>
-  ) : (
-    <form onSubmit={send} className="border-t border-track px-[20px] pt-[10px]">
-      <div className="flex items-center gap-[10px]">
-        <label htmlFor="message-input" className="sr-only">
-          쪽지
-        </label>
-        <input
-          ref={input}
-          id="message-input"
-          value={draft}
-          maxLength={MESSAGE_MAX}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            if (error) setError("");
-          }}
-          placeholder="쪽지 보내기"
-          autoComplete="off"
-          enterKeyHint="send"
-          className={`h-[44px] min-w-0 flex-1 ${INPUT} rounded-[10px]`}
-        />
-        <button type="submit" disabled={!draft.trim()} aria-label="쪽지 보내기" className="pressable flex h-[44px] w-[44px] shrink-0 items-center justify-center text-mint disabled:text-faint">
-          <SendIcon />
-        </button>
-      </div>
-      <p role="alert" className="min-h-[18px] pt-[2px] text-[12px] text-[#c4373b]">
-        {error}
-      </p>
-    </form>
-  );
-  const more = thread && !blocked && (
-    <button aria-label="대화 메뉴" onClick={() => setAsking(true)} className="pressable flex h-[40px] w-[40px] items-center justify-center text-gray">
-      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden fill="currentColor">
-        <circle cx="5" cy="12" r="1.8" />
-        <circle cx="12" cy="12" r="1.8" />
-        <circle cx="19" cy="12" r="1.8" />
-      </svg>
-    </button>
-  );
-  let lastDay = "";
-  return (
-    <>
-    <View title={mentor.nickname} onBack={onBack} inert={inert || asking} right={more} footer={footer} bodyRef={body}>
-      {post && (
-        <button onClick={onOpenPost} className="pressable flex w-full items-center gap-[10px] border-y border-track bg-[#f6f7f4] px-[20px] py-[10px] text-left">
-          <span className="min-w-0 flex-1">
-            <span className="block text-[11px] leading-[16px] text-gray">이 글에서 시작된 쪽지예요</span>
-            <span className="block truncate text-[13px] font-medium leading-[19px] text-slate">{post.title}</span>
-          </span>
-          <Chevron />
-        </button>
-      )}
-      <div className="px-[20px] pb-[20px] pt-[16px]">
-        <p className="rounded-[10px] bg-[#f6f7f4] px-[14px] py-[10px] text-center text-[11.5px] leading-[17px] text-ink-3" role="note">
-          연락처·SNS 계정은 주고받지 마세요.
-          <br />
-          미리보기에서는 선배가 답장하지 않고, 보낸 쪽지는 새로고침하면 사라져요.
-        </p>
-        {count === 0 && <p className="mt-[24px] text-center text-[13px] text-ink-3">{`${mentor.nickname}님에게 첫 쪽지를 보내 보세요.`}</p>}
-        <ol className="mt-[8px] grid gap-[8px]" aria-label="쪽지 내용">
-          {(thread?.messages || []).map((msg) => {
-            const today = day(msg.at);
-            const showDay = today !== lastDay;
-            lastDay = today;
-            const mine = msg.from === "me";
-            return (
-              <li key={msg.id}>
-                {showDay && <p className="py-[10px] text-center text-[11px] text-gray">{today}</p>}
-                <div className={`flex items-end gap-[6px] ${mine ? "flex-row-reverse" : ""}`}>
-                  {!mine && <Avatar year={mentor.year} size={32} />}
-                  <p
-                    className={`max-w-[240px] whitespace-pre-wrap px-[14px] py-[10px] text-[14px] leading-[21px] text-ink-2 ${
-                      mine ? "rounded-[14px] rounded-tr-[4px] border border-mint/50 bg-mint-soft" : "rounded-[14px] rounded-tl-[4px] bg-[#f6f7f4]"
-                    }`}
-                  >
-                    <span className="sr-only">{mine ? "나: " : `${mentor.nickname}: `}</span>
-                    {msg.body}
-                  </p>
-                  <span className="shrink-0 pb-[2px] text-[10px] text-gray">{clock(msg.at)}</span>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      </div>
-    </View>
-      {asking && (
-        <Dialog
-          title={`${mentor.nickname}님을 차단할까요?`}
-          onClose={() => setAsking(false)}
-          actions={
-            <>
-              <button
-                className="button danger"
-                onClick={() => {
-                  onBlock(true);
-                  setAsking(false);
-                }}
-              >
-                차단하기
-              </button>
-              <button className="button ghost" onClick={() => setAsking(false)}>
-                취소
-              </button>
-            </>
-          }
-        >
-          차단하면 이 선배와 쪽지를 주고받을 수 없어요. 대화방에서 언제든 차단을 풀 수 있어요.
-        </Dialog>
-      )}
-    </>
   );
 }

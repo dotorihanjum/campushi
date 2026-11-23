@@ -12,25 +12,13 @@ import {
   addQuestion,
   checkComment,
   checkPost,
-  MESSAGE_MAX,
-  answeredBy,
-  checkMessage,
+  MENTOR_LABEL,
   communityStore,
-  featuredQuestion,
   filterMentors,
   filterQuestions,
   fromMock,
   hasMentorAnswer,
-  lastMessage,
-  markRead,
-  messageStore,
-  recommendMentors,
-  searchCommunity,
-  sendMessage,
-  setBlocked,
-  sortThreads,
   timeAgo,
-  unreadCount,
 } from "./community.js";
 import { MOCK_MENTORS, MOCK_QUESTIONS } from "./communityMock.js";
 import { createDepartment } from "./model.js";
@@ -73,7 +61,9 @@ test("글쓰기: 학과·제목·내용을 검사하고, 통과하면 목록 맨
   assert.equal(checkPost({ ...empty, dept: "khu-cse" }, departments), "제목을 적어 주세요.");
   assert.equal(checkPost({ dept: "khu-cse", title: "   ", body: "내용" }, departments), "제목을 적어 주세요.");
   assert.equal(checkPost({ dept: "khu-cse", title: "제목", body: " " }, departments), "내용을 적어 주세요.");
-  assert.match(checkPost({ dept: "khu-cse", title: "가".repeat(TITLE_MAX + 1), body: "내용" }, departments), /60자/);
+  assert.match(checkPost({ dept: "khu-cse", title: "가".repeat(TITLE_MAX + 1), body: "내용" }, departments), /40자/);
+  assert.equal(TITLE_MAX, 40, "manyfast F-DPIKIB·S-GHOVXR의 제목 40자");
+  assert.equal(checkPost({ dept: "khu-cse", title: "가".repeat(TITLE_MAX), body: "내용" }, departments), null);
   assert.match(checkPost({ dept: "khu-cse", title: "제목", body: "가".repeat(BODY_MAX + 1) }, departments), /1,000자/);
   assert.equal(checkPost({ dept: "없는학과", title: "제목", body: "내용" }, departments), "학과를 골라 주세요.");
   assert.equal(checkPost({ dept: "khu-id", title: " 제목 ", body: " 내용 " }, departments), null);
@@ -121,87 +111,22 @@ test("시간 표시와 메모리 저장소", () => {
   assert.equal(calls, 1);
 });
 
-test("재학생 답변·많이 본 글·추천 선배", () => {
+test("재학생 답변 표시와 재학생 필터", () => {
   const questions = fromMock(MOCK_QUESTIONS, NOW);
   const q = (id) => questions.find((x) => x.id === id);
   assert.equal(hasMentorAnswer(q("q1")), true);
   assert.equal(hasMentorAnswer(q("q4")), false);
-  assert.deepEqual(answeredBy(questions, "m1").map((x) => x.id), ["q1", "q3"]);
-  assert.deepEqual(answeredBy(questions, "m3"), []);
-
-  // 7일 안의 글 중 댓글이 가장 많은 글, 같으면 더 새 글.
-  assert.equal(featuredQuestion(questions, NOW).id, "q1");
-  const tie = addComment(questions, "q3", "같이 궁금해요", NOW);
-  assert.equal(featuredQuestion(tie, NOW).id, "q1", "q1이 q3보다 새 글");
-  const more = addComment(tie, "q3", "저도요", NOW);
-  assert.equal(featuredQuestion(more, NOW).id, "q3");
-  assert.equal(featuredQuestion(questions, NOW + 30 * 86400000), null, "7일이 지나면 없다");
-  assert.equal(featuredQuestion(questions.map((x) => ({ ...x, comments: [] })), NOW), null);
-
-  // 필터에 맞는 재학생 중 내가 체험한 학과 먼저, 그다음 답변 수.
+  assert.deepEqual(filterMentors(MOCK_MENTORS, ALL, departments).map((m) => m.id), MOCK_MENTORS.map((m) => m.id), "예시 순서 그대로");
   assert.deepEqual(filterMentors(MOCK_MENTORS, "design", departments).map((m) => m.id), ["m2", "m4"]);
-  assert.deepEqual(recommendMentors(MOCK_MENTORS, questions, "all", departments).map((m) => m.id), ["m1", "m2", "m4"]);
-  assert.deepEqual(recommendMentors(MOCK_MENTORS, questions, "all", departments, { "khu-id": {} }).map((m) => m.id), ["m2", "m4", "m1"]);
-  assert.deepEqual(recommendMentors(MOCK_MENTORS, questions, MINE, departments, {}), []);
-  assert.equal(recommendMentors(MOCK_MENTORS, questions, "computing", departments, {}, 10).length, 3);
+  assert.deepEqual(filterMentors(MOCK_MENTORS, "khu-cse", departments).map((m) => m.id), ["m1", "m3", "m5"]);
+  assert.deepEqual(filterMentors(MOCK_MENTORS, MINE, departments, {}), []);
+  assert.deepEqual(filterMentors(MOCK_MENTORS, MINE, departments, { "khu-id": {} }).map((m) => m.id), ["m2", "m4"]);
 });
 
-test("검색: 띄어쓰기·대소문자 무시, 낱말이 모두 들어간 질문·재학생, 빈 검색어는 결과 없음", () => {
-  const questions = fromMock(MOCK_QUESTIONS, NOW);
-  const find = (query) => searchCommunity(questions, MOCK_MENTORS, query, departments);
-  assert.deepEqual(find("   "), { questions: [], mentors: [] });
-  assert.deepEqual(find(""), { questions: [], mentors: [] });
-  // 학과 이름으로 찾으면 그 학과 질문과 재학생이 모두 나온다.
-  const design = find("산업 디자인");
-  assert.deepEqual(design.mentors.map((m) => m.id), ["m2", "m4"]);
-  assert.equal(design.questions.length, questions.filter((x) => x.dept === "khu-id").length);
-  assert.deepEqual(find("ai").mentors.map((m) => m.id), ["m3"], "대소문자 무시");
-  assert.deepEqual(find("정렬 체험").questions.map((x) => x.id), ["q3"]);
-  assert.deepEqual(find("포트폴리오").mentors.map((m) => m.id), ["m2"], "주제로도 찾는다");
-  assert.deepEqual(find("정렬 포트폴리오"), { questions: [], mentors: [] }, "낱말이 모두 들어가야 한다");
-  assert.deepEqual(find("없는말없는말"), { questions: [], mentors: [] });
-});
-
-test("쪽지: 학생이 먼저 보내고, 이어 쓰기·읽음·차단", () => {
-  assert.equal(checkMessage("  "), "쪽지 내용을 적어 주세요.");
-  assert.match(checkMessage("가".repeat(MESSAGE_MAX + 1)), /500자/);
-  assert.equal(checkMessage("안녕하세요"), null);
-
-  assert.deepEqual(messageStore.get(), [], "쪽지함은 예시 대화 없이 빈 채로 시작한다");
-  // 내가 보내고 재학생이 답장해 아직 읽지 않은 대화(서버가 생기면 이런 모양으로 온다).
-  const threads = [{
-    id: "t1", mentor: "m2", post: "q2", read: false, blocked: false,
-    messages: [
-      { id: "a", from: "me", at: NOW - 60 * 60000, body: "안녕하세요" },
-      { id: "b", from: "mentor", at: NOW - 30 * 60000, body: "반가워요" },
-    ],
-  }];
-  assert.equal(unreadCount(threads), 1);
-  assert.equal(threads[0].blocked, false);
-  assert.equal(lastMessage(threads[0]).from, "mentor");
-
-  // 새 재학생에게 보내면 새 대화가 맨 위에 생긴다.
-  const sent = sendMessage(threads, "m1", " 안녕하세요 ", "q1", NOW);
-  assert.equal(sent.length, 2);
-  assert.equal(sent[0].mentor, "m1");
-  assert.equal(sent[0].post, "q1");
-  assert.deepEqual({ ...sent[0].messages[0], id: "" }, { id: "", from: "me", at: NOW, body: "안녕하세요" });
-  // 있는 대화에는 이어 붙이고, 시작한 글은 바꾸지 않는다.
-  const again = sendMessage(sent, "m2", "감사합니다", "q4", NOW + 1000);
-  assert.equal(again.length, 2);
-  assert.equal(again[0].mentor, "m2");
-  assert.equal(again[0].post, "q2");
-  assert.equal(again[0].messages.length, 3);
-  assert.deepEqual(sortThreads(again).map((t) => t.mentor), ["m2", "m1"]);
-
-  const read = markRead(threads, "t1");
-  assert.equal(unreadCount(read), 0);
-  assert.deepEqual(markRead(read, "t1"), read, "이미 읽은 대화는 그대로");
-  // 차단하면 읽지 않음에 세지 않고 쪽지도 보내지 않는다. 풀면 다시 보낼 수 있다.
-  const blocked = setBlocked(threads, "t1", true);
-  assert.equal(unreadCount(blocked), 0);
-  assert.equal(sendMessage(blocked, "m2", "안녕하세요", null, NOW), blocked);
-  assert.equal(sendMessage(setBlocked(blocked, "t1", false), "m2", "안녕하세요", null, NOW)[0].messages.length, 3);
-
-  assert.equal(messageStore.get(), messageStore.get(), "같은 값을 돌려줘야 화면이 쓸데없이 다시 그려지지 않는다");
+test("예시 데이터: 가상 선배는 예시로 표시하고, 제목은 40자 안, 가상 선배가 수업을 겪은 것처럼 말하지 않는다", () => {
+  // 승인된 멘토에게만 붙는 '재학생'·'인증' 표시를 예시 선배에게 그대로 쓰지 않는다.
+  assert.match(MENTOR_LABEL, /예시/);
+  for (const item of MOCK_QUESTIONS) assert.ok(item.title.length <= TITLE_MAX, item.id);
+  const said = [...MOCK_QUESTIONS.flatMap((x) => x.comments).filter((c) => c.mentor).map((c) => c.body), ...MOCK_MENTORS.flatMap((m) => [m.intro, ...m.topics.flat()])].join(" ");
+  assert.doesNotMatch(said, /수업|학년은|학년 수학|올라갈수록|초반에/);
 });
