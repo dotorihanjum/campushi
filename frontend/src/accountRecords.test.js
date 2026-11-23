@@ -6,6 +6,7 @@ import {
   persistAccount,
   readAccount,
   clearAccountCache,
+  accountLocked,
 } from "./accountRecords.js";
 import { initialState } from "./model.js";
 
@@ -428,4 +429,22 @@ test("failed withdrawal keeps the account copy and queue and releases the lock",
   assert.equal(readAccount(storage, "account-A").queue.length, 1);
   assert.equal(JSON.parse(storage.getItem("campushi-account-logout-v1")).phase, "release");
   assert.notEqual(sync.enqueue([{ kind: "reset" }]), false);
+});
+
+test("#95 login check covers the screen only on a device that signed in before", () => {
+  const guest = { context: { current: null }, phase: "checking", loadedUser: null };
+  const checking = { loading: true, user: null };
+  assert.equal(accountLocked(checking, guest, false), false);
+  assert.equal(accountLocked(checking, guest, true), true);
+  assert.equal(accountLocked({ loading: false, user: null }, { ...guest, phase: "guest" }, true), false);
+  const user = { id: "u" };
+  // A signed-in student still waits for the account copy, even on a device with no mark yet.
+  assert.equal(accountLocked({ loading: false, user }, guest, false), true);
+  assert.equal(accountLocked({ loading: false, user }, { ...guest, phase: "loading", loadedUser: user }, false), true);
+  assert.equal(
+    accountLocked({ loading: false, user }, { context: { current: {} }, phase: "saved", loadedUser: user }, false),
+    false,
+  );
+  // After logout the account copy stays hidden until it is cleared.
+  assert.equal(accountLocked({ loading: false, user: null }, { ...guest, context: { current: {} } }, false), true);
 });

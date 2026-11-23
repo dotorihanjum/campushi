@@ -12,7 +12,8 @@ import { getDepartments } from "./api.js";
 import { openStorage, storageNotice, writeStorage } from "./storage.js";
 import { useAccountRecords } from "./useAccountRecords.js";
 import { useLogin } from "./useLogin.js";
-import { authReturn } from "./login.js";
+import { authReturn, expectsAccount, rememberSignIn } from "./login.js";
+import { accountLocked as isAccountLocked } from "./accountRecords.js";
 import { Dialog, Toast } from "./ui.jsx";
 import { isReview } from "./certificates.js";
 
@@ -120,6 +121,14 @@ export default function App() {
   // 쿠키·사이트 데이터를 막은 브라우저에서는 localStorage를 읽기만 해도 예외가 나므로, 열지 못하면 빈 상태로 시작한다.
   const [storage] = useState(() => openStorage(() => window.localStorage));
   const [state, setState] = useState(() => loadState(storage));
+  // 처음 열 때 한 번만 본다. 로그인 복귀 주소(?auth=)는 useLogin이 곧 지운다.
+  const [expectAccount] = useState(() =>
+    expectsAccount(storage, location.search),
+  );
+  // 로그인 확인이 끝나면 결과를 남긴다. 서버에 닿지 못한 경우(auth.error)는 예전 표시를 그대로 둔다.
+  useEffect(() => {
+    if (!auth.loading && !auth.error) rememberSignIn(storage, !!auth.user);
+  }, [storage, auth.loading, auth.error, auth.user]);
   // 저장 실패 안내: hidden | shown | closed. 닫은 것은 메모리에만 둔다(저장소가 막혀 있으므로).
   const [notice, setNotice] = useState("hidden");
   const [stack, setStack] = useState(() => initialStack(state));
@@ -296,13 +305,7 @@ export default function App() {
     const timer = window.setTimeout(() => setFarewell(""), 4000);
     return () => window.clearTimeout(timer);
   }, [farewell]);
-  const accountLocked =
-    auth.loading ||
-    (!auth.user && !!records.context.current) ||
-    (!!auth.user &&
-      (records.loadedUser !== auth.user ||
-        ["checking", "loading", "expired", "locking"].includes(records.phase) ||
-        (records.phase === "error" && !records.context.current)));
+  const accountLocked = isAccountLocked(auth, records, expectAccount);
   const top = stack[stack.length - 1];
   const layers = [
     ...stack.map((route) => ({
