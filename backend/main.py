@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -191,9 +191,12 @@ def lesson_game(body: GameRequest):
 
 
 @app.get("/api/me")
-def me(request: Request, store=Depends(accounts.account_store)):
-    """지금 로그인한 사용자. 로그인하지 않았거나 세션이 만료·위조됐으면 401."""
-    return {"user": accounts.current_user(store, request)}
+def me(request: Request, response: Response, store=Depends(accounts.account_store)):
+    """지금 로그인한 사용자. 로그인하지 않았거나 세션이 만료·위조됐으면 401.
+    앱은 열 때와 창으로 돌아올 때마다 이것을 부르므로, 여기서 로그인 유지 기간을 늘린다(#94)."""
+    user = accounts.current_user(store, request)
+    accounts.renew_session(store, request, response)
+    return {"user": user}
 
 
 app.include_router(login_router)

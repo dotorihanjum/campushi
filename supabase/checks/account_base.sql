@@ -157,7 +157,19 @@ begin
   raise notice '통과: service_role은 users 읽기, sessions 읽기·만들기·지우기';
 end;
 $$;
-select pg_temp.expect_fail($q$update public.sessions set expires_at = now() + interval '9 days'$q$, '42501', 'service_role이 세션 고치기');
+-- #94 쓸 때마다 로그인 유지: service_role은 세션의 만료 시각만 늦출 수 있다(20261123000100_session_renew.sql).
+do $$
+begin
+  update public.sessions set expires_at = now() + interval '30 days' where token_hash = repeat('c', 64);
+  if not found then
+    raise exception 'service_role이 세션 만료 시각을 못 늦춤';
+  end if;
+  raise notice '통과: service_role은 sessions.expires_at 늦추기';
+end;
+$$;
+select pg_temp.expect_fail($q$update public.sessions set user_id = user_id$q$, '42501', 'service_role이 세션 주인 바꾸기');
+select pg_temp.expect_fail($q$update public.sessions set token_hash = repeat('f', 64)$q$, '42501', 'service_role이 세션 토큰 바꾸기');
+select pg_temp.expect_fail($q$update public.sessions set created_at = now()$q$, '42501', 'service_role이 세션 만든 시각 바꾸기');
 select pg_temp.expect_fail($q$insert into public.users (provider, provider_user_id, birth_year, terms_agreed_at) values ('kakao', 'srv', 2000, now())$q$, '42501', 'service_role이 사용자 만들기(이번 이슈 범위 밖)');
 select pg_temp.expect_fail($q$delete from public.users$q$, '42501', 'service_role이 사용자 지우기(이번 이슈 범위 밖)');
 reset role;
