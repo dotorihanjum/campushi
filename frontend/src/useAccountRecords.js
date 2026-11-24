@@ -12,6 +12,9 @@ import {
   clearAccountCache,
 } from "./accountRecords.js";
 
+// #96 How long a note draft waits after the last keystroke before it is sent.
+export const DRAFT_SEND_DELAY = 2000;
+
 export function useAccountRecords(
   auth,
   state,
@@ -26,6 +29,7 @@ export function useAccountRecords(
     generation = useRef(0);
   local.current = state;
   const loadedUser = useRef(null);
+  const draftTimer = useRef(0);
   const [retryCount, setRetryCount] = useState(0);
   const [status, setStatus] = useState({
     phase: "checking",
@@ -130,14 +134,18 @@ export function useAccountRecords(
         event.returnValue = "";
       }
     };
+    // Leaving the tab (or locking the phone) sends a waiting draft right away.
+    const onHide = () => document.visibilityState === "hidden" && retry();
     window.addEventListener("online", retry);
     window.addEventListener("focus", retry);
+    document.addEventListener("visibilitychange", onHide);
     window.addEventListener("storage", onStorage);
     window.addEventListener("beforeunload", onUnload);
     const timer = window.setInterval(retry, 30000);
     return () => {
       window.removeEventListener("online", retry);
       window.removeEventListener("focus", retry);
+      document.removeEventListener("visibilitychange", onHide);
       window.clearInterval(timer);
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("beforeunload", onUnload);
@@ -157,7 +165,15 @@ export function useAccountRecords(
           credits: sync.doc.state.credits || 0,
           creditedAt: sync.doc.state.creditedAt || {},
         });
-        if (changes.length) sync.flush().catch(() => {});
+        if (!changes.length) return;
+        // #96 Draft-only edits wait until typing pauses; anything else sends now (drafts too).
+        window.clearTimeout(draftTimer.current);
+        if (changes.every((op) => op.kind === "draft"))
+          draftTimer.current = window.setTimeout(
+            () => sync.flush().catch(() => {}),
+            DRAFT_SEND_DELAY,
+          );
+        else sync.flush().catch(() => {});
       } else {
         guest.current = after;
         display(after);
