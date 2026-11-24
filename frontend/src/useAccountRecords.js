@@ -305,6 +305,8 @@ export function useAccountRecords(
         ? engine.current.refresh()
         : setRetryCount((n) => n + 1),
     saveProfile: (name, photo) => engine.current.saveProfile(name, photo),
+    startAttempt: (department, subject) =>
+      engine.current?.startAttempt(department, subject) ?? Promise.resolve(null),
     dismissRejected: () => {
       engine.current?.dismissRejected();
       setStatus((s) => ({ ...s, rejectedRecord: "" }));

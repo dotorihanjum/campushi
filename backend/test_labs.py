@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 from backend import main, record_rules
 from backend.record_rules import check_conditions, empty_state, grandfather, imported
-from backend.test_login import USER
+from backend.test_login import HEADERS, USER
 from backend.test_records import RecordTest
 
 CSE = "khu-cse"
@@ -37,16 +37,17 @@ class LabRecordTest(unittest.TestCase):
     operation = RecordTest.operation
 
     def complete(self, subject, score=None):
-        return self.operation(
-            [
-                {
-                    "kind": "complete",
-                    "department": CSE,
-                    "subject": subject,
-                    "score": score or {"correct": 10, "total": 10},
-                }
-            ]
-        )
+        # #97 a signed-in completion earns credit only with a server attempt; locked courses get none (400 below).
+        r = self.client.post("/api/me/records/attempts", json={"department": CSE, "subject": subject}, headers=HEADERS)
+        change = {
+            "kind": "complete",
+            "department": CSE,
+            "subject": subject,
+            "score": score or {"correct": 10, "total": 10},
+        }
+        if r.status_code == 200:
+            change["attempt"] = r.json()["attempt"]
+        return self.operation([change])
 
     def publish(self, **lab):
         patcher = patch.object(record_rules, "CONDITIONS", registry(**lab))

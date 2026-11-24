@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Request, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from backend import accounts
 from backend.login import signing_key, same_origin
-from backend.record_rules import empty_state, imported, apply_operation
+from backend.record_rules import empty_state, imported, apply_operation, available, course, upgraded
 
 router = APIRouter(prefix="/api/me/records")
 
@@ -83,6 +83,36 @@ def commit(store, user_id, operation_id, change):
     raise HTTPException(
         409, "다른 기기에서 기록을 저장 중이에요. 잠시 후 다시 시도해 주세요."
     )
+
+
+class AttemptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    department: str = Field(min_length=1, max_length=100)
+    subject: str = Field(min_length=1, max_length=200)
+
+
+@router.post("/attempts")
+def start_attempt(
+    body: AttemptRequest, request: Request, store=Depends(accounts.account_store)
+):
+    """#97 수업을 열 때 그 과목의 체험 시도를 발급한다. 이 번호로 마친 이수에만 크레딧을 준다."""
+    same_origin(request)
+    user_id, _ = owner(store, request)
+    from backend.main import department_list
+
+    state = {**empty_state(), **document(store, user_id)["state"]}
+    catalog = department_list()["departments"]
+    d, key = course(upgraded(state, catalog), catalog, body.department, body.subject)
+    if not available(d, body.subject):
+        raise HTTPException(400, "아직 체험이 없는 과목이에요.")
+    attempt = store.call(
+        "POST",
+        "rpc/start_lesson_attempt",
+        body={"p_user_id": user_id, "p_course_key": key},
+    ).json()
+    if not attempt:
+        raise HTTPException(429, "체험을 너무 자주 시작했어요. 잠시 뒤에 다시 해 주세요.")
+    return {"attempt": attempt}
 
 
 @router.get("")

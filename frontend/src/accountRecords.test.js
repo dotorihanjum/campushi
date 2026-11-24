@@ -491,3 +491,38 @@ test("#96 note drafts typed before sending become one operation with the latest 
   assert.ok(sent.every((item) => !("sent" in item)), "the local sent mark is not part of the delivery");
   assert.equal(readAccount(storage, "account-A").queue.length, 0);
 });
+
+test("#97 a lesson attempt is asked after pending changes are sent, and failures give no attempt", async () => {
+  const calls = [];
+  let fail = false;
+  const sync = new RecordSync({
+    storage: memory(),
+    change: () => {},
+    request: async (path, method, body) => {
+      calls.push(path || "GET");
+      if (path === "/attempts") {
+        if (fail) throw Object.assign(new Error("체험을 너무 자주 시작했어요."), { status: 429 });
+        assert.deepEqual(body, { department: "khu-cse", subject: "이산구조" });
+        return { attempt: "11111111-2222-4333-8444-555555555555" };
+      }
+      return { ...doc(), revision: calls.length };
+    },
+  });
+  await sync.open(doc());
+  sync.enqueue([{ kind: "enroll", department: "khu-cse" }]);
+  assert.equal(await sync.startAttempt("khu-cse", "이산구조"), "11111111-2222-4333-8444-555555555555");
+  // The enrollment reached the server before the attempt, so the server sees an open course.
+  assert.deepEqual(calls, ["/operations", "/attempts"]);
+  fail = true;
+  assert.equal(await sync.startAttempt("khu-cse", "이산구조"), null);
+  sync.close();
+  assert.equal(await sync.startAttempt("khu-cse", "이산구조"), null);
+});
+
+test("#97 the attempt number rides on the complete change", () => {
+  const attempt = "11111111-2222-4333-8444-555555555555";
+  const changes = captureChanges(initialState, initialState, {
+    completion: { department: "khu-cse", subject: "이산구조", score: { correct: 9, total: 10 }, note: "", attempt },
+  });
+  assert.equal(changes.find((op) => op.kind === "complete").attempt, attempt);
+});

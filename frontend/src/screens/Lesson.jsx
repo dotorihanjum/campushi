@@ -14,6 +14,10 @@ import { LAB_SCREENS } from "../labs/components.js";
 import { LabSummary } from "../labs/parts/LabSummary.jsx";
 import { FOCUS_RING, SETTLE_MS } from "../focus.js";
 import { CreditPill, gradeText, josa, useGuard, view } from "./shared.jsx";
+import { lessonAttempts } from "../lessonAttempts.js";
+
+// #97 서버가 크레딧을 주는 최소 시간(supabase/migrations/20261123000200_lesson_attempts.sql의 20초).
+const ATTEMPT_MIN_MS = 20000;
 
 const STEPS = ["배우기", "직접 해보기", "기록"];
 // 스크롤 영역의 아래 끝을 흐리게 한다(아래 여백 20px 안이라 끝까지 내리면 내용이 가려지지 않는다).
@@ -201,6 +205,18 @@ export function Lesson({ active, nav, route, state, setState, auth }) {
   const moved = useRef(false);
   useGuard(ok, nav, active);
   useEffect(() => () => window.clearTimeout(timer.current), []);
+  // #97 로그인 중이면 수업을 열 때 서버에서 체험 시도 번호를 받는다. 이 번호로 마친 이수에만 크레딧이 쌓인다.
+  // 시도는 과목별로 lessonAttempts에 둔다: 체험한 결과가 있는 채로 나갔다 다시 들어오면(기록 단계부터 열린다) 앞의 시도를 이어 쓰고,
+  // 다시 듣기를 누르면 새 번호를 받는다. 늦게 온 이전 응답은 순번으로 걸러진다.
+  const startAttempt = (reopen) => {
+    if (!ok || !game || !auth?.user || !auth.records?.startAttempt) return;
+    const now = Date.now();
+    const n = reopen ? lessonAttempts.open(key, { played: !!state.plays[key], now }) : lessonAttempts.begin(key, now);
+    if (n === null) return;
+    auth.records.startAttempt(v.d.id, subject).then((id) => lessonAttempts.fill(key, n, id));
+  };
+  // 이 화면을 열 때 한 번만.
+  useEffect(() => startAttempt(true), []);
   // 단계를 옮기면 맨 위로 올리고 제목에 초점을 둔다(스크린 리더가 새 단계를 읽게).
   useEffect(() => {
     if (!moved.current) return;
@@ -266,7 +282,11 @@ export function Lesson({ active, nav, route, state, setState, auth }) {
     if (after === base) return false;
     const got = gradeOf(base.plays[key].score);
     const progress = progressOf(after, d);
-    setState(after, { completion: { department: d.id, subject, score: base.plays[key].score, note: text } });
+    const used = lessonAttempts.take(key);
+    setState(after, {
+      completion: { department: d.id, subject, score: base.plays[key].score, note: text, ...(used.id ? { attempt: used.id } : {}) },
+    });
+    // 한 시도는 한 번만 쓴다(take가 지웠고, 다시 듣기에서 새로 받는다).
     moved.current = true;
     setResult({
       ...got,
@@ -274,6 +294,8 @@ export function Lesson({ active, nav, route, state, setState, auth }) {
       credits: auth?.user ? 0 : (after.credits || 0) - (base.credits || 0),
       // 로그인 중이면 크레딧은 서버가 확정한 뒤에 알린다(#98). 마칠 때 이 과목의 마지막 지급 시각과 들은 횟수를 남겨 두고 비교한다.
       accountCredit: auth?.user ? { at: base.creditedAt?.[key] ?? null, attempts: base.records?.[key]?.attempts || 0 } : null,
+      // #97 크레딧을 못 받을 이유를 미리 안다: 시도 번호를 받지 못했거나(연결 문제), 수업을 연 지 20초가 안 됐다.
+      creditBlocked: auth?.user ? (!used.id ? "attempt" : Date.now() - used.at < ATTEMPT_MIN_MS ? "fast" : null) : null,
       // 이수했지만 7일 규칙 때문에 이번엔 크레딧을 받지 못했으면, 다시 받을 수 있기까지 남은 날.
       creditWait: passes(got.grade) ? creditWaitDays(base, d.id, subject) : 0,
       // 새로 열린 학년들(체험이 있는 필수과목이 없는 학년은 함께 열린다).
@@ -283,6 +305,7 @@ export function Lesson({ active, nav, route, state, setState, auth }) {
     return true;
   };
   const again = () => {
+    startAttempt(false);
     moved.current = true;
     setResult(null);
     setLabOpen(false);
@@ -337,6 +360,13 @@ export function Lesson({ active, nav, route, state, setState, auth }) {
             )}
             {credits > 0 && <CreditPill credits={credits} className="a-pop mt-[12px] inline-flex" style={delay(0.2)} />}
             {credits > 0 && <span className="sr-only">{`크레딧 ${josa(String(credits), "을", "를")} 받았어요`}</span>}
+            {creditSettled && passed && credits === 0 && creditWait === 0 && result.creditBlocked && (
+              <p className="a-up mt-[8px] text-[13px] leading-[20px] text-gray" style={delay(0.2)}>
+                {result.creditBlocked === "fast"
+                  ? "수업을 열고 너무 빨리 마쳐서 이번에는 크레딧이 쌓이지 않았어요. 성적은 남았어요."
+                  : "수업을 열 때 서버에 연결하지 못해 이번에는 크레딧이 쌓이지 않았어요. 성적은 남았어요."}
+              </p>
+            )}
             {creditSettled && credits === 0 && creditWait > 0 && (
               <p className="a-up mt-[8px] text-[13px] leading-[20px] text-gray" style={delay(0.2)}>
                 {`같은 과목 크레딧은 ${CREDIT_COOLDOWN_DAYS}일에 한 번 받아요. ${creditWait}일 뒤에 이수하면 다시 받아요.`}

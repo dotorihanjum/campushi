@@ -1,5 +1,6 @@
 import copy
 import io
+import time
 import base64
 import unittest
 from unittest.mock import patch
@@ -13,12 +14,43 @@ from backend.test_login import ENV, HEADERS, USER
 
 
 class RecordStore:
+    """Fake Supabase for records. commit_account_records follows the SQL: credits come from a ledger, and each grant
+    needs an unused attempt of the same user and course that started 20 seconds to a day ago (#97)."""
+
     def __init__(self):
         self.docs = {}
         self.operations = set()
         self.conflicts = 0
+        self.attempts = {}
+        self.ledger = []
+        self.attempt_limit = 60
+        # Seconds since a new attempt "started". Tests that finish too fast set this below 20.
+        self.attempt_age = 30
+
+    def grant(self, owner, operation_id, award):
+        now = time.time()
+        if any(row[0] == owner and row[1] == award["course_key"] and row[2] > award["awarded_at"] - 604800000 for row in self.ledger):
+            return
+        attempt = self.attempts.get(award.get("attempt_id"))
+        if (
+            not attempt
+            or attempt["user"] != owner
+            or attempt["course_key"] != award["course_key"]
+            or attempt["used_by"]
+            or not now - 86400 < attempt["started"] <= now - 20
+        ):
+            return
+        attempt["used_by"] = operation_id
+        self.ledger.append((owner, award["course_key"], award["awarded_at"]))
 
     def call(self, method, table, params=None, body=None, prefer=None):
+        if table == "rpc/start_lesson_attempt":
+            mine = [a for a in self.attempts.values() if a["user"] == body["p_user_id"]]
+            if len(mine) >= self.attempt_limit:
+                return httpx.Response(200, content=b"null", headers={"content-type": "application/json"})
+            id = str(uuid4())
+            self.attempts[id] = {"user": body["p_user_id"], "course_key": body["p_course_key"], "started": time.time() - self.attempt_age, "used_by": None}
+            return httpx.Response(200, json=id)
         if table == "record_operations":
             return httpx.Response(
                 200,
@@ -43,10 +75,15 @@ class RecordStore:
             if body["p_revision"] != doc["revision"]:
                 return httpx.Response(200, json={**doc, "status": "conflict"})
             self.operations.add(key)
-            doc = {
-                "revision": doc["revision"] + 1,
-                "state": copy.deepcopy(body["p_state"]),
-            }
+            for award in body.get("p_awards", []):
+                self.grant(owner, body["p_operation_id"], award)
+            state = copy.deepcopy(body["p_state"])
+            mine = [row for row in self.ledger if row[0] == owner]
+            state["credits"] = 5 * len(mine)
+            state["creditedAt"] = {}
+            for _, course_key, at in mine:
+                state["creditedAt"][course_key] = max(at, state["creditedAt"].get(course_key, 0))
+            doc = {"revision": doc["revision"] + 1, "state": state}
             self.docs[owner] = doc
             return httpx.Response(200, json={**doc, "status": "saved"})
         raise AssertionError(table)
@@ -160,6 +197,15 @@ class RecordTest(unittest.TestCase):
         raw["profilePhoto"] = value
         self.assertEqual(self.import_request(raw).status_code, 200)
 
+    def attempt(self, subject=None, department=None):
+        r = self.client.post(
+            "/api/me/records/attempts",
+            json={"department": department or self.id, "subject": subject or self.subject},
+            headers=HEADERS,
+        )
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()["attempt"]
+
     def operation(self, changes, operation_id=None):
         return self.client.post(
             "/api/me/records/operations",
@@ -183,6 +229,7 @@ class RecordTest(unittest.TestCase):
                 "subject": self.subject,
                 "score": {"correct": 10, "total": 10},
                 "note": "내 기록",
+                "attempt": self.attempt(),
             }
         ]
         first = self.operation(changes, op)
@@ -191,7 +238,7 @@ class RecordTest(unittest.TestCase):
         again = self.operation(changes, op).json()["state"]
         self.assertEqual(again["credits"], 5)
         self.assertEqual(again["records"][self.id + "|" + self.subject]["attempts"], 3)
-        next_attempt = self.operation(changes).json()["state"]
+        next_attempt = self.operation([{**changes[0], "attempt": self.attempt()}]).json()["state"]
         self.assertEqual(next_attempt["credits"], 5)
         self.assertEqual(
             next_attempt["records"][self.id + "|" + self.subject]["attempts"], 4
@@ -285,6 +332,7 @@ class RecordTest(unittest.TestCase):
                     "department": self.id,
                     "subject": self.subject,
                     "score": {"correct": 10, "total": 10},
+                    "attempt": self.attempt(),
                 }
             ]
         )
@@ -344,6 +392,71 @@ class RecordTest(unittest.TestCase):
         ):
             self.assertEqual(self.client.get("/api/me/records").status_code, 401)
 
+    def pass_course(self, **extra):
+        change = {"kind": "complete", "department": self.id, "subject": self.subject, "score": {"correct": 10, "total": 10}}
+        r = self.operation([{**change, **extra}])
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()["state"]
+
+    def test_97_complete_without_server_attempt_saves_grade_but_no_credit(self):
+        self.operation([{"kind": "enroll", "department": self.id}])
+        state = self.pass_course()
+        self.assertEqual(state["records"][self.id + "|" + self.subject]["grade"], "A+")
+        self.assertEqual(state["credits"], 0)
+        self.assertEqual(state["creditedAt"], {})
+        # A made-up attempt number is not an attempt either.
+        self.assertEqual(self.pass_course(attempt=str(uuid4()))["credits"], 0)
+        # A malformed one is rejected as a bad change.
+        r = self.operation([{"kind": "complete", "department": self.id, "subject": self.subject,
+                             "score": {"correct": 10, "total": 10}, "attempt": "not-an-attempt"}])
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["detail"]["code"], "record_change_rejected")
+
+    def test_97_attempt_must_be_this_users_this_courses_unused_and_not_too_fast(self):
+        self.operation([{"kind": "enroll", "department": self.id}])
+        other = next(s for s in self.catalog[0]["years"]["1"] if s in self.catalog[0]["games"] and s != self.subject)
+        # Another course's attempt does not pay for this course.
+        self.assertEqual(self.pass_course(attempt=self.attempt(other))["credits"], 0)
+        # Another account's attempt does not pay either.
+        stolen = self.attempt()
+        self.store.attempts[stolen]["user"] = "00000000-0000-0000-0000-000000000002"
+        self.assertEqual(self.pass_course(attempt=stolen)["credits"], 0)
+        # Finishing within 20 seconds of opening the lesson earns nothing and leaves the attempt unused.
+        self.store.attempt_age = 5
+        quick = self.attempt()
+        self.assertEqual(self.pass_course(attempt=quick)["credits"], 0)
+        self.assertIsNone(self.store.attempts[quick]["used_by"])
+        self.store.attempts[quick]["started"] -= 30
+        op = str(uuid4())
+        r = self.operation([{"kind": "complete", "department": self.id, "subject": self.subject,
+                             "score": {"correct": 10, "total": 10}, "attempt": quick}], op)
+        self.assertEqual(r.json()["state"]["credits"], 5)
+        self.assertEqual(self.store.attempts[quick]["used_by"], op)
+        # A failing grade earns nothing even with an attempt.
+        state = self.operation([{"kind": "complete", "department": self.id, "subject": other,
+                                 "score": {"correct": 1, "total": 10}, "attempt": self.attempt(other)}]).json()["state"]
+        self.assertEqual(state["credits"], 5)
+
+    def test_97_attempts_are_issued_only_for_open_courses_with_an_experience(self):
+        post = lambda body, headers=HEADERS: self.client.post("/api/me/records/attempts", json=body, headers=headers)
+        # Not enrolled yet.
+        r = post({"department": self.id, "subject": self.subject})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["detail"], "입학한 학과의 열린 학년 과목만 저장할 수 있어요.")
+        self.operation([{"kind": "enroll", "department": self.id}])
+        cse = self.catalog[0]
+        planned = next(s for s in cse["years"]["1"] if s not in cse["games"] and s not in (cse.get("practice"), cse["final"]))
+        self.assertEqual(post({"department": self.id, "subject": planned}).json()["detail"], "아직 체험이 없는 과목이에요.")
+        locked = cse["years"]["4"][0]
+        self.assertEqual(post({"department": self.id, "subject": locked}).status_code, 400)
+        self.assertEqual(post({"department": self.id, "subject": self.subject, "extra": 1}).status_code, 400)
+        self.assertEqual(post({"department": self.id, "subject": self.subject}, {"origin": "https://evil.example"}).status_code, 403)
+        # Too many starts in an hour.
+        self.store.attempt_limit = 0
+        r = post({"department": self.id, "subject": self.subject})
+        self.assertEqual(r.status_code, 429)
+        self.assertEqual(r.json()["detail"], "체험을 너무 자주 시작했어요. 잠시 뒤에 다시 해 주세요.")
+
     def test_credit_cooldown_uses_server_time_for_each_course(self):
         from backend.record_rules import apply_operation
 
@@ -353,8 +466,10 @@ class RecordTest(unittest.TestCase):
             "department": self.id,
             "subject": self.subject,
             "score": {"correct": 10, "total": 10},
+            "attempt": str(uuid4()),
         }
         state, awards = apply_operation(state, op, self.catalog, 1000000000000)
+        self.assertEqual(awards[0]["attempt_id"], op["attempt"])
         self.assertEqual(state["credits"], 5)
         state, awards = apply_operation(
             state, op, self.catalog, 1000000000000 + 6 * 86400000
