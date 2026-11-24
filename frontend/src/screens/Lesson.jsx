@@ -5,8 +5,6 @@ import { delay, FilledButton, Header, Screen } from "../ui.jsx";
 import { YEARS, completeCourse, courseKey, creditWaitDays, CREDIT_COOLDOWN_DAYS, gameOf, isRequired, kindOf, labFor, progressOf, recordOf, savePlay, serverCreditOf, yearOf } from "../model.js";
 import { gradeOf, passes, PASS, PASS_GRADE } from "../grades.js";
 import { isLessonType } from "../lessonGames.js";
-// #97 서버가 크레딧을 주는 최소 시간(supabase/migrations/20261123000200_lesson_attempts.sql의 20초).
-const ATTEMPT_MIN_MS = 20000;
 import LessonGame, { useLessonGame } from "../Games.jsx";
 import { Rub, SortGuide } from "../Templates.jsx";
 import { groupName } from "../groups.js";
@@ -16,6 +14,10 @@ import { LAB_SCREENS } from "../labs/components.js";
 import { LabSummary } from "../labs/parts/LabSummary.jsx";
 import { FOCUS_RING, SETTLE_MS } from "../focus.js";
 import { CreditPill, gradeText, josa, useGuard, view } from "./shared.jsx";
+import { lessonAttempts } from "../lessonAttempts.js";
+
+// #97 서버가 크레딧을 주는 최소 시간(supabase/migrations/20261123000200_lesson_attempts.sql의 20초).
+const ATTEMPT_MIN_MS = 20000;
 
 const STEPS = ["배우기", "직접 해보기", "기록"];
 // 스크롤 영역의 아래 끝을 흐리게 한다(아래 여백 20px 안이라 끝까지 내리면 내용이 가려지지 않는다).
@@ -204,19 +206,17 @@ export function Lesson({ active, nav, route, state, setState, auth }) {
   useGuard(ok, nav, active);
   useEffect(() => () => window.clearTimeout(timer.current), []);
   // #97 로그인 중이면 수업을 열 때 서버에서 체험 시도 번호를 받는다. 이 번호로 마친 이수에만 크레딧이 쌓인다.
-  // 다시 듣기를 누르면 새 번호를 받는다. n은 늦게 온 이전 응답을 무시하려는 순번이다.
-  const attempt = useRef({ id: null, at: 0, n: 0 });
-  const startAttempt = () => {
-    const n = ++attempt.current.n;
-    attempt.current.id = null;
-    attempt.current.at = Date.now();
+  // 시도는 과목별로 lessonAttempts에 둔다: 체험한 결과가 있는 채로 나갔다 다시 들어오면(기록 단계부터 열린다) 앞의 시도를 이어 쓰고,
+  // 다시 듣기를 누르면 새 번호를 받는다. 늦게 온 이전 응답은 순번으로 걸러진다.
+  const startAttempt = (reopen) => {
     if (!ok || !game || !auth?.user || !auth.records?.startAttempt) return;
-    auth.records.startAttempt(v.d.id, subject).then((id) => {
-      if (attempt.current.n === n) attempt.current.id = id;
-    });
+    const now = Date.now();
+    const n = reopen ? lessonAttempts.open(key, { played: !!state.plays[key], now }) : lessonAttempts.begin(key, now);
+    if (n === null) return;
+    auth.records.startAttempt(v.d.id, subject).then((id) => lessonAttempts.fill(key, n, id));
   };
-  // 이 화면을 열 때 한 번만 받는다.
-  useEffect(startAttempt, []);
+  // 이 화면을 열 때 한 번만.
+  useEffect(() => startAttempt(true), []);
   // 단계를 옮기면 맨 위로 올리고 제목에 초점을 둔다(스크린 리더가 새 단계를 읽게).
   useEffect(() => {
     if (!moved.current) return;
@@ -282,12 +282,11 @@ export function Lesson({ active, nav, route, state, setState, auth }) {
     if (after === base) return false;
     const got = gradeOf(base.plays[key].score);
     const progress = progressOf(after, d);
-    const used = attempt.current;
+    const used = lessonAttempts.take(key);
     setState(after, {
       completion: { department: d.id, subject, score: base.plays[key].score, note: text, ...(used.id ? { attempt: used.id } : {}) },
     });
-    // 한 시도는 한 번만 쓴다(다시 듣기에서 새로 받는다).
-    attempt.current = { ...used, id: null };
+    // 한 시도는 한 번만 쓴다(take가 지웠고, 다시 듣기에서 새로 받는다).
     moved.current = true;
     setResult({
       ...got,
@@ -306,7 +305,7 @@ export function Lesson({ active, nav, route, state, setState, auth }) {
     return true;
   };
   const again = () => {
-    startAttempt();
+    startAttempt(false);
     moved.current = true;
     setResult(null);
     setLabOpen(false);
