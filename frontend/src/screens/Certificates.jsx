@@ -259,7 +259,7 @@ export function Enrolled({ active, nav, state, route }) {
   const at = Number.isFinite(journey?.enrolledAt) ? new Date(journey.enrolledAt) : null;
   return (
     <CertificateShell onBack={nav.back} onNext={next} review={review} d={d} kind="enrolled">
-      <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint" style={delay(0.45)}>
+      <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint-deep" style={delay(0.45)}>
         입학을 축하합니다!
       </T>
       <PaperRow y={at ? 117 : 141} left="체험생" right={`${d.school} ${d.name}`} d={0.6} />
@@ -306,7 +306,7 @@ export function Grades({ active, nav, state, route }) {
   return (
     <CertificateShell onBack={review ? nav.back : () => nav.reset(["home"])} onNext={next} review={review} d={d} kind="grades">
       <div className="absolute inset-0 overflow-hidden rounded-[8px]">
-        <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint" style={delay(0.45)}>
+        <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint-deep" style={delay(0.45)}>
           성적표
         </T>
         <Statement y={98} d={0.6}>
@@ -357,7 +357,7 @@ export function Diploma({ active, nav, state, route }) {
   const { d } = v;
   return (
     <CertificateShell onBack={review ? nav.back : () => nav.reset(["home"])} onNext={next} review={review} d={d} kind="diploma">
-      <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint" style={delay(0.45)}>
+      <T y={56} size={25} center className="a-up pl-[8px] font-bold text-mint-deep" style={delay(0.45)}>
         졸업증명서
       </T>
       <PaperRow y={117} left="체험생" right={`${d.school} ${d.name}`} d={0.6} />

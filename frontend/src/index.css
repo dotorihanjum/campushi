@@ -83,10 +83,12 @@
   --color-mint-line: #83bfbb;
   --color-ink: #2c1502;
   --color-ink-2: #302b27;
-  --color-ink-3: #827d76;
+  /* 보조 글자. 글자를 두는 가장 어두운 밝은 바탕(butter #feeaa0)에서도 대비 4.5:1 이상(5.05:1), #52. */
+  --color-ink-3: #66625c;
   --color-navy: #202b3c;
   --color-slate: #637083;
-  --color-gray: #949494;
+  /* 흐린 글자. butter 위 4.64:1, 흰 바탕 5.57:1(#52). ink-3보다 조금 옅다. */
+  --color-gray: #686868;
   --color-mute: #b3b9c2;
   --color-faint: #d1d5da;
   --color-line: #e2e5e8;
@@ -391,8 +393,9 @@ body {
   color: #087f77;
 }
 .button.danger {
-  border-color: #e5484d;
-  background: #e5484d;
+  /* 흰 글자 대비 5.27:1(#52, 예전 #e5484d는 3.91:1). */
+  border-color: #cd2b31;
+  background: #cd2b31;
 }
 .text-button {
   font-size: 13px;
@@ -415,7 +418,7 @@ body {
   margin: 0 0 12px;
   font-size: 13px;
   line-height: 21px;
-  color: #827d76;
+  color: var(--color-ink-3);
 }
 .body-copy strong {
   color: #302b27;
@@ -424,7 +427,7 @@ body {
   margin: 8px 0 0;
   font-size: 11px;
   line-height: 17px;
-  color: #949494;
+  color: var(--color-gray);
 }
 .tag {
   display: inline-flex;
@@ -507,7 +510,7 @@ body {
   font-size: 11.5px;
   font-weight: 600;
   line-height: 16px;
-  color: #827d76;
+  color: var(--color-ink-3);
   text-align: center;
   white-space: nowrap;
 }
@@ -811,7 +814,7 @@ body {
   outline-offset: 1px;
 }
 .sort-card.is-fixed {
-  background: #827d76;
+  background: var(--color-ink-3);
 }
 .journal-text {
   border-radius: 12px;
