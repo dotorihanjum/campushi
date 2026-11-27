@@ -22,3 +22,16 @@ export const isReview = (params) => params?.review === true;
 
 /** 다시 보기로 증명서를 열 때 넘기는 params. */
 export const REVIEW = Object.freeze({ review: true });
+
+/** 성적표 종이에 적는 과목 목록의 최대 줄 수("외 N과목" 줄 포함). 서명 줄("체험생", y 288.5)과 붙지 않는 높이다(164 + 7×16 = 276). */
+export const TRANSCRIPT_ROWS = 7;
+
+/**
+ * 성적표에 적을 과목과 "외 N과목"의 N. 다 들어가면 모두 적고(more 0),
+ * 넘치면 "외 N과목" 줄까지 합쳐 rows줄이 되게 앞의 rows-1과목만 적는다.
+ */
+export function transcriptRows(courses, rows = TRANSCRIPT_ROWS) {
+  const list = Array.isArray(courses) ? courses : [];
+  const shown = list.length <= rows ? list : list.slice(0, Math.max(0, rows - 1));
+  return { shown, more: list.length - shown.length };
+}
